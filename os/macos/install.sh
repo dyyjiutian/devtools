@@ -40,18 +40,19 @@ ${BOLD}选项:${NC}
   -h, --help          显示此帮助信息并退出
   --info-only         仅显示系统信息，不执行安装
   --skip-brew         跳过 Homebrew 安装/更新
-  --skip-casks        跳过 GUI 应用安装（iTerm2、Sublime Text、搜狗输入法等）
+  --skip-casks        跳过 GUI 应用安装（iTerm2、Sublime Text、搜狗输入法、Obsidian 等）
   --skip-formulae     跳过 CLI 工具安装
   --skip-node         跳过 Node.js / npm 安装
 
 ${BOLD}安装的软件:${NC}
   CLI 工具 (brew formulae):
-    git, curl, wget, jq, tree, htop, fzf, zsh, ripgrep, bat, eza
+    git, curl, wget, jq, tree, htop, gh, fzf, zsh, ripgrep, bat, eza
 
   GUI 应用 (brew casks):
     iterm2          - 终端模拟器
     sublime-text    - 代码编辑器
     sogouinput      - 搜狗输入法
+    obsidian        - 知识库 / 笔记应用
 
   Node.js:
     nvm             - Node 版本管理器
@@ -161,6 +162,7 @@ install_formulae() {
     jq
     tree
     htop
+    gh
     # fzf
     # zsh
     # ripgrep
@@ -187,6 +189,7 @@ install_casks() {
     "iterm2:iTerm2 终端"
     "sublime-text:Sublime Text 编辑器"
     "sogouinput:搜狗输入法"
+    "obsidian:Obsidian 知识库"
   )
 
   for entry in "${casks[@]}"; do
@@ -277,6 +280,9 @@ post_install_notes() {
   echo -e ""
   echo -e "  ${YELLOW}fzf${NC}: 运行以下命令启用快捷键绑定:"
   echo -e "    \$(brew --prefix)/opt/fzf/install"
+  echo -e ""
+  echo -e "  ${YELLOW}gh (GitHub CLI)${NC}: 安装完成后需登录："
+  echo -e "    ${BOLD}gh auth login${NC}"
   echo -e ""
   echo -e "  ${YELLOW}nvm / Node.js${NC}: 在当前终端立即生效，运行："
   echo -e "    ${BOLD}source ~/.zshrc${NC}"
