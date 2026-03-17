@@ -1,3 +1,8 @@
 anthropic.claude-code
+anysphere.cursorpyright
 anysphere.remote-ssh
+foxundermoon.shell-format
 k--kato.intellij-idea-keybindings
+mads-hartmann.bash-ide-vscode
+ms-python.debugpy
+ms-python.python
