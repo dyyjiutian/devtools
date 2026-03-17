@@ -21,5 +21,10 @@
     "key": "cmd+e",
     "command": "-cursor.toggleAgentWindowIDEUnification",
     "when": "cursor.agentIdeUnification.featureGate && !isGlass && workbenchState != 'empty'"
+  },
+  // Shift+Cmd+R: 重新加载 Cursor 窗口
+  {
+    "key": "shift+cmd+r",
+    "command": "workbench.action.reloadWindow"
   }
 ]

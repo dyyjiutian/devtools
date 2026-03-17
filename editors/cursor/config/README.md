@@ -118,3 +118,4 @@ cursor --uninstall-extension <extension-id>
 | `⌥J` | 在文件树中定位当前打开的文件 |
 | `⌘J` | 打开 / 切换集成终端面板 |
 | `⇧⌘J` | 在当前文件所在目录打开新终端 |
+| `⇧⌘R` | 重新加载 Cursor 窗口 |
