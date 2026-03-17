@@ -1,0 +1,25 @@
+[
+  // Option+J: 在 Explorer 中定位当前打开的文件
+  {
+    "key": "alt+j",
+    "command": "workbench.files.action.showActiveFileInExplorer"
+  },
+  // Cmd+J: 打开 / 切换集成终端面板
+  {
+    "key": "cmd+j",
+    "command": "workbench.action.terminal.toggleTerminal"
+  },
+  // Shift+Cmd+J: 在当前文件所在目录打开新的集成终端
+  {
+    "key": "shift+cmd+j",
+    "command": "workbench.action.terminal.new",
+    "args": {
+      "cwd": "${fileDirname}"
+    }
+  },
+  {
+    "key": "cmd+e",
+    "command": "-cursor.toggleAgentWindowIDEUnification",
+    "when": "cursor.agentIdeUnification.featureGate && !isGlass && workbenchState != 'empty'"
+  }
+]

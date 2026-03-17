@@ -1,0 +1,13 @@
+{
+    "window.commandCenter": true,
+    "git.autofetch": true,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 500,
+    "remote.SSH.remotePlatform": {
+        "dev.user@198.51.100.30": "linux"
+    },
+    "explorer.autoReveal": false,
+    "editor.fontSize": 13,
+    "terminal.integrated.fontSize": 13,
+    "workbench.tree.indent": 13
+}
