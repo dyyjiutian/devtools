@@ -1,0 +1,12 @@
+[alias]
+  review = "!f() { \
+    DEFAULT=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||'); \
+    if [ -z \"$DEFAULT\" ]; then \
+      echo 'review: cannot determine default branch. Run: git remote set-head origin -a' >&2; exit 1; \
+    fi; \
+    echo \"Fetching origin/$DEFAULT ...\"; \
+    git fetch origin \"$DEFAULT\" || exit 1; \
+    echo \"Rebasing onto origin/$DEFAULT ...\"; \
+    git rebase \"origin/$DEFAULT\" || exit 1; \
+    git push -u origin HEAD && gh pr create --fill; \
+  }; f"
