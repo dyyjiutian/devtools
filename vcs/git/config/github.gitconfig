@@ -1,0 +1,5 @@
+[alias]
+  review = "!f() { \
+    BRANCH=$(git rev-parse --abbrev-ref HEAD); \
+    git push -u origin HEAD && gh pr create --fill; \
+  }; f"
