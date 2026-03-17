@@ -37,21 +37,16 @@ macOS 上 Cursor 配置文件的原始路径：
 
 ## 备份配置
 
-### 备份 settings.json 和 keybindings.json
+在 `scripts/` 目录下提供了统一的管理脚本，会自动识别当前 OS。
 
 ```bash
-CURSOR_CONFIG="$HOME/Library/Application Support/Cursor/User"
-REPO_DIR="$(git rev-parse --show-toplevel)/editors/cursor/config"
-
-cp "$CURSOR_CONFIG/settings.json"   "$REPO_DIR/settings.json"
-cp "$CURSOR_CONFIG/keybindings.json" "$REPO_DIR/keybindings.json"
+bash editors/cursor/scripts/settings.sh --backup
 ```
 
-### 导出插件列表
-
-```bash
-cursor --list-extensions > editors/cursor/config/extensions.txt
-```
+脚本会将以下文件备份到 `config/` 目录（或通过 `--dir` 指定的目录）：
+- `settings.json`
+- `keybindings.json`
+- `extensions.txt`（通过 `cursor --list-extensions` 导出）
 
 > 如果 `cursor` 命令不存在，在 Cursor 中执行 `Shell Command: Install 'cursor' command in PATH` 即可（Command Palette → `⌘⇧P`）。
 
@@ -63,23 +58,24 @@ cursor --list-extensions > editors/cursor/config/extensions.txt
 
 从 [cursor.com](https://www.cursor.com/) 下载并安装，然后在 Command Palette 中执行 `Shell Command: Install 'cursor' command in PATH` 注册 CLI。
 
-### 第二步：复制配置文件
+### 第二步：运行还原脚本
 
 ```bash
-CURSOR_CONFIG="$HOME/Library/Application Support/Cursor/User"
-REPO_DIR="path/to/devtools/editors/cursor/config"
-
-cp "$REPO_DIR/settings.json"   "$CURSOR_CONFIG/settings.json"
-cp "$REPO_DIR/keybindings.json" "$CURSOR_CONFIG/keybindings.json"
+bash editors/cursor/scripts/settings.sh --restore
 ```
 
-### 第三步：批量安装插件
+脚本会在覆盖前提示确认，随后自动完成：
+1. 复制 `settings.json` 和 `keybindings.json` 到系统配置目录
+2. 逐个安装 `extensions.txt` 中的插件
+
+完成后执行 `⌘⇧P → Reload Window` 使配置生效。
+
+### 指定自定义目录
 
 ```bash
-cat path/to/devtools/editors/cursor/config/extensions.txt | xargs -L1 cursor --install-extension
+bash editors/cursor/scripts/settings.sh --backup  --dir ~/dotfiles/cursor
+bash editors/cursor/scripts/settings.sh --restore --dir ~/dotfiles/cursor
 ```
-
-安装完成后重启 Cursor 使所有插件生效。
 
 ---
 
