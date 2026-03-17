@@ -5,7 +5,7 @@
       echo 'review: cannot determine default branch. Run: git remote set-head origin -a' >&2; exit 1; \
     fi; \
     echo \"Fetching origin/$DEFAULT ...\"; \
-    git fetch origin \"$DEFAULT\" || exit 1; \
+    git fetch origin \"$DEFAULT:$DEFAULT\" || exit 1; \
     echo \"Rebasing onto origin/$DEFAULT ...\"; \
     git rebase \"origin/$DEFAULT\" || exit 1; \
     git push -u origin HEAD && gh pr create --fill; \

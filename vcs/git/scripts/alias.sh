@@ -32,7 +32,7 @@ gitrebase() {
     return 1
   fi
   echo "Fetching origin/$default_branch ..."
-  git fetch origin "$default_branch"
+  git fetch origin "$default_branch:$default_branch"
   echo "Rebasing onto origin/$default_branch ..."
   git rebase "origin/$default_branch"
 }
