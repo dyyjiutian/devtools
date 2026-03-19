@@ -126,7 +126,7 @@ check_and_restore_pre_omz_config() {
     fi
 
     # 询问用户
-    read -r "?是否将原有配置中差异的部分追加到现有 ~/.zshrc 中? [y/N]: " response
+    read -r -p "是否将原有配置中差异的部分追加到现有 ~/.zshrc 中? [y/N]: " response
     echo
 
     if [[ "$response" =~ ^[Yy]$ ]]; then
@@ -184,11 +184,27 @@ disable_auto_update() {
         else
             # 在 ZSH_THEME 行之后添加
             sed -i '' '/^ZSH_THEME=/a\
-# 禁用自动更新\nDISABLE_AUTO_UPDATE="true"' "$ZSHRC"
+# 禁用自动更新\
+DISABLE_AUTO_UPDATE="true"' "$ZSHRC"
         fi
         log "✓ 已禁用自动更新"
+
+        # 优化 git 目录下的命令响应速度
+        if ! grep -q "^DISABLE_UNTRACKED_FILES_DIRTY=" "$ZSHRC"; then
+            sed -i '' '/^DISABLE_AUTO_UPDATE=/a\
+# 不检查未跟踪文件，加速 git 目录下的命令响应\
+DISABLE_UNTRACKED_FILES_DIRTY="true"' "$ZSHRC"
+        fi
+        if ! grep -q "^DISABLE_AUTO_TITLE=" "$ZSHRC"; then
+            sed -i '' '/^DISABLE_UNTRACKED_FILES_DIRTY=/a\
+# 禁用自动设置终端标题\
+DISABLE_AUTO_TITLE="true"' "$ZSHRC"
+        fi
+        log "✓ 已优化 git 目录性能"
     else
         log "[试运行] 将要设置 DISABLE_AUTO_UPDATE=\"true\""
+        log "[试运行] 将要设置 DISABLE_UNTRACKED_FILES_DIRTY=\"true\""
+        log "[试运行] 将要设置 DISABLE_AUTO_TITLE=\"true\""
     fi
 }
 
@@ -291,9 +307,9 @@ main() {
     backup_zshrc
     set_theme
     disable_auto_update
-    set_plugins
     install_autosuggestions
     install_syntax_highlighting
+    set_plugins
     install_font
 
     echo
