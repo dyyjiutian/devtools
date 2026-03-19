@@ -64,17 +64,24 @@ chmod +x settings.sh
 
 ### 2. 主题设置
 
-- **主题**: `agnoster`
-- agnoster 是一个流行的 Powerline 风格主题，显示 git 分支、Python 虚拟环境等上下文信息
-- 需要安装 [Powerline 字体](https://github.com/powerline/fonts) 或 [Nerd Fonts](https://www.nerdfonts.com/) 才能正确显示特殊字符
+- **主题**: `powerlevel10k/powerlevel10k`
+- [Powerlevel10k](https://github.com/romkatv/powerlevel10k) 是一个高性能的 Zsh 主题，强调速度、灵活性和开箱即用体验
+- 支持丰富的提示符段落：git 状态、命令执行时间、Python 虚拟环境、Node.js 版本等
+- 脚本会自动安装主题并恢复备份的 `.p10k.zsh` 配置文件
+- 需要安装 [Nerd Fonts](https://www.nerdfonts.com/) 才能正确显示图标
 
-### 3. 禁用自动更新
+### 3. p10k 配置恢复
+
+- 脚本会自动将项目中备份的 `.p10k.zsh` 恢复到 `~/.p10k.zsh`
+- 如需重新配置，运行 `p10k configure`
+
+### 4. 禁用自动更新
 
 - **配置项**: `DISABLE_AUTO_UPDATE="true"`
 - Oh My Zsh 默认会定期检查更新，禁用后避免更新提示干扰
 - 如需手动更新，可运行 `omz update`
 
-### 4. 内置插件
+### 5. 内置插件
 
 启用的 Oh My Zsh 内置插件：
 
@@ -84,7 +91,7 @@ chmod +x settings.sh
 | `z` | 目录快速跳转，基于访问频率的智能跳转 |
 | `web-search` | 在命令行中进行网络搜索，支持 Google、Bing、GitHub 等 |
 
-### 5. 第三方插件
+### 6. 第三方插件
 
 自动从 GitHub 安装：
 
@@ -93,11 +100,11 @@ chmod +x settings.sh
 | `zsh-autosuggestions` | 根据历史记录自动建议命令，按 → 键接受 | [zsh-users/zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) |
 | `zsh-syntax-highlighting` | Fish shell 风格的语法高亮，命令输入时实时显示合法性 | [zsh-users/zsh-syntax-highlighting](https://github.com/zsh-users/zsh-syntax-highlighting) |
 
-### 6. 字体自动安装
+### 7. 字体自动安装
 
 - **字体**: Meslo LG Nerd Font
 - **安装方式**: 自动通过 Homebrew 安装 (`font-meslo-lg-nerd-font`)
-- **用途**: 为 agnoster 主题提供 Powerline 特殊字符支持
+- **用途**: 为 powerlevel10k 主题提供图标和特殊字符支持
 - **要求**: 系统已安装 Homebrew
 
 如果你想手动配置，可以参考以下步骤：
@@ -106,7 +113,7 @@ chmod +x settings.sh
 
 编辑 `~/.zshrc`：
 ```bash
-ZSH_THEME="agnoster"
+ZSH_THEME="powerlevel10k/powerlevel10k"
 ```
 
 ### 禁用自动更新
@@ -144,9 +151,15 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.
 source ~/.zshrc
 ```
 
+### 安装 powerlevel10k 主题
+
+```bash
+git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/themes/powerlevel10k
+```
+
 ## 推荐字体
 
-agnoster 主题需要特殊字体支持。本脚本会自动通过 Homebrew 安装 **MesloLGS NF** 字体。
+powerlevel10k 主题需要 Nerd Font 字体支持。本脚本会自动通过 Homebrew 安装 **MesloLGS NF** 字体。
 
 ### 自动安装
 
@@ -201,6 +214,7 @@ brew install --cask font-meslo-lg-nerd-font
 |---------|---------|------|
 | Oh My Zsh 原始备份 | `~/.zshrc.pre-oh-my-zsh` | Oh My Zsh 安装时自动备份的原始配置 |
 | 脚本运行备份 | `~/.zshrc.backup.YYYYMMDD_HHMMSS` | 本脚本运行前自动创建的备份 |
+| p10k 配置备份 | `.p10k.zsh` (项目根目录) | powerlevel10k 配置备份，脚本运行时自动恢复到 `~/.p10k.zsh` |
 
 ### 配置恢复流程
 
@@ -226,8 +240,9 @@ DISABLE_AUTO_UPDATE="true"
 ## 故障排除
 
 ### 主题显示乱码
-- 确保终端字体设置为 Powerline 字体或 Nerd Font
+- 确保终端字体设置为 Nerd Font
 - 推荐字体: MesloLGS NF, JetBrainsMono Nerd Font
+- 运行 `p10k configure` 重新配置主题
 
 ### 语法高亮不生效
 - 确保 `zsh-syntax-highlighting` 是插件列表中的最后一个
@@ -240,3 +255,4 @@ DISABLE_AUTO_UPDATE="true"
 ## 许可证
 
 本项目遵循与 Oh My Zsh 相同的许可证。
+

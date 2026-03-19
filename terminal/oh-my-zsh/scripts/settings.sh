@@ -23,13 +23,14 @@ Oh My Zsh 自动配置脚本
 
 功能:
     1. 检查并恢复 Oh My Zsh 安装前覆盖的 ~/.zshrc 配置
-    2. 设置 zsh 主题为 agnoster
-    3. 禁用 Oh My Zsh 自动更新
-    4. 启用插件: git, z, web-search
-    5. 安装第三方插件:
+    2. 设置 zsh 主题为 powerlevel10k/powerlevel10k
+    3. 安装 powerlevel10k 主题并恢复 .p10k.zsh 配置
+    4. 禁用 Oh My Zsh 自动更新
+    5. 启用插件: git, z, web-search
+    6. 安装第三方插件:
        - zsh-autosuggestions (命令自动建议)
        - zsh-syntax-highlighting (语法高亮)
-    6. 通过 Homebrew 安装 Meslo LG Nerd Font (agnoster主题所需)
+    7. 通过 Homebrew 安装 Meslo LG Nerd Font (powerlevel10k主题所需)
 
 要求:
     - 已安装 Oh My Zsh
@@ -163,14 +164,55 @@ backup_zshrc() {
     fi
 }
 
-# 设置主题为 agnoster
-set_theme() {
-    log "设置主题为 agnoster..."
-    if [[ "$DRY_RUN" == "false" ]]; then
-        sed -i '' 's/^ZSH_THEME=.*/ZSH_THEME="agnoster"/' "$ZSHRC"
-        log "✓ 主题已设置为 agnoster"
+# 安装 powerlevel10k 主题
+install_powerlevel10k() {
+    local theme_dir="${ZSH_CUSTOM}/themes/powerlevel10k"
+
+    log "安装 powerlevel10k 主题..."
+
+    if [[ -d "$theme_dir" ]]; then
+        log "✓ powerlevel10k 已安装，跳过"
     else
-        log "[试运行] 将要设置 ZSH_THEME=\"agnoster\""
+        if [[ "$DRY_RUN" == "false" ]]; then
+            git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "$theme_dir"
+            log "✓ powerlevel10k 安装完成"
+        else
+            log "[试运行] 将要克隆 https://github.com/romkatv/powerlevel10k.git 到 $theme_dir"
+        fi
+    fi
+}
+
+# 恢复 .p10k.zsh 配置
+restore_p10k_config() {
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local p10k_source="${script_dir}/../.p10k.zsh"
+    local p10k_target="$HOME/.p10k.zsh"
+
+    log "恢复 .p10k.zsh 配置..."
+
+    if [[ ! -f "$p10k_source" ]]; then
+        log "⚠ 未找到备份的 .p10k.zsh 配置文件: $p10k_source"
+        log "  跳过 p10k 配置恢复，首次启动时将运行 p10k configure"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "false" ]]; then
+        cp "$p10k_source" "$p10k_target"
+        log "✓ 已恢复 .p10k.zsh 配置到 $p10k_target"
+    else
+        log "[试运行] 将要复制 $p10k_source 到 $p10k_target"
+    fi
+}
+
+# 设置主题为 powerlevel10k
+set_theme() {
+    log "设置主题为 powerlevel10k/powerlevel10k..."
+    if [[ "$DRY_RUN" == "false" ]]; then
+        sed -i '' 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$ZSHRC"
+        log "✓ 主题已设置为 powerlevel10k/powerlevel10k"
+    else
+        log "[试运行] 将要设置 ZSH_THEME=\"powerlevel10k/powerlevel10k\""
     fi
 }
 
@@ -289,7 +331,7 @@ install_font() {
         if [[ "$DRY_RUN" == "false" ]]; then
             brew install --cask "$font_name"
             log "✓ 字体安装完成"
-            log "  请在终端设置中将字体更改为 'MesloLGS NF' 以显示特殊字符"
+            log "  请在终端设置中将字体更改为 'MesloLGS NF' 以正常显示 powerlevel10k 图标"
         else
             log "[试运行] 将要通过 brew 安装 $font_name"
         fi
@@ -305,7 +347,9 @@ main() {
     check_ohmyzsh
     check_and_restore_pre_omz_config
     backup_zshrc
+    install_powerlevel10k
     set_theme
+    restore_p10k_config
     disable_auto_update
     install_autosuggestions
     install_syntax_highlighting
@@ -319,10 +363,12 @@ main() {
     if [[ "$DRY_RUN" == "false" ]]; then
         echo
         echo "提示:"
-        echo "  - agnoster 主题使用 Meslo LG Nerd Font 字体显示特殊字符"
+        echo "  - powerlevel10k 主题使用 Meslo LG Nerd Font 字体显示特殊字符"
         echo "  - 如字体未自动生效，请在终端设置中手动选择 'MesloLGS NF'"
+        echo "  - 如需重新配置 p10k，运行 'p10k configure'"
         echo "  - 配置完成后请运行 'source ~/.zshrc' 或重新打开终端"
     fi
 }
 
 main
+
