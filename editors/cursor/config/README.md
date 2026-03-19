@@ -37,10 +37,8 @@ macOS 上 Cursor 配置文件的原始路径：
 
 ## 备份配置
 
-在 `scripts/` 目录下提供了统一的管理脚本，会自动识别当前 OS。
-
 ```bash
-bash editors/cursor/scripts/settings.sh --backup
+bash editors/cursor/setup.sh --backup
 ```
 
 脚本会将以下文件备份到 `config/` 目录（或通过 `--dir` 指定的目录）：
@@ -61,7 +59,7 @@ bash editors/cursor/scripts/settings.sh --backup
 ### 第二步：运行还原脚本
 
 ```bash
-bash editors/cursor/scripts/settings.sh --restore
+bash editors/cursor/setup.sh --restore
 ```
 
 脚本会在覆盖前提示确认，随后自动完成：
@@ -73,8 +71,8 @@ bash editors/cursor/scripts/settings.sh --restore
 ### 指定自定义目录
 
 ```bash
-bash editors/cursor/scripts/settings.sh --backup  --dir ~/dotfiles/cursor
-bash editors/cursor/scripts/settings.sh --restore --dir ~/dotfiles/cursor
+bash editors/cursor/setup.sh --backup  --dir ~/dotfiles/cursor
+bash editors/cursor/setup.sh --restore --dir ~/dotfiles/cursor
 ```
 
 ---

@@ -13,7 +13,7 @@ ZSHRC="$HOME/.zshrc"
 # 显示帮助信息
 show_help() {
     cat << 'EOF'
-用法: ./settings.sh [选项]
+用法: ./setup.sh [选项]
 
 Oh My Zsh 自动配置脚本
 
@@ -38,9 +38,9 @@ Oh My Zsh 自动配置脚本
     - 有写入 ~/.zshrc 的权限
 
 示例:
-    ./settings.sh           # 执行配置
-    ./settings.sh --help    # 显示帮助
-    ./settings.sh --dry-run # 试运行，查看将要做的修改
+    ./setup.sh           # 执行配置
+    ./setup.sh --help    # 显示帮助
+    ./setup.sh --dry-run # 试运行，查看将要做的修改
 
 官方文档:
     https://ohmyz.sh/
@@ -186,7 +186,7 @@ install_powerlevel10k() {
 restore_p10k_config() {
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local p10k_source="${script_dir}/../.p10k.zsh"
+    local p10k_source="${script_dir}/.p10k.zsh"
     local p10k_target="$HOME/.p10k.zsh"
 
     log "恢复 .p10k.zsh 配置..."

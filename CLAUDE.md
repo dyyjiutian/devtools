@@ -4,66 +4,97 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This repository contains automated setup scripts for developer tools across different operating systems. It provides initialization scripts for macOS and Linux (CentOS/RHEL), along with terminal configuration files.
+This repository contains automated setup scripts for developer tools across different operating systems and environments. It provides initialization scripts for macOS and Linux (CentOS/RHEL), terminal configurations (iTerm2, Oh My Zsh, Vim), editor configurations (Cursor), and Git utilities.
 
 ## Directory Structure
 
 ```
 os/
-├── macos/install.sh      # macOS initialization script
-└── linux/install_centos.sh  # CentOS/RHEL initialization script
+├── macos/setup.sh          # macOS system initialization
+└── linux/setup_centos.sh   # CentOS/RHEL system initialization
 
-terminal/iterm2/
-├── config/               # iTerm2 configuration exports
-├── scripts/login.exp     # expect script for password-based SSH login
-└── README.md             # iTerm2 configuration guide (Chinese)
+terminal/
+├── iterm2/                 # iTerm2 configuration and SSH login scripts
+├── oh-my-zsh/              # Oh My Zsh configuration (theme, plugins)
+└── vim/                    # Vim configuration with vim-plug and coc.nvim
+
+editors/
+└── cursor/                 # Cursor editor backup/restore scripts
+
+vcs/git/
+├── scripts/
+│   ├── git_config.sh       # Interactive git global configurator
+│   └── alias.sh            # Shell aliases for git workflows
+└── config/
+    └── github.gitconfig    # GitHub-specific settings
 ```
 
-## Running the Install Scripts
+## OS Initialization Scripts
 
-Both install scripts support similar options:
+Both scripts follow the same architecture: bash 3.2+ compatible, color-coded output functions (`info()`, `success()`, `warn()`, `error()`, `step()`), system info detection, confirmation prompts, skip flags, and post-install notes.
 
+**macOS** (`os/macos/setup.sh`):
 ```bash
-# macOS
-./os/macos/install.sh                 # Full installation
-./os/macos/install.sh --info-only     # Show system info only
-./os/macos/install.sh --skip-casks    # Skip GUI applications
-./os/macos/install.sh --help          # Show usage
-
-# CentOS/RHEL
-./os/linux/install_centos.sh          # Full installation
-./os/linux/install_centos.sh --info-only
-./os/linux/install_centos.sh --skip-docker
-./os/linux/install_centos.sh --help
+./setup.sh                 # Full installation
+./setup.sh --info-only     # Show system info only
+./setup.sh --skip-casks    # Skip GUI applications
+./setup.sh --skip-omz      # Skip Oh My Zsh
 ```
+Installs: Homebrew, CLI tools (git, curl, wget, jq, tree, htop, gh, neovim), GUI apps (iTerm2, Sublime Text, Sogou Input, Obsidian), Node.js via nvm, Oh My Zsh.
 
-## Script Architecture
+**CentOS/RHEL** (`os/linux/setup_centos.sh`):
+```bash
+./setup_centos.sh          # Full installation
+./setup_centos.sh --info-only
+./setup.sh --skip-docker   # Skip Docker CE
+```
+Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSource.
 
-Both install scripts follow the same pattern:
-- Bash 3.2+ compatible (for macOS default bash)
-- Color-coded output functions: `info()`, `success()`, `warn()`, `error()`, `step()`
-- System info detection before installation
-- Confirmation prompt before proceeding
-- Skip flags for selective installation
-- Post-install notes with next steps
+## Terminal Configuration
 
-## What Gets Installed
+**Oh My Zsh** (`terminal/oh-my-zsh/`):
+- `setup.sh` - Configures powerlevel10k theme, installs plugins (zsh-autosuggestions, zsh-syntax-highlighting), disables auto-updates
+- `.p10k.zsh` - Powerlevel10k theme configuration backup
+- Automatically installs Meslo Nerd Font via Homebrew
 
-**macOS** (`os/macos/install.sh`):
-- Homebrew (auto-update if installed)
-- CLI tools: git, curl, wget, jq, tree, htop, gh
-- GUI apps (casks): iTerm2, Sublime Text, Sogou Input, Obsidian
-- Node.js via nvm
+**Vim** (`terminal/vim/`):
+- `setup.sh` - Installs vim-plug, plugins, and coc.nvim language servers
+- `vimrc` - Complete vim configuration with NERDTree, fzf, coc.nvim, vim-fugitive
+- Language servers: Python (pyright), Go, Java, Shell, JSON, YAML
+- Leader key is comma (`,`)
 
-**CentOS/RHEL** (`os/linux/install_centos.sh`):
-- Docker CE (with docker-compose-plugin)
-- Git
-- Node.js LTS via NodeSource
+**iTerm2** (`terminal/iterm2/`):
+- `config/` - iTerm2 profile exports
+- `scripts/login.exp` - Expect script for password-based SSH login: `./login.exp <user> <host> <password>`
 
-## iTerm2 Setup
+## Editor Configuration
 
-The `terminal/iterm2/` directory contains:
-- Configuration exports for iTerm2 profiles
-- `login.exp` - expect script for automated SSH login with password
-  - Usage: `./login.exp <user> <host> <password>`
-  - Can be configured in iTerm2 Profile Command for automatic login
+**Cursor** (`editors/cursor/`):
+- `setup.sh --backup`  - Backs up settings.json, keybindings.json, and extensions list
+- `setup.sh --restore` - Restores configuration to new machine
+- Detects config paths across macOS (`~/Library/Application Support/Cursor/User/`), Linux, and Windows
+
+## Git Utilities
+
+**Global Configuration** (`vcs/git/scripts/git_config.sh`):
+```bash
+./git_config.sh          # Interactive setup for user.name, user.email, and recommended settings
+./git_config.sh --dry-run # Preview without applying
+```
+Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential.helper, and 15+ other recommended configs.
+
+**Shell Aliases** (`vcs/git/scripts/alias.sh`):
+```bash
+./alias.sh         # Install git aliases to ~/.zshrc or ~/.bashrc
+./alias.sh --clean # Remove git aliases
+```
+Provides: `gitroot` (cd to repo root), `gitrebase` (fetch and rebase onto default branch), `gitprune` (delete merged branches), `gitalias` (list aliases).
+
+## Common Patterns
+
+All setup scripts:
+- Use `set -euo pipefail` for strict error handling
+- Include `--help` flag with usage information
+- Create backups before modifying existing files
+- Support `--dry-run` or similar preview modes where applicable
+- Output color-coded status messages

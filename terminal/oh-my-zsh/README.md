@@ -33,15 +33,14 @@ sh -c "$(wget https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/ins
 ### 快速开始
 
 ```bash
-cd scripts
-chmod +x settings.sh
-./settings.sh
+chmod +x setup.sh
+./setup.sh
 ```
 
 ### 查看帮助
 
 ```bash
-./settings.sh --help
+./setup.sh --help
 ```
 
 ### 试运行模式
@@ -49,12 +48,12 @@ chmod +x settings.sh
 查看脚本将要执行的修改，但不实际修改文件：
 
 ```bash
-./settings.sh --dry-run
+./setup.sh --dry-run
 ```
 
 ## 脚本功能说明
 
-本脚本 (`scripts/settings.sh`) 会自动完成以下配置：
+本脚本 (`setup.sh`) 会自动完成以下配置：
 
 ### 1. 配置恢复
 

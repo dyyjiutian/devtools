@@ -40,7 +40,7 @@ detect_cursor_config_dir() {
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
 COMMAND=""
-CONFIG_DIR="$SCRIPT_DIR/../config"
+CONFIG_DIR="$SCRIPT_DIR/config"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
