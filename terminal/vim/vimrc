@@ -100,6 +100,9 @@ set mouse=a
 " Backspace
 set backspace=indent,eol,start
 
+" Paste mode - disable auto-indent when pasting
+set pastetoggle=<F2>
+
 " Split
 set splitbelow
 set splitright
