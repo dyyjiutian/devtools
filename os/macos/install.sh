@@ -43,10 +43,11 @@ ${BOLD}选项:${NC}
   --skip-casks        跳过 GUI 应用安装（iTerm2、Sublime Text、搜狗输入法、Obsidian 等）
   --skip-formulae     跳过 CLI 工具安装
   --skip-node         跳过 Node.js / npm 安装
+  --skip-omz          跳过 Oh My Zsh 安装
 
 ${BOLD}安装的软件:${NC}
   CLI 工具 (brew formulae):
-    git, curl, wget, jq, tree, htop, gh, fzf, zsh, ripgrep, bat, eza
+    git, curl, wget, jq, tree, htop, gh, neovim, fzf, zsh, ripgrep, bat, eza
 
   GUI 应用 (brew casks):
     iterm2          - 终端模拟器
@@ -57,6 +58,9 @@ ${BOLD}安装的软件:${NC}
   Node.js:
     nvm             - Node 版本管理器
     node (LTS)      - 通过 nvm 安装最新 LTS 版本
+
+  Oh My Zsh:
+    oh-my-zsh       - Zsh 配置管理框架（包含插件和主题支持）
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
@@ -163,6 +167,7 @@ install_formulae() {
     tree
     htop
     gh
+    neovim
     # fzf
     # zsh
     # ripgrep
@@ -268,6 +273,23 @@ ZSHRC
   fi
 }
 
+# ─── 安装 Oh My Zsh ─────────────────────────────────────────────────────────
+install_omz() {
+  step "Oh My Zsh 安装"
+
+  if [[ -d "$HOME/.oh-my-zsh" ]]; then
+    success "Oh My Zsh 已安装，跳过"
+  else
+    info "正在安装 Oh My Zsh..."
+    # 使用官方安装脚本，保持静默安装
+    if sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; then
+      success "Oh My Zsh 安装完成"
+    else
+      warn "Oh My Zsh 安装失败，请手动安装"
+    fi
+  fi
+}
+
 # ─── 安装后提示 ──────────────────────────────────────────────────────────────
 post_install_notes() {
   step "安装后注意事项"
@@ -292,6 +314,10 @@ post_install_notes() {
   echo -e "    nvm use <version>       # 切换版本"
   echo -e "    nvm alias default <ver> # 设置默认版本"
   echo -e ""
+  echo -e "  ${YELLOW}Oh My Zsh${NC}: 配置文件位于 ~/.zshrc"
+  echo -e "    查看主题: ls ~/.oh-my-zsh/themes/"
+  echo -e "    查看插件: ls ~/.oh-my-zsh/plugins/"
+  echo -e ""
 }
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
@@ -301,6 +327,7 @@ main() {
   local skip_casks=false
   local skip_formulae=false
   local skip_node=false
+  local skip_omz=false
 
   # 参数解析
   while [[ $# -gt 0 ]]; do
@@ -323,6 +350,9 @@ main() {
         ;;
       --skip-node)
         skip_node=true
+        ;;
+      --skip-omz)
+        skip_omz=true
         ;;
       *)
         error "未知参数: $1"
@@ -357,6 +387,7 @@ main() {
   $skip_formulae || install_formulae
   $skip_casks    || install_casks
   $skip_node     || install_node
+  $skip_omz      || install_omz
 
   post_install_notes
 
