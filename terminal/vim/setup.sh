@@ -27,7 +27,8 @@ Vim Setup Script - 一键配置 Vim 开发环境
   4. 将本目录的 vimrc 软链接到 ~/.vimrc
   5. 创建 Vim 缓存目录 (~/.vim/gutentags)
   6. 安装 vim-plug 插件管理器并安装所有插件
-  7. 安装 coc.nvim 语言服务器 (Python, Go, Java, Shell, JSON, YAML)
+  7. 安装 Nerd Font 字体 (用于 NERDTree 等插件显示图标)
+  8. 安装 coc.nvim 语言服务器 (Python, Go, Java, Shell, JSON, YAML)
      - 如果 Vim 版本过低则跳过此步骤
 
 用法:
@@ -123,6 +124,9 @@ restore_vimrc() {
     done
     success "Language servers configured"
 
+    # Install Nerd Font
+    install_nerd_font
+
     echo ""
     success "Vim restore complete!"
     exit 0
@@ -201,6 +205,93 @@ check_vim_version() {
     fi
 }
 
+# --- Install Nerd Font ---
+install_nerd_font_macos() {
+    if ! command -v brew &>/dev/null; then
+        warn "Homebrew not found, skipping font installation"
+        return 1
+    fi
+
+    local font_name="font-meslo-lg-nerd-font"
+    if brew list --cask "$font_name" &>/dev/null; then
+        success "Font $font_name already installed"
+    else
+        info "Installing $font_name via Homebrew..."
+        brew install --cask "$font_name"
+        success "Font installed"
+    fi
+    return 0
+}
+
+install_nerd_font_linux() {
+    local font_dir="$HOME/.local/share/fonts"
+    local font_installed=false
+
+    # Check if font already exists
+    if fc-list 2>/dev/null | grep -qi "MesloLGS NF"; then
+        success "MesloLGS NF font already installed"
+        return 0
+    fi
+
+    info "Installing MesloLGS Nerd Font..."
+
+    # Create font directory
+    mkdir -p "$font_dir"
+
+    # Download MesloLGS Nerd Font from powerlevel10k-media repo
+    local fonts=(
+        "MesloLGS%20NF%20Regular.ttf"
+        "MesloLGS%20NF%20Bold.ttf"
+        "MesloLGS%20NF%20Italic.ttf"
+        "MesloLGS%20NF%20Bold%20Italic.ttf"
+    )
+    local base_url="https://github.com/romkatv/powerlevel10k-media/raw/master"
+
+    for font in "${fonts[@]}"; do
+        local font_name=$(echo "$font" | sed 's/%20/ /g')
+        local target="$font_dir/$font_name"
+
+        if [ -f "$target" ]; then
+            success "$font_name already exists"
+        else
+            info "Downloading $font_name..."
+            if curl -fLo "$target" "$base_url/$font" 2>/dev/null; then
+                font_installed=true
+            else
+                warn "Failed to download $font_name"
+            fi
+        fi
+    done
+
+    # Rebuild font cache
+    if [ "$font_installed" = true ]; then
+        fc-cache -f "$font_dir" 2>/dev/null || warn "fc-cache not available, you may need to restart your terminal"
+        success "MesloLGS Nerd Font installed"
+    fi
+    return 0
+}
+
+install_nerd_font() {
+    info "Checking Nerd Font..."
+    case "$OS" in
+        Darwin)
+            install_nerd_font_macos
+            ;;
+        Linux)
+            install_nerd_font_linux
+            ;;
+        *)
+            warn "Unsupported OS: $OS, skipping font installation"
+            warn "Please install a Nerd Font manually: https://www.nerdfonts.com/"
+            return 1
+            ;;
+    esac
+
+    echo ""
+    echo -e "\033[33m[重要提示]\033[0m 请在终端设置中将字体更改为 'MesloLGS NF' 以正确显示图标"
+    echo ""
+}
+
 # --- Install system dependencies ---
 info "Detected OS: $OS"
 case "$OS" in
@@ -243,6 +334,9 @@ success "vim-plug installed"
 info "Installing Vim plugins (this may take a moment)..."
 vim +PlugInstall +qall 2>/dev/null
 success "Vim plugins installed"
+
+# --- Install Nerd Font ---
+install_nerd_font
 
 # --- Install coc.nvim language servers via npm (non-interactive) ---
 if [ "${SKIP_COC:-0}" = "1" ]; then
@@ -291,5 +385,7 @@ echo "  ,-gd       Git diff"
 echo "  Tab/S-Tab  Navigate completion"
 echo ""
 echo "  Leader key is comma (,)"
+echo ""
+echo "  Font: Set terminal font to 'MesloLGS NF' for proper icon display"
 echo ""
 

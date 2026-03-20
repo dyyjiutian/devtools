@@ -10,6 +10,16 @@ set -e
 ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
 ZSHRC="$HOME/.zshrc"
 
+# 检测操作系统类型
+detect_os() {
+    case "$(uname -s)" in
+        Darwin*)    echo "macos" ;;
+        Linux*)     echo "linux" ;;
+        CYGWIN*|MINGW*|MSYS*)    echo "windows" ;;
+        *)          echo "unknown" ;;
+    esac
+}
+
 # 显示帮助信息
 show_help() {
     cat << 'EOF'
@@ -22,20 +32,23 @@ Oh My Zsh 自动配置脚本
     -d, --dry-run   试运行模式，只显示将要执行的修改，不实际修改文件
 
 功能:
-    1. 检查并恢复 Oh My Zsh 安装前覆盖的 ~/.zshrc 配置
-    2. 设置 zsh 主题为 powerlevel10k/powerlevel10k
-    3. 安装 powerlevel10k 主题并恢复 .p10k.zsh 配置
-    4. 禁用 Oh My Zsh 自动更新
-    5. 启用插件: git, z, web-search
-    6. 安装第三方插件:
+    1. 检测操作系统类型 (macOS/Linux)，自动安装 zsh（如果未安装）
+    2. 如果未安装 Oh My Zsh，自动安装
+    3. 检查并恢复 Oh My Zsh 安装前覆盖的 ~/.zshrc 配置
+    4. 设置 zsh 主题为 powerlevel10k/powerlevel10k
+    5. 安装 powerlevel10k 主题并恢复 .p10k.zsh 配置
+    6. 禁用 Oh My Zsh 自动更新
+    7. 启用插件: git, z, web-search
+    8. 安装第三方插件:
        - zsh-autosuggestions (命令自动建议)
        - zsh-syntax-highlighting (语法高亮)
-    7. 通过 Homebrew 安装 Meslo LG Nerd Font (powerlevel10k主题所需)
+    9. 通过 Homebrew 安装 Meslo LG Nerd Font (powerlevel10k主题所需)
 
 要求:
-    - 已安装 Oh My Zsh
-    - 已安装 git
+    - git
+    - curl 或 wget
     - 有写入 ~/.zshrc 的权限
+    - macOS 需要 Homebrew (用于安装字体)
 
 示例:
     ./setup.sh           # 执行配置
@@ -74,12 +87,121 @@ log() {
     echo "[$(date +%H:%M:%S)] $*"
 }
 
+# 检测 sed 命令（macOS 和 Linux 的 sed -i 语法不同）
+# macOS (BSD sed): sed -i '' 's/pattern/replacement/' file
+# Linux (GNU sed): sed -i 's/pattern/replacement/' file
+sed_inplace() {
+    local file="$1"
+    shift
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        sed -i '' "$@" "$file"
+    else
+        sed -i "$@" "$file"
+    fi
+}
+
+# 检查 zsh 是否安装
+check_zsh() {
+    if ! command -v zsh &> /dev/null; then
+        local os_type
+        os_type=$(detect_os)
+
+        log "zsh 未安装，正在根据操作系统类型安装..."
+
+        case "$os_type" in
+            macos)
+                if command -v brew &> /dev/null; then
+                    if [[ "$DRY_RUN" == "false" ]]; then
+                        brew install zsh
+                        log "✓ zsh 安装完成"
+                    else
+                        log "[试运行] 将要通过 brew 安装 zsh"
+                    fi
+                else
+                    echo "错误: Homebrew 未安装，请先安装 Homebrew: https://brew.sh"
+                    exit 1
+                fi
+                ;;
+            linux)
+                if command -v apt-get &> /dev/null; then
+                    if [[ "$DRY_RUN" == "false" ]]; then
+                        sudo apt-get update && sudo apt-get install -y zsh
+                        log "✓ zsh 安装完成"
+                    else
+                        log "[试运行] 将要通过 apt-get 安装 zsh"
+                    fi
+                elif command -v yum &> /dev/null; then
+                    if [[ "$DRY_RUN" == "false" ]]; then
+                        sudo yum install -y zsh
+                        log "✓ zsh 安装完成"
+                    else
+                        log "[试运行] 将要通过 yum 安装 zsh"
+                    fi
+                elif command -v dnf &> /dev/null; then
+                    if [[ "$DRY_RUN" == "false" ]]; then
+                        sudo dnf install -y zsh
+                        log "✓ zsh 安装完成"
+                    else
+                        log "[试运行] 将要通过 dnf 安装 zsh"
+                    fi
+                else
+                    echo "错误: 无法识别的包管理器，请手动安装 zsh"
+                    exit 1
+                fi
+                ;;
+            *)
+                echo "错误: 不支持的操作系统: $os_type"
+                echo "请手动安装 zsh"
+                exit 1
+                ;;
+        esac
+    fi
+
+    log "✓ zsh 已安装: $(command -v zsh)"
+}
+
+# 安装 Oh My Zsh
+install_ohmyzsh() {
+    log "安装 Oh My Zsh..."
+
+    # 检查必要的工具
+    if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
+        echo "错误: 需要 curl 或 wget 来安装 Oh My Zsh"
+        exit 1
+    fi
+
+    if [[ "$DRY_RUN" == "false" ]]; then
+        # 使用官方安装脚本，RUNZSH=no 防止自动启动 zsh
+        # CHSH=no 防止自动更改默认 shell
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        log "✓ Oh My Zsh 安装完成"
+    else
+        log "[试运行] 将要下载并安装 Oh My Zsh"
+    fi
+}
+
 # 检查是否已安装 Oh My Zsh
 check_ohmyzsh() {
     if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
-        echo "错误: Oh My Zsh 未安装"
-        echo "请先安装 Oh My Zsh: https://ohmyz.sh/#install"
-        exit 1
+        log "Oh My Zsh 未安装"
+
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log "[试运行] 将要安装 Oh My Zsh"
+            return 0
+        fi
+
+        # 询问用户是否安装
+        read -r -p "是否自动安装 Oh My Zsh? [Y/n]: " response
+        response="${response:-Y}"
+
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            check_zsh
+            install_ohmyzsh
+        else
+            echo "错误: Oh My Zsh 未安装"
+            echo "请先安装 Oh My Zsh: https://ohmyz.sh/#install"
+            exit 1
+        fi
     fi
     log "✓ Oh My Zsh 已安装"
 }
@@ -209,7 +331,7 @@ restore_p10k_config() {
 set_theme() {
     log "设置主题为 powerlevel10k/powerlevel10k..."
     if [[ "$DRY_RUN" == "false" ]]; then
-        sed -i '' 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$ZSHRC"
+        sed_inplace "$ZSHRC" 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/'
         log "✓ 主题已设置为 powerlevel10k/powerlevel10k"
     else
         log "[试运行] 将要设置 ZSH_THEME=\"powerlevel10k/powerlevel10k\""
@@ -222,25 +344,25 @@ disable_auto_update() {
     if [[ "$DRY_RUN" == "false" ]]; then
         # 检查是否已存在 DISABLE_AUTO_UPDATE 配置
         if grep -q "^DISABLE_AUTO_UPDATE=" "$ZSHRC"; then
-            sed -i '' 's/^DISABLE_AUTO_UPDATE=.*/DISABLE_AUTO_UPDATE="true"/' "$ZSHRC"
+            sed_inplace "$ZSHRC" 's/^DISABLE_AUTO_UPDATE=.*/DISABLE_AUTO_UPDATE="true"/'
         else
             # 在 ZSH_THEME 行之后添加
-            sed -i '' '/^ZSH_THEME=/a\
+            sed_inplace "$ZSHRC" '/^ZSH_THEME=/a\
 # 禁用自动更新\
-DISABLE_AUTO_UPDATE="true"' "$ZSHRC"
+DISABLE_AUTO_UPDATE="true"'
         fi
         log "✓ 已禁用自动更新"
 
         # 优化 git 目录下的命令响应速度
         if ! grep -q "^DISABLE_UNTRACKED_FILES_DIRTY=" "$ZSHRC"; then
-            sed -i '' '/^DISABLE_AUTO_UPDATE=/a\
+            sed_inplace "$ZSHRC" '/^DISABLE_AUTO_UPDATE=/a\
 # 不检查未跟踪文件，加速 git 目录下的命令响应\
-DISABLE_UNTRACKED_FILES_DIRTY="true"' "$ZSHRC"
+DISABLE_UNTRACKED_FILES_DIRTY="true"'
         fi
         if ! grep -q "^DISABLE_AUTO_TITLE=" "$ZSHRC"; then
-            sed -i '' '/^DISABLE_UNTRACKED_FILES_DIRTY=/a\
+            sed_inplace "$ZSHRC" '/^DISABLE_UNTRACKED_FILES_DIRTY=/a\
 # 禁用自动设置终端标题\
-DISABLE_AUTO_TITLE="true"' "$ZSHRC"
+DISABLE_AUTO_TITLE="true"'
         fi
         log "✓ 已优化 git 目录性能"
     else
@@ -255,7 +377,7 @@ set_plugins() {
     log "配置插件..."
     local plugins="git z web-search"
     if [[ "$DRY_RUN" == "false" ]]; then
-        sed -i '' 's/^plugins=.*/plugins=('"$plugins"')/' "$ZSHRC"
+        sed_inplace "$ZSHRC" 's/^plugins=.*/plugins=('"$plugins"')/'
         log "✓ 插件已启用: $plugins"
     else
         log "[试运行] 将要设置 plugins=($plugins)"
@@ -283,7 +405,7 @@ install_autosuggestions() {
     # 添加到 plugins (如果尚未添加)
     if [[ "$DRY_RUN" == "false" ]]; then
         if ! grep -q "zsh-autosuggestions" "$ZSHRC"; then
-            sed -i '' '/^plugins=/s/plugins=(/plugins=(zsh-autosuggestions /' "$ZSHRC"
+            sed_inplace "$ZSHRC" '/^plugins=/s/plugins=(/plugins=(zsh-autosuggestions /'
         fi
     fi
 }
@@ -309,7 +431,7 @@ install_syntax_highlighting() {
     # 添加到 plugins (注意: zsh-syntax-highlighting 必须是最后一个，如果尚未添加)
     if [[ "$DRY_RUN" == "false" ]]; then
         if ! grep -q "zsh-syntax-highlighting" "$ZSHRC"; then
-            sed -i '' '/^plugins=/s/)/ zsh-syntax-highlighting)/' "$ZSHRC"
+            sed_inplace "$ZSHRC" '/^plugins=/s/)/ zsh-syntax-highlighting)/'
         fi
     fi
 }
