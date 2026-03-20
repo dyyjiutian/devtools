@@ -375,7 +375,7 @@ DISABLE_AUTO_TITLE="true"'
 # 启用插件
 set_plugins() {
     log "配置插件..."
-    local plugins="git z web-search"
+    local plugins="git z web-search zsh-autosuggestions zsh-syntax-highlighting"
     if [[ "$DRY_RUN" == "false" ]]; then
         sed_inplace "$ZSHRC" 's/^plugins=.*/plugins=('"$plugins"')/'
         log "✓ 插件已启用: $plugins"
