@@ -42,6 +42,7 @@ ${BOLD}选项:${NC}
   --skip-docker       跳过 Docker CE 安装
   --skip-git          跳过 Git 安装
   --skip-node         跳过 Node.js / npm 安装
+  --skip-cloc         跳过 cloc 安装
 
 ${BOLD}安装的软件:${NC}
   Docker CE:
@@ -55,6 +56,9 @@ ${BOLD}安装的软件:${NC}
   Node.js:
     nodejs (LTS)     - Node.js LTS 版本
     npm              - Node 包管理器
+
+  cloc:
+    cloc             - 代码行数统计工具
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
@@ -318,6 +322,30 @@ install_node() {
   fi
 }
 
+# ─── 安装 cloc ────────────────────────────────────────────────────────────────
+install_cloc() {
+  step "cloc 安装"
+
+  if is_installed cloc; then
+    success "cloc 已安装：$(cloc --version | head -1)"
+    return
+  fi
+
+  info "正在安装 cloc..."
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+
+  run_cmd "$pkg_manager" install -y cloc
+
+  if is_installed cloc; then
+    success "cloc 安装完成：$(cloc --version | head -1)"
+  else
+    error "cloc 安装失败"
+    return 1
+  fi
+}
+
 # ─── 安装后提示 ──────────────────────────────────────────────────────────────────
 post_install_notes() {
   step "安装后注意事项"
@@ -339,6 +367,11 @@ post_install_notes() {
   echo -e "    docker images               # 查看镜像列表"
   echo -e "    docker compose up -d        # 使用 compose 启动服务"
   echo -e ""
+  echo -e "  ${YELLOW}cloc 代码统计${NC}:"
+  echo -e "    cloc <path>                 # 统计目录代码行数"
+  echo -e "    cloc --by-file <path>       # 按文件统计"
+  echo -e "    cloc --include-lang=Python,Go <path>  # 仅统计指定语言"
+  echo -e ""
 }
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────────
@@ -347,6 +380,7 @@ main() {
   local skip_docker=false
   local skip_git=false
   local skip_node=false
+  local skip_cloc=false
 
   # 参数解析
   while [[ $# -gt 0 ]]; do
@@ -366,6 +400,9 @@ main() {
         ;;
       --skip-node)
         skip_node=true
+        ;;
+      --skip-cloc)
+        skip_cloc=true
         ;;
       *)
         error "未知参数: $1"
@@ -402,6 +439,7 @@ main() {
   $skip_docker || install_docker
   $skip_git    || install_git
   $skip_node   || install_node
+  $skip_cloc   || install_cloc
 
   post_install_notes
 

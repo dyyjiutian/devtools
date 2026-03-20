@@ -47,7 +47,7 @@ ${BOLD}选项:${NC}
 
 ${BOLD}安装的软件:${NC}
   CLI 工具 (brew formulae):
-    git, curl, wget, jq, tree, htop, gh, neovim, fzf, zsh, ripgrep, bat, eza
+    git, curl, wget, jq, tree, htop, gh, neovim, fzf, zsh, ripgrep, bat, eza, cloc
 
   GUI 应用 (brew casks):
     iterm2          - 终端模拟器
@@ -168,6 +168,7 @@ install_formulae() {
     htop
     gh
     neovim
+    cloc
     # fzf
     # zsh
     # ripgrep
