@@ -57,6 +57,7 @@ call plug#end()
 set nocompatible
 filetype plugin indent on
 syntax on
+set paste
 
 set encoding=utf-8
 set fileencodings=utf-8,gbk,gb2312,gb18030,latin1

@@ -280,9 +280,11 @@ install_autosuggestions() {
         fi
     fi
 
-    # 添加到 plugins
+    # 添加到 plugins (如果尚未添加)
     if [[ "$DRY_RUN" == "false" ]]; then
-        sed -i '' 's/plugins=(/plugins=(zsh-autosuggestions /' "$ZSHRC"
+        if ! grep -q "zsh-autosuggestions" "$ZSHRC"; then
+            sed -i '' '/^plugins=/s/plugins=(/plugins=(zsh-autosuggestions /' "$ZSHRC"
+        fi
     fi
 }
 
@@ -304,9 +306,11 @@ install_syntax_highlighting() {
         fi
     fi
 
-    # 添加到 plugins (注意: zsh-syntax-highlighting 必须是最后一个)
+    # 添加到 plugins (注意: zsh-syntax-highlighting 必须是最后一个，如果尚未添加)
     if [[ "$DRY_RUN" == "false" ]]; then
-        sed -i '' 's/)/ zsh-syntax-highlighting)/' "$ZSHRC"
+        if ! grep -q "zsh-syntax-highlighting" "$ZSHRC"; then
+            sed -i '' '/^plugins=/s/)/ zsh-syntax-highlighting)/' "$ZSHRC"
+        fi
     fi
 }
 

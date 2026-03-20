@@ -30,6 +30,8 @@ Vim Setup Script - 一键配置 Vim 开发环境
 
 用法:
   ./setup.sh              运行完整安装
+  ./setup.sh --backup     将 ~/.vimrc 备份到当前目录的 vimrc
+  ./setup.sh --restore    将当前目录的 vimrc 覆盖到 ~/.vimrc 并安装插件
   ./setup.sh --help       显示此帮助信息
 
 快捷键速查 (Leader 键为逗号 ,):
@@ -48,8 +50,81 @@ EOF
     exit 0
 }
 
+# --- Backup ~/.vimrc to current directory ---
+backup_vimrc() {
+    if [ ! -f "$HOME/.vimrc" ]; then
+        error "~/.vimrc does not exist, nothing to backup"
+        exit 1
+    fi
+
+    info "Backing up ~/.vimrc to $SCRIPT_DIR/vimrc..."
+    cp "$HOME/.vimrc" "$SCRIPT_DIR/vimrc"
+    success "Backup complete: $SCRIPT_DIR/vimrc"
+    exit 0
+}
+
+# --- Restore vimrc from current directory and install plugins ---
+restore_vimrc() {
+    if [ ! -f "$SCRIPT_DIR/vimrc" ]; then
+        error "vimrc not found in $SCRIPT_DIR"
+        exit 1
+    fi
+
+    # Backup existing ~/.vimrc if it exists and is not a symlink
+    if [ -f "$HOME/.vimrc" ] && [ ! -L "$HOME/.vimrc" ]; then
+        BACKUP="$HOME/.vimrc.bak.$(date +%Y%m%d%H%M%S)"
+        info "Backing up existing ~/.vimrc to $BACKUP"
+        cp "$HOME/.vimrc" "$BACKUP"
+    fi
+
+    info "Restoring vimrc from $SCRIPT_DIR/vimrc..."
+    cp "$SCRIPT_DIR/vimrc" "$HOME/.vimrc"
+    success "vimrc restored to ~/.vimrc"
+
+    # Create cache directories
+    mkdir -p "$HOME/.vim/gutentags"
+
+    # Install vim-plug if not exists
+    if [ ! -f "$HOME/.vim/autoload/plug.vim" ]; then
+        info "Installing vim-plug..."
+        curl -fLo "$HOME/.vim/autoload/plug.vim" --create-dirs \
+            https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+        success "vim-plug installed"
+    fi
+
+    # Install plugins
+    info "Installing Vim plugins (this may take a moment)..."
+    vim +PlugInstall +qall 2>/dev/null || true
+    success "Vim plugins installed"
+
+    # Install coc.nvim language servers
+    info "Installing coc.nvim language servers..."
+    EXTENSIONS=(
+        "coc-pyright"
+        "coc-go"
+        "coc-java"
+        "coc-sh"
+        "coc-json"
+        "coc-yaml"
+    )
+
+    mkdir -p "$HOME/.config/coc/extensions"
+
+    for ext in "${EXTENSIONS[@]}"; do
+        info "Installing $ext..."
+        vim -c "CocInstall -sync $ext" -c "qall" 2>/dev/null || warn "Failed to install $ext (install manually in vim with :CocInstall $ext)"
+    done
+    success "Language servers configured"
+
+    echo ""
+    success "Vim restore complete!"
+    exit 0
+}
+
 case "${1:-}" in
-    --help|-h) show_help ;;
+    --help|-h)     show_help ;;
+    --backup|-b)   backup_vimrc ;;
+    --restore|-r)  restore_vimrc ;;
 esac
 
 # --- Detect OS ---
