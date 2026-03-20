@@ -22,8 +22,13 @@ Plug 'ryanoasis/vim-devicons'
 Plug 'tpope/vim-fugitive'
 Plug 'airblade/vim-gitgutter'
 
-" Auto-completion
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
+" Auto-completion (requires Vim 8.1.1719+ or Neovim 0.4.0+)
+if has('nvim') || (v:version >= 801 && has('patch1719'))
+  Plug 'neoclide/coc.nvim', {'branch': 'release'}
+else
+  " Fallback: use simpler completion for older Vim
+  Plug 'vim-scripts/AutoComplPop'
+endif
 
 " Syntax highlighting
 Plug 'sheerun/vim-polyglot'
@@ -98,6 +103,11 @@ set noswapfile
 " Mouse
 set mouse=a
 
+" Cursor shape
+let &t_SI = "\e[6 q"   " Insert mode: vertical bar
+let &t_SR = "\e[4 q"   " Replace mode: underline
+let &t_EI = "\e[2 q"   " Normal mode: block
+
 " Backspace
 set backspace=indent,eol,start
 
@@ -168,6 +178,7 @@ autocmd BufEnter * if winnr('$') == 1 && exists('b:NERDTree') && b:NERDTree.isTa
 " ============================================================
 " coc.nvim Settings (Auto-completion & LSP)
 " ============================================================
+if has('nvim') || (v:version >= 801 && has('patch1719'))
 " Tab to trigger completion and navigate
 inoremap <silent><expr> <TAB>
       \ coc#pum#visible() ? coc#pum#next(1) :
@@ -206,6 +217,7 @@ nmap <Leader>rn <Plug>(coc-rename)
 " Diagnostic navigation
 nmap <silent> [d <Plug>(coc-diagnostic-prev)
 nmap <silent> ]d <Plug>(coc-diagnostic-next)
+endif
 
 " ============================================================
 " Airline Settings
@@ -223,7 +235,7 @@ let g:gutentags_project_root = ['.git', '.svn', '.project', 'package.json', 'go.
 let g:gutentags_ctags_tagfile = '.tags'
 let g:gutentags_modules = ['ctags']
 let g:gutentags_cache_dir = expand('~/.vim/gutentags')
-let g:gutentags_ctags_extra_args = ['--fields=+niazS', '--extras=+q']
+let g:gutentags_ctags_extra_args = ['--fields=+niazS']
 
 " ============================================================
 " Language-specific Settings

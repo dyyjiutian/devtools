@@ -19,14 +19,16 @@ show_help() {
 Vim Setup Script - 一键配置 Vim 开发环境
 
 该脚本会执行以下配置:
-  1. 安装系统依赖 (vim, node, universal-ctags, fzf, ripgrep)
+  1. 安装系统依赖 (vim, node, ctags, fzf, ripgrep)
      - macOS 通过 Homebrew 安装
      - Linux 通过 apt-get 或 yum 安装
-  2. 备份已有的 ~/.vimrc (如果存在)
-  3. 将本目录的 vimrc 软链接到 ~/.vimrc
-  4. 创建 Vim 缓存目录 (~/.vim/gutentags)
-  5. 安装 vim-plug 插件管理器并安装所有插件
-  6. 安装 coc.nvim 语言服务器 (Python, Go, Java, Shell, JSON, YAML)
+  2. 检测 Vim 版本 (coc.nvim 需要 Vim 8.1.1719+)
+  3. 备份已有的 ~/.vimrc (如果存在)
+  4. 将本目录的 vimrc 软链接到 ~/.vimrc
+  5. 创建 Vim 缓存目录 (~/.vim/gutentags)
+  6. 安装 vim-plug 插件管理器并安装所有插件
+  7. 安装 coc.nvim 语言服务器 (Python, Go, Java, Shell, JSON, YAML)
+     - 如果 Vim 版本过低则跳过此步骤
 
 用法:
   ./setup.sh              运行完整安装
@@ -97,7 +99,7 @@ restore_vimrc() {
     vim +PlugInstall +qall 2>/dev/null || true
     success "Vim plugins installed"
 
-    # Install coc.nvim language servers
+    # Install coc.nvim language servers via npm (non-interactive)
     info "Installing coc.nvim language servers..."
     EXTENSIONS=(
         "coc-pyright"
@@ -109,10 +111,15 @@ restore_vimrc() {
     )
 
     mkdir -p "$HOME/.config/coc/extensions"
+    cd "$HOME/.config/coc/extensions"
 
     for ext in "${EXTENSIONS[@]}"; do
-        info "Installing $ext..."
-        vim -c "CocInstall -sync $ext" -c "qall" 2>/dev/null || warn "Failed to install $ext (install manually in vim with :CocInstall $ext)"
+        if [ -d "node_modules/$ext" ]; then
+            success "$ext already installed"
+        else
+            info "Installing $ext..."
+            npm install "$ext" --global-style --ignore-scripts --no-bin-links --no-package-lock 2>&1 | grep -v "npm WARN" || warn "Failed to install $ext (install manually: cd ~/.config/coc/extensions && npm install $ext)"
+        fi
     done
     success "Language servers configured"
 
@@ -137,7 +144,7 @@ install_deps_macos() {
         exit 1
     fi
 
-    local deps=(vim node universal-ctags fzf ripgrep)
+    local deps=(vim node ctags fzf ripgrep)
     for dep in "${deps[@]}"; do
         if brew list "$dep" &>/dev/null; then
             success "$dep already installed"
@@ -162,6 +169,38 @@ install_deps_linux() {
     fi
 }
 
+# --- Check Vim version ---
+check_vim_version() {
+    local version_output
+    version_output=$(vim --version 2>/dev/null | head -1)
+
+    # Extract major.minor.patch version (e.g., "VIM - Vi IMproved 9.1" -> 9.1)
+    local version
+    version=$(echo "$version_output" | grep -oE '[0-9]+\.[0-9]+' | head -1)
+
+    local major minor
+    major=$(echo "$version" | cut -d. -f1)
+    minor=$(echo "$version" | cut -d. -f2)
+
+    # coc.nvim requires at least Vim 8.1.1719
+    # We check: 9.x is OK, 8.2+ is OK, 8.1.1719+ is OK
+    if [ "$major" -ge 9 ]; then
+        echo "ok"
+    elif [ "$major" -eq 8 ]; then
+        if [ "$minor" -ge 2 ]; then
+            echo "ok"
+        elif [ "$minor" -eq 1 ]; then
+            # For 8.1.x, we need patch 1719+, but we'll just warn
+            warn "Vim 8.1 detected. coc.nvim requires 8.1.1719+"
+            echo "warn"
+        else
+            echo "old"
+        fi
+    else
+        echo "old"
+    fi
+}
+
 # --- Install system dependencies ---
 info "Detected OS: $OS"
 case "$OS" in
@@ -169,6 +208,16 @@ case "$OS" in
     Linux)  install_deps_linux ;;
     *)      warn "Unknown OS: $OS. Skipping dependency installation." ;;
 esac
+
+# --- Check Vim version for coc.nvim ---
+VIM_STATUS=$(check_vim_version)
+if [ "$VIM_STATUS" = "old" ]; then
+    warn "Vim version too old for coc.nvim (requires 8.1.1719+)"
+    warn "coc.nvim will be skipped. Consider upgrading Vim to 9.0+"
+    SKIP_COC=1
+elif [ "$VIM_STATUS" = "warn" ]; then
+    warn "Vim version may be too old for some coc.nvim features"
+fi
 
 # --- Backup existing vimrc ---
 if [ -f "$HOME/.vimrc" ] && [ ! -L "$HOME/.vimrc" ]; then
@@ -195,24 +244,34 @@ info "Installing Vim plugins (this may take a moment)..."
 vim +PlugInstall +qall 2>/dev/null
 success "Vim plugins installed"
 
-# --- Install coc.nvim language servers ---
-info "Installing coc.nvim language servers..."
-EXTENSIONS=(
-    "coc-pyright"
-    "coc-go"
-    "coc-java"
-    "coc-sh"
-    "coc-json"
-    "coc-yaml"
-)
+# --- Install coc.nvim language servers via npm (non-interactive) ---
+if [ "${SKIP_COC:-0}" = "1" ]; then
+    warn "Skipping coc.nvim installation due to Vim version"
+    warn "To use coc.nvim, upgrade Vim to 9.0+ and run: vim +PlugInstall +qall"
+else
+    info "Installing coc.nvim language servers..."
+    EXTENSIONS=(
+        "coc-pyright"
+        "coc-go"
+        "coc-java"
+        "coc-sh"
+        "coc-json"
+        "coc-yaml"
+    )
 
-mkdir -p "$HOME/.config/coc/extensions"
+    mkdir -p "$HOME/.config/coc/extensions"
+    cd "$HOME/.config/coc/extensions"
 
-for ext in "${EXTENSIONS[@]}"; do
-    info "Installing $ext..."
-    vim -c "CocInstall -sync $ext" -c "qall" 2>/dev/null || warn "Failed to install $ext (install manually in vim with :CocInstall $ext)"
-done
-success "Language servers configured"
+    for ext in "${EXTENSIONS[@]}"; do
+        if [ -d "node_modules/$ext" ]; then
+            success "$ext already installed"
+        else
+            info "Installing $ext..."
+            npm install "$ext" --global-style --ignore-scripts --no-bin-links --no-package-lock 2>&1 | grep -v "npm WARN" || warn "Failed to install $ext (install manually: cd ~/.config/coc/extensions && npm install $ext)"
+        fi
+    done
+    success "Language servers configured"
+fi
 
 # --- Done ---
 echo ""
