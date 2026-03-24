@@ -43,6 +43,7 @@ ${BOLD}选项:${NC}
   --skip-git          跳过 Git 安装
   --skip-node         跳过 Node.js / npm 安装
   --skip-cloc         跳过 cloc 安装
+  --skip-tools        跳过终端工具安装 (tmux, fzf, yazi, zoxide)
 
 ${BOLD}安装的软件:${NC}
   Docker CE:
@@ -59,6 +60,12 @@ ${BOLD}安装的软件:${NC}
 
   cloc:
     cloc             - 代码行数统计工具
+
+  终端增强工具:
+    tmux             - 终端复用器
+    fzf              - 模糊搜索工具
+    yazi             - 终端文件管理器
+    zoxide           - 快速目录跳转工具
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
@@ -346,6 +353,109 @@ install_cloc() {
   fi
 }
 
+# ─── 安装终端增强工具 (tmux, fzf, yazi, zoxide) ────────────────────────────────
+install_tools() {
+  step "终端增强工具安装 (tmux, fzf, yazi, zoxide)"
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+
+  # tmux
+  if is_installed tmux; then
+    success "tmux 已安装：$(tmux -V)"
+  else
+    info "正在安装 tmux..."
+    run_cmd "$pkg_manager" install -y tmux
+    if is_installed tmux; then
+      success "tmux 安装完成：$(tmux -V)"
+    else
+      warn "tmux 安装失败"
+    fi
+  fi
+
+  # fzf
+  if is_installed fzf; then
+    success "fzf 已安装"
+  else
+    info "正在安装 fzf..."
+    # 尝试从仓库安装
+    if run_cmd "$pkg_manager" install -y fzf 2>/dev/null; then
+      success "fzf 安装完成"
+    else
+      # 从源码安装
+      info "从 GitHub 安装 fzf..."
+      if [[ -d "$HOME/.fzf" ]]; then
+        rm -rf "$HOME/.fzf"
+      fi
+      git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf" 2>/dev/null || true
+      if [[ -f "$HOME/.fzf/install" ]]; then
+        "$HOME/.fzf/install" --all --no-bash --no-fish
+        success "fzf 安装完成"
+      else
+        warn "fzf 安装失败，请手动安装"
+      fi
+    fi
+  fi
+
+  # yazi
+  if is_installed yazi; then
+    success "yazi 已安装"
+  else
+    info "正在安装 yazi..."
+    # 检查是否有预编译版本
+    local arch
+    arch=$(uname -m)
+    local yazi_arch="$arch"
+    [[ "$arch" == "x86_64" ]] && yazi_arch="x86_64"
+
+    # 尝试下载最新版本
+    local yazi_version="0.3.3"
+    local yazi_url="https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/yazi-${yazi_arch}-unknown-linux-gnu.zip"
+
+    info "下载 yazi v${yazi_version}..."
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    if curl -fsSL "$yazi_url" -o "$tmpdir/yazi.zip" 2>/dev/null; then
+      if command -v unzip &>/dev/null; then
+        unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
+        if [[ -f "$tmpdir/yazi" ]]; then
+          run_cmd mv "$tmpdir/yazi" /usr/local/bin/yazi
+          run_cmd chmod +x /usr/local/bin/yazi
+          success "yazi 安装完成"
+        else
+          warn "yazi 解压失败"
+        fi
+      else
+        run_cmd "$pkg_manager" install -y unzip
+        unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
+        if [[ -f "$tmpdir/yazi" ]]; then
+          run_cmd mv "$tmpdir/yazi" /usr/local/bin/yazi
+          run_cmd chmod +x /usr/local/bin/yazi
+          success "yazi 安装完成"
+        else
+          warn "yazi 解压失败"
+        fi
+      fi
+      rm -rf "$tmpdir"
+    else
+      warn "yazi 下载失败，请手动安装"
+    fi
+  fi
+
+  # zoxide
+  if is_installed zoxide; then
+    success "zoxide 已安装"
+  else
+    info "正在安装 zoxide..."
+    # 使用官方安装脚本
+    if curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | run_cmd bash -s -- --bin-dir /usr/local/bin 2>/dev/null; then
+      success "zoxide 安装完成"
+    else
+      warn "zoxide 安装失败，请手动安装"
+    fi
+  fi
+}
+
 # ─── 安装后提示 ──────────────────────────────────────────────────────────────────
 post_install_notes() {
   step "安装后注意事项"
@@ -372,6 +482,14 @@ post_install_notes() {
   echo -e "    cloc --by-file <path>       # 按文件统计"
   echo -e "    cloc --include-lang=Python,Go <path>  # 仅统计指定语言"
   echo -e ""
+  echo -e "  ${YELLOW}终端增强工具${NC}:"
+  echo -e "    tmux new -s <name>          # 创建新会话"
+  echo -e "    tmux attach -t <name>       # 附加到会话"
+  echo -e "    fzf                         # 模糊搜索文件"
+  echo -e "    yazi                        # 终端文件管理器"
+  echo -e "    z <目录名>                   # 快速目录跳转"
+  echo -e "    注意: zoxide 需要添加到 shell 配置: eval \"\$(zoxide init bash)\""
+  echo -e ""
 }
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────────
@@ -381,6 +499,7 @@ main() {
   local skip_git=false
   local skip_node=false
   local skip_cloc=false
+  local skip_tools=false
 
   # 参数解析
   while [[ $# -gt 0 ]]; do
@@ -403,6 +522,9 @@ main() {
         ;;
       --skip-cloc)
         skip_cloc=true
+        ;;
+      --skip-tools)
+        skip_tools=true
         ;;
       *)
         error "未知参数: $1"
@@ -440,6 +562,7 @@ main() {
   $skip_git    || install_git
   $skip_node   || install_node
   $skip_cloc   || install_cloc
+  $skip_tools  || install_tools
 
   post_install_notes
 

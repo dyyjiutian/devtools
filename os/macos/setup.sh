@@ -47,7 +47,8 @@ ${BOLD}选项:${NC}
 
 ${BOLD}安装的软件:${NC}
   CLI 工具 (brew formulae):
-    git, curl, wget, jq, tree, htop, gh, neovim, fzf, zsh, ripgrep, bat, eza, cloc
+    git, curl, wget, jq, tree, htop, gh, neovim, cloc
+    tmux, fzf, yazi, zoxide    - 终端增强工具
 
   GUI 应用 (brew casks):
     iterm2          - 终端模拟器
@@ -169,11 +170,10 @@ install_formulae() {
     gh
     neovim
     cloc
-    # fzf
-    # zsh
-    # ripgrep
-    # bat
-    # eza
+    tmux
+    fzf
+    yazi
+    zoxide
   )
 
   for pkg in "${formulae[@]}"; do
@@ -301,8 +301,18 @@ post_install_notes() {
   echo -e "  ${YELLOW}iTerm2${NC}: 建议配置 Shell Integration:"
   echo -e "    打开 iTerm2 → 菜单 Install Shell Integration"
   echo -e ""
-  echo -e "  ${YELLOW}fzf${NC}: 运行以下命令启用快捷键绑定:"
-  echo -e "    \$(brew --prefix)/opt/fzf/install"
+  echo -e "  ${YELLOW}fzf${NC}: 快捷键已启用 (Ctrl+T 模糊搜索文件，Ctrl+R 搜索历史)"
+  echo -e "    如需重新配置，运行: \$(brew --prefix)/opt/fzf/install"
+  echo -e ""
+  echo -e "  ${YELLOW}tmux${NC}: 终端复用器"
+  echo -e "    常用命令: tmux new -s <name>, tmux attach -t <name>"
+  echo -e ""
+  echo -e "  ${YELLOW}yazi${NC}: 终端文件管理器"
+  echo -e "    启动命令: yazi"
+  echo -e ""
+  echo -e "  ${YELLOW}zoxide${NC}: 快速目录跳转 (z 命令替代 cd)"
+  echo -e "    用法: z <目录名或关键词>"
+  echo -e "    添加到 ~/.zshrc: eval \"\$(zoxide init zsh)\""
   echo -e ""
   echo -e "  ${YELLOW}gh (GitHub CLI)${NC}: 安装完成后需登录："
   echo -e "    ${BOLD}gh auth login${NC}"
