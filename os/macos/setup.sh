@@ -48,12 +48,11 @@ ${BOLD}选项:${NC}
 ${BOLD}安装的软件:${NC}
   CLI 工具 (brew formulae):
     git, curl, wget, jq, tree, htop, gh, neovim, cloc
-    tmux, fzf, yazi, zoxide    - 终端增强工具
+    tmux, fzf, yazi, zoxide, lazygit  - 终端增强工具
 
   GUI 应用 (brew casks):
     iterm2          - 终端模拟器
     sublime-text    - 代码编辑器
-    sogouinput      - 搜狗输入法
     obsidian        - 知识库 / 笔记应用
 
   Node.js:
@@ -174,6 +173,7 @@ install_formulae() {
     fzf
     yazi
     zoxide
+    lazygit
   )
 
   for pkg in "${formulae[@]}"; do
@@ -194,7 +194,6 @@ install_casks() {
   local casks=(
     "iterm2:iTerm2 终端"
     "sublime-text:Sublime Text 编辑器"
-    "sogouinput:搜狗输入法"
     "obsidian:Obsidian 知识库"
   )
 
@@ -313,6 +312,9 @@ post_install_notes() {
   echo -e "  ${YELLOW}zoxide${NC}: 快速目录跳转 (z 命令替代 cd)"
   echo -e "    用法: z <目录名或关键词>"
   echo -e "    添加到 ~/.zshrc: eval \"\$(zoxide init zsh)\""
+  echo -e ""
+  echo -e "  ${YELLOW}lazygit${NC}: 终端 Git TUI 客户端"
+  echo -e "    启动命令: lazygit"
   echo -e ""
   echo -e "  ${YELLOW}gh (GitHub CLI)${NC}: 安装完成后需登录："
   echo -e "    ${BOLD}gh auth login${NC}"

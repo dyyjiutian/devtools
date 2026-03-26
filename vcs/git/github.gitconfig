@@ -10,3 +10,29 @@
     git rebase \"origin/$DEFAULT\" || exit 1; \
     git push -u origin HEAD && gh pr create --fill; \
   }; f"
+
+[alias]
+  br-prune = "!f() { \
+    base=main; dry=0; \
+    for arg in \"$@\"; do \
+      case $arg in \
+        --dry-run|-n) dry=1 ;; \
+        *) base=$arg ;; \
+      esac; \
+    done; \
+    [ $dry -eq 1 ] && echo \"🔍 dry-run 模式\" && echo '---'; \
+    git fetch --prune; \
+    git branch | grep -v \"^\\*\\|$base\\|master\\|dev\" | while read branch; do \
+      is_merged=$(git branch --merged $base | grep -w \"$branch\"); \
+      is_rebased=$(git cherry $base $branch | grep '^+'); \
+      if [ -n \"$is_merged\" ] || [ -z \"$is_rebased\" ]; then \
+        if [ $dry -eq 1 ]; then \
+          [ -n \"$is_merged\" ] && echo \"[dry-run] 将删除 (merge):  $branch\" || echo \"[dry-run] 将删除 (rebase): $branch\"; \
+        else \
+          git branch -D $branch && echo \"已删除: $branch\"; \
+        fi; \
+      else \
+        echo \"跳过 (有未合并提交): $branch\"; \
+      fi; \
+    done; \
+  }; f"

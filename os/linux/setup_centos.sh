@@ -43,7 +43,7 @@ ${BOLD}选项:${NC}
   --skip-git          跳过 Git 安装
   --skip-node         跳过 Node.js / npm 安装
   --skip-cloc         跳过 cloc 安装
-  --skip-tools        跳过终端工具安装 (tmux, fzf, yazi, zoxide)
+  --skip-tools        跳过终端工具安装 (tmux, fzf, yazi, zoxide, lazygit)
 
 ${BOLD}安装的软件:${NC}
   Docker CE:
@@ -66,6 +66,7 @@ ${BOLD}安装的软件:${NC}
     fzf              - 模糊搜索工具
     yazi             - 终端文件管理器
     zoxide           - 快速目录跳转工具
+    lazygit          - 终端 Git TUI 客户端
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
@@ -353,9 +354,9 @@ install_cloc() {
   fi
 }
 
-# ─── 安装终端增强工具 (tmux, fzf, yazi, zoxide) ────────────────────────────────
+# ─── 安装终端增强工具 (tmux, fzf, yazi, zoxide, lazygit) ─────────────────────────
 install_tools() {
-  step "终端增强工具安装 (tmux, fzf, yazi, zoxide)"
+  step "终端增强工具安装 (tmux, fzf, yazi, zoxide, lazygit)"
 
   local pkg_manager
   pkg_manager=$(detect_pkg_manager)
@@ -454,6 +455,37 @@ install_tools() {
       warn "zoxide 安装失败，请手动安装"
     fi
   fi
+
+  # lazygit
+  if is_installed lazygit; then
+    success "lazygit 已安装：$(lazygit --version | head -1)"
+  else
+    info "正在安装 lazygit..."
+    # 下载预编译版本
+    local lazygit_version="0.44.1"
+    local arch
+    arch=$(uname -m)
+    local lazygit_arch="$arch"
+    [[ "$arch" == "x86_64" ]] && lazygit_arch="x86_64"
+    [[ "$arch" == "aarch64" ]] && lazygit_arch="arm64"
+
+    local lazygit_url="https://github.com/jesseduffield/lazygit/releases/download/v${lazygit_version}/lazygit_${lazygit_version}_Linux_${lazygit_arch}.tar.gz"
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    if curl -fsSL "$lazygit_url" -o "$tmpdir/lazygit.tar.gz" 2>/dev/null; then
+      if tar -xzf "$tmpdir/lazygit.tar.gz" -C "$tmpdir" lazygit 2>/dev/null; then
+        run_cmd mv "$tmpdir/lazygit" /usr/local/bin/lazygit
+        run_cmd chmod +x /usr/local/bin/lazygit
+        success "lazygit 安装完成：$(lazygit --version | head -1)"
+      else
+        warn "lazygit 解压失败"
+      fi
+    else
+      warn "lazygit 下载失败，请手动安装"
+    fi
+    rm -rf "$tmpdir"
+  fi
 }
 
 # ─── 安装后提示 ──────────────────────────────────────────────────────────────────
@@ -488,6 +520,7 @@ post_install_notes() {
   echo -e "    fzf                         # 模糊搜索文件"
   echo -e "    yazi                        # 终端文件管理器"
   echo -e "    z <目录名>                   # 快速目录跳转"
+  echo -e "    lazygit                     # 终端 Git TUI 客户端"
   echo -e "    注意: zoxide 需要添加到 shell 配置: eval \"\$(zoxide init bash)\""
   echo -e ""
 }

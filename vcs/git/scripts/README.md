@@ -7,6 +7,7 @@
 - [脚本说明](#脚本说明)
 - [alias.sh — 安装 Git 快捷命令](#aliassh--安装-git-快捷命令)
 - [git_config.sh — 初始化 Git 全局配置](#git_configsh--初始化-git-全局配置)
+- [github.gitconfig — Git 别名配置](#githubgitconfig--git-别名配置)
 - [在新机器上快速上手](#在新机器上快速上手)
 
 ---
@@ -95,6 +96,31 @@ bash git_config.sh --dry-run
 ```bash
 git config --global --list
 ```
+
+---
+
+## github.gitconfig — Git 别名配置
+
+位于 `../config/github.gitconfig`，提供与 GitHub 工作流相关的 Git 别名。
+
+### 用法
+
+```bash
+# 引入到全局配置
+git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
+
+# 或在 ~/.gitconfig 中添加：
+# [include]
+#   path = ~/devtools/vcs/git/config/github.gitconfig
+```
+
+### 可用别名
+
+| 别名 | 功能 |
+|------|------|
+| `git review` | 推送当前分支到 origin 并使用 `gh` 命令行创建 PR（`--fill` 自动填充标题和描述） |
+
+> **前提**: 需要安装 [GitHub CLI](https://cli.github.com/) (`gh`) 并已认证。
 
 ---
 
