@@ -77,6 +77,8 @@ set scrolloff=5
 set sidescrolloff=5
 set signcolumn=yes
 
+set clipboard=unnamed,unnamedplus
+
 " 注意：不要使用 set paste，它会禁用代码补全等自动功能
 " 使用 F2 键临时切换粘贴模式
 
