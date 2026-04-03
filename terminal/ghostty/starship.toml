@@ -1,0 +1,220 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# 终端宽度小于此值时不显示某些信息
+command_timeout = 500
+scan_timeout = 30
+add_newline = false
+
+# 自定义格式 - 紧凑简洁的提示符
+format = """
+$username$hostname$directory$git_branch$git_state$git_status$cmd_duration$line_break$character"""
+
+# 右栏显示信息
+right_format = """
+$kubernetes$docker_context$golang$nodejs$python$java$rust$terraform$time"""
+
+# 光标前的提示符字符
+[character]
+success_symbol = '[❯](bold green)'
+error_symbol = '[❯](bold red)'
+vimcmd_symbol = '[❮](bold green)'
+
+# 当前目录
+[directory]
+truncation_length = 3
+truncation_symbol = '…/'
+home_symbol = '🏠 ~'
+read_only = ' 🔒'
+format = '[$path]($style) [$read_only]($read_only_style) '
+style = 'bold cyan'
+
+# 用户名
+[username]
+style_user = 'bold green'
+style_root = 'bold red'
+format = '[$user]($style) '
+disabled = false
+show_always = false
+
+# 主机名
+[hostname]
+ssh_only = true
+format = 'on [$hostname](bold yellow) '
+disabled = false
+
+# Git 分支
+[git_branch]
+symbol = '🌱 '
+format = '[$symbol$branch(:$remote_branch)]($style) '
+style = 'bold purple'
+
+# Git 状态
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+style = 'bold yellow'
+conflicted = '🏳️'
+ahead = '🏎️💨${count}'
+behind = '🐢${count}'
+diverged = '😵'
+upto_date = '✓'
+stashed = '📦'
+modified = '📝${count}'
+staged = '++${count}'
+renamed = '👅'
+deleted = '🗑️${count}'
+untracked = '🤷${count}'
+
+# Git 状态（更详细的显示）
+[git_state]
+format = '[\($state( $progress_current/$progress_total)\)]($style) '
+cherry_pick = '[🍒 PICKING](bold red)'
+rebase = '[🔨 REBASING](bold red)'
+merge = '[🔀 MERGING](bold red)'
+revert = '[⏪ REVERTING](bold red)'
+cherry_pick_revert = '[🍒⏪ CHERRY PICK REVERTING](bold red)'
+bisect = '[🕵️ BISECTING](bold red)'
+am = '[📦 AM](bold red)'
+am_or_rebase = '[📦 AM/REBASE](bold red)'
+
+# 命令执行时间
+[cmd_duration]
+min_time = 2000
+format = '⏱️ [$duration](bold yellow) '
+disabled = false
+
+# 时间
+[time]
+disabled = true
+format = '🕙 [$time]($style) '
+time_format = '%T'
+style = 'bold white'
+
+# 编程语言 --------------------
+
+[python]
+symbol = '🐍 '
+format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style)'
+style = 'bold yellow'
+detect_files = ['requirements.txt', 'pyproject.toml', 'setup.py', 'Pipfile', 'tox.ini', 'poetry.lock']
+detect_folders = ['.venv', 'venv', 'env']
+
+[nodejs]
+symbol = '⬢ '
+format = '[$symbol($version )]($style)'
+style = 'bold green'
+detect_files = ['package.json', 'node_modules', '.nvmrc']
+
+[go]
+symbol = '🐹 '
+format = '[$symbol($version )]($style)'
+style = 'bold cyan'
+detect_files = ['go.mod', 'go.sum', 'glide.yaml', 'Gopkg.yml']
+
+[rust]
+symbol = '🦀 '
+format = '[$symbol($version )]($style)'
+style = 'bold red'
+detect_files = ['Cargo.toml', 'Cargo.lock']
+
+[java]
+symbol = '☕ '
+format = '[$symbol($version )]($style)'
+style = 'bold red'
+detect_files = ['pom.xml', 'build.gradle.kts', 'build.gradle', ' gradle.properties']
+
+# 工具和平台 --------------------
+
+[kubernetes]
+symbol = '☸️  '
+format = '[$symbol$context( \($namespace\))]($style) '
+style = 'bold blue'
+disabled = false
+detect_files = ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml', 'k8s', 'kubernetes']
+detect_env_vars = ['KUBECONFIG']
+
+[docker_context]
+symbol = '🐳 '
+format = '[$symbol$context]($style) '
+style = 'bold blue'
+detect_files = ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml']
+
+[terraform]
+symbol = '💠 '
+format = '[$symbol$workspace]($style) '
+detect_files = ['*.tf', '*.tfvars']
+detect_folders = ['.terraform']
+
+# Shell 指示器
+[shlvl]
+disabled = true
+threshold = 2
+
+# 禁用某些默认模块
+[package]
+disabled = true
+
+[lua]
+disabled = true
+
+[ruby]
+disabled = true
+
+[perl]
+disabled = true
+
+[php]
+disabled = true
+
+[swift]
+disabled = true
+
+[scala]
+disabled = true
+
+[kotlin]
+disabled = true
+
+[haskell]
+disabled = true
+
+[elixir]
+disabled = true
+
+[erlang]
+disabled = true
+
+[julia]
+disabled = true
+
+[c]
+disabled = true
+
+[dotnet]
+disabled = true
+
+[gcloud]
+disabled = true
+
+[openstack]
+disabled = true
+
+[azure]
+disabled = true
+
+[aws]
+disabled = true
+
+[conda]
+disabled = true
+
+[nix_shell]
+disabled = true
+
+[crystal]
+disabled = true
+
+[ocaml]
+disabled = true
+
+[zig]
+disabled = true
