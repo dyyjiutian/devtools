@@ -35,6 +35,7 @@ Ghostty + Starship 配置安装脚本
     --skip-starship     跳过 Starship 安装
     --skip-ghostty      跳过 Ghostty 安装
     --skip-fonts        跳过字体安装
+    --skip-ssh          跳过 SSH 配置
     --uninstall         卸载配置，恢复默认
 
 功能:
@@ -44,6 +45,7 @@ Ghostty + Starship 配置安装脚本
     4. 应用自定义 Starship 配置 (starship.toml)
     5. 应用自定义 Ghostty 配置 (ghostty.config)
     6. 配置 Shell 集成 (zshrc/bashrc)
+    7. 配置 ~/.ssh/config (避免 SSH 终端输出异常)
 
 注意: 仅支持 macOS，需要预先安装 Homebrew。
 
@@ -63,6 +65,7 @@ DRY_RUN=false
 SKIP_STARSHIP=false
 SKIP_GHOSTTY=false
 SKIP_FONTS=false
+SKIP_SSH=false
 UNINSTALL=false
 
 while [[ $# -gt 0 ]]; do
@@ -85,6 +88,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-fonts)
             SKIP_FONTS=true
+            shift
+            ;;
+        --skip-ssh)
+            SKIP_SSH=true
             shift
             ;;
         --uninstall)
@@ -341,6 +348,48 @@ configure_ghostty() {
     fi
 }
 
+# 配置 ~/.ssh/config，避免 SSH 到远程服务器时终端输出异常
+configure_ssh_config() {
+    if [[ "$SKIP_SSH" == "true" ]]; then
+        log "跳过 SSH 配置"
+        return 0
+    fi
+
+    log "配置 ~/.ssh/config..."
+
+    local ssh_config="$HOME/.ssh/config"
+    local marker="# Ghostty: SetEnv TERM=xterm-256color"
+
+    # 已配置则跳过
+    if grep -qF "$marker" "$ssh_config" 2>/dev/null; then
+        log "✓ SSH 配置已存在，跳过"
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[试运行] 将要创建目录: $HOME/.ssh"
+        log "[试运行] 将要在 $ssh_config 中添加 Host * / SetEnv TERM=xterm-256color"
+        return 0
+    fi
+
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+
+    backup_config "$ssh_config"
+
+    {
+        echo ""
+        echo "# =========================================="
+        echo "$marker"
+        echo "# =========================================="
+        echo "Host *"
+        echo "    SetEnv TERM=xterm-256color"
+    } >> "$ssh_config"
+
+    chmod 600 "$ssh_config"
+    log "✓ SSH 配置已添加到 $ssh_config"
+}
+
 # 卸载配置
 uninstall() {
     log "卸载 Ghostty + Starship 配置..."
@@ -396,6 +445,29 @@ uninstall() {
         shell_rc="$HOME/.bashrc"
     fi
 
+    # 从 ~/.ssh/config 移除 Ghostty 添加的块
+    local ssh_config="$HOME/.ssh/config"
+    local ssh_marker="# Ghostty: SetEnv TERM=xterm-256color"
+    if grep -qF "$ssh_marker" "$ssh_config" 2>/dev/null; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log "[试运行] 将要从 $ssh_config 移除 Ghostty SSH 配置"
+        else
+            local temp_file
+            temp_file=$(mktemp)
+            awk '
+                /^# =+$/ && !in_block { hold=$0; next }
+                /^# Ghostty: SetEnv TERM=xterm-256color$/ { in_block=1; hold=""; next }
+                in_block && /^# =+$/ { next }
+                in_block && /^Host \*$/ { next }
+                in_block && /^    SetEnv TERM=xterm-256color$/ { in_block=0; next }
+                { if (hold) { print hold; hold="" }; print }
+            ' "$ssh_config" > "$temp_file"
+            mv "$temp_file" "$ssh_config"
+            chmod 600 "$ssh_config"
+            log "✓ 已从 $ssh_config 移除 Ghostty SSH 配置"
+        fi
+    fi
+
     if [[ -n "$shell_rc" ]] && [[ "$DRY_RUN" == "false" ]]; then
         # 移除 Starship 相关行
         if grep -q "Starship 提示符配置" "$shell_rc" 2>/dev/null; then
@@ -433,10 +505,12 @@ show_summary() {
     echo "  • Ghostty 终端: $([[ "$SKIP_GHOSTTY" == "true" ]] && echo "跳过" || echo "已配置")"
     echo "  • Starship 提示符: $([[ "$SKIP_STARSHIP" == "true" ]] && echo "跳过" || echo "已配置")"
     echo "  • Nerd Font: $([[ "$SKIP_FONTS" == "true" ]] && echo "跳过" || echo "已安装")"
+    echo "  • SSH 配置: $([[ "$SKIP_SSH" == "true" ]] && echo "跳过" || echo "已配置")"
     echo
     echo "配置文件位置:"
     echo "  • Starship: $STARSHIP_CONFIG"
     echo "  • Ghostty:  $GHOSTTY_CONFIG_DIR/config"
+    echo "  • SSH:      $HOME/.ssh/config"
     echo
     echo "下一步:"
     echo "  1. 重新打开终端或运行: source ~/.zshrc (或 ~/.bashrc)"
@@ -475,6 +549,7 @@ main() {
     install_fonts
     configure_starship
     configure_ghostty
+    configure_ssh_config
 
     echo
     if [[ "$DRY_RUN" == "true" ]]; then
