@@ -1,0 +1,27 @@
+"""Bazel module for devtools configuration repository."""
+
+module(
+    name = "devtools",
+    version = "1.0.0",
+    bazel_compatibility = [">=7.0.0"],
+)
+
+# Core Bazel dependencies
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+# Buildifier for Starlark linting and formatting
+bazel_dep(name = "buildifier_prebuilt", version = "8.0.3", dev_dependency = True)
+
+# Shellcheck for shell script linting (using rules_shell)
+bazel_dep(name = "rules_shell", version = "0.6.1")
+
+# Packaging rules for distribution
+bazel_dep(name = "rules_pkg", version = "1.1.0")
+
+# Multitool for managing external tools
+bazel_dep(name = "rules_multitool", version = "0.15.0", dev_dependency = True)
+
+multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
+multitool.hub(lockfile = "//:multitool.lock.json")
+use_repo(multitool, "multitool")
