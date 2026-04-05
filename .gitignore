@@ -31,4 +31,6 @@ go.work.sum
 # .idea/
 # .vscode/
 
+.cursor
+.claude
 .DS_Store

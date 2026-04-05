@@ -41,6 +41,7 @@ ${BOLD}选项:${NC}
   --skip-bazelisk         跳过 Bazelisk 安装
   --skip-buildifier       跳过 Buildifier 安装
   --skip-starpls          跳过 Starpls 安装
+  --skip-bazelrc          跳过 ~/.bazelrc 初始化配置
   --skip-completion       跳过 Shell 补全配置
   --dry-run               预览操作，不实际执行
 
@@ -51,6 +52,7 @@ ${BOLD}安装内容:${NC}
 
 ${BOLD}配置:${NC}
   ~/.bazeliskrc 中写入 USE_BAZEL_VERSION=${DEFAULT_BAZEL_VERSION}，使 bazelisk 默认使用指定版本
+  ~/.bazelrc    中写入 clean 默认选项（--async --expunge）
   ~/.config/bazel/ 存放 bash/zsh 补全脚本
   ~/.bashrc 和 ~/.zshrc 中写入补全配置
 
@@ -255,6 +257,24 @@ configure_bazeliskrc() {
   fi
 }
 
+# ─── 配置 ~/.bazelrc ─────────────────────────────────────────────────────────
+configure_bazelrc() {
+  step "配置 ~/.bazelrc"
+
+  local rc="$HOME/.bazelrc"
+  local marker="# bazel clean 默认选项（由 bazel-setup 写入）"
+  local block="${marker}
+clean --async
+clean --expunge"
+
+  # 确保文件存在
+  if [[ "$DRY_RUN" != true ]]; then
+    touch "$rc"
+  fi
+
+  append_if_absent "$rc" "$marker" "$block"
+}
+
 # ─── 安装 Buildifier ─────────────────────────────────────────────────────────
 install_buildifier() {
   step "Buildifier 安装"
@@ -414,6 +434,10 @@ post_install_notes() {
   echo -e "  ${YELLOW}Bazelisk${NC}: 已接管 bazel 命令，根据 ~/.bazeliskrc 或工作区的"
   echo -e "    .bazelversion 文件自动下载并调用对应版本的 Bazel。"
   echo -e ""
+  echo -e "  ${YELLOW}~/.bazelrc${NC}: 已写入 clean 默认选项"
+  echo -e "    clean --async    # 异步删除，不阻塞终端"
+  echo -e "    clean --expunge  # 清理整个输出基目录（深度清理）"
+  echo -e ""
   echo -e "  ${YELLOW}默认版本${NC}: Bazel ${BAZEL_VERSION}（通过 ~/.bazeliskrc 中的 USE_BAZEL_VERSION）"
   echo -e "    优先级（从高到低）："
   echo -e "      1. USE_BAZEL_VERSION 环境变量"
@@ -445,6 +469,7 @@ post_install_notes() {
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
 main() {
   local skip_bazelisk=false
+  local skip_bazelrc=false
   local skip_buildifier=false
   local skip_starpls=false
   local skip_completion=false
@@ -463,6 +488,9 @@ main() {
         ;;
       --skip-bazelisk)
         skip_bazelisk=true
+        ;;
+      --skip-bazelrc)
+        skip_bazelrc=true
         ;;
       --skip-buildifier)
         skip_buildifier=true
@@ -503,6 +531,7 @@ main() {
 
   $skip_bazelisk   || install_bazelisk
   configure_bazeliskrc
+  $skip_bazelrc    || configure_bazelrc
   $skip_buildifier || install_buildifier
   $skip_starpls    || install_starpls
   $skip_completion || setup_completion
