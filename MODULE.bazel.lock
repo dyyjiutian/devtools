@@ -36,7 +36,6 @@
     "https://bcr.bazel.build/modules/bazel_features/1.33.0/MODULE.bazel": "8b8dc9d2a4c88609409c3191165bccec0e4cb044cd7a72ccbe826583303459f6",
     "https://bcr.bazel.build/modules/bazel_features/1.33.0/source.json": "13617db3930328c2cd2807a0f13d52ca870ac05f96db9668655113265147b2a6",
     "https://bcr.bazel.build/modules/bazel_features/1.4.1/MODULE.bazel": "e45b6bb2350aff3e442ae1111c555e27eac1d915e77775f6fdc4b351b758b5d7",
-    "https://bcr.bazel.build/modules/bazel_features/1.9.0/MODULE.bazel": "885151d58d90d8d9c811eb75e3288c11f850e1d6b481a8c9f766adee4712358b",
     "https://bcr.bazel.build/modules/bazel_features/1.9.1/MODULE.bazel": "8f679097876a9b609ad1f60249c49d68bfab783dd9be012faf9d82547b14815a",
     "https://bcr.bazel.build/modules/bazel_skylib/1.0.3/MODULE.bazel": "bcb0fd896384802d1ad283b4e4eb4d718eebd8cb820b0a2c3a347fb971afd9d8",
     "https://bcr.bazel.build/modules/bazel_skylib/1.1.1/MODULE.bazel": "1add3e7d93ff2e6998f9e118022c84d163917d912f5afafb3058e3d2f1545b5e",
@@ -52,7 +51,6 @@
     "https://bcr.bazel.build/modules/bazel_skylib/1.8.1/MODULE.bazel": "88ade7293becda963e0e3ea33e7d54d3425127e0a326e0d17da085a5f1f03ff6",
     "https://bcr.bazel.build/modules/bazel_skylib/1.8.2/MODULE.bazel": "69ad6927098316848b34a9142bcc975e018ba27f08c4ff403f50c1b6e646ca67",
     "https://bcr.bazel.build/modules/bazel_skylib/1.8.2/source.json": "34a3c8bcf233b835eb74be9d628899bb32999d3e0eadef1947a0a562a2b16ffb",
-    "https://bcr.bazel.build/modules/buildifier_prebuilt/7.3.1/MODULE.bazel": "537faf0ad9f5892910074b8e43b4c91c96f1d5d86b6ed04bdbe40cf68aa48b68",
     "https://bcr.bazel.build/modules/buildifier_prebuilt/8.0.3/MODULE.bazel": "4791b031727d1183c183a0b8fd5fc0fe8d8834c45f9a22efd26be6c962b9cfee",
     "https://bcr.bazel.build/modules/buildifier_prebuilt/8.0.3/source.json": "68ee16210562f325ff961aabeb4d46ed10e6638b5e842cd48d8d83dea220dfbd",
     "https://bcr.bazel.build/modules/buildozer/8.2.1/MODULE.bazel": "61e9433c574c2bd9519cad7fa66b9c1d2b8e8d5f3ae5d6528a2c2d26e68d874d",
@@ -146,8 +144,6 @@
     "https://bcr.bazel.build/modules/rules_license/0.0.7/MODULE.bazel": "088fbeb0b6a419005b89cf93fe62d9517c0a2b8bb56af3244af65ecfe37e7d5d",
     "https://bcr.bazel.build/modules/rules_license/1.0.0/MODULE.bazel": "a7fda60eefdf3d8c827262ba499957e4df06f659330bbe6cdbdb975b768bb65c",
     "https://bcr.bazel.build/modules/rules_license/1.0.0/source.json": "a52c89e54cc311196e478f8382df91c15f7a2bfdf4c6cd0e2675cc2ff0b56efb",
-    "https://bcr.bazel.build/modules/rules_multitool/0.15.0/MODULE.bazel": "76f8bf0ebade291b360d17a19255f4bc24579fc8d9fdb64257701ba4fd2f0edf",
-    "https://bcr.bazel.build/modules/rules_multitool/0.15.0/source.json": "f93e9a7b3093c87edaec7343f0cdcdd692e15d3542c5e479c9b035411cd92756",
     "https://bcr.bazel.build/modules/rules_pkg/0.7.0/MODULE.bazel": "df99f03fc7934a4737122518bb87e667e62d780b610910f0447665a7e2be62dc",
     "https://bcr.bazel.build/modules/rules_pkg/1.0.1/MODULE.bazel": "5b1df97dbc29623bccdf2b0dcd0f5cb08e2f2c9050aab1092fd39a41e82686ff",
     "https://bcr.bazel.build/modules/rules_pkg/1.1.0/MODULE.bazel": "9db8031e71b6ef32d1846106e10dd0ee2deac042bd9a2de22b4761b0c3036453",
@@ -376,57 +372,6 @@
               "strip_prefix": "rules_android-0.1.1",
               "urls": [
                 "https://github.com/bazelbuild/rules_android/archive/v0.1.1.zip"
-              ]
-            }
-          }
-        }
-      }
-    },
-    "@@rules_multitool+//multitool:extension.bzl%multitool": {
-      "general": {
-        "bzlTransitiveDigest": "krBF3f2wsBaa0s5t2U2AZ6nstypIutXRL3BlawGbIvo=",
-        "usagesDigest": "ySn8AIqbL9gePMMLgpj8nICZtIGJsALKA1ayNLIR8Ds=",
-        "recordedInputs": [
-          "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
-          "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
-          "REPO_MAPPING:rules_multitool+,bazel_features bazel_features+",
-          "REPO_MAPPING:rules_multitool+,bazel_tools bazel_tools",
-          "FILE:@@//multitool.lock.json 9e08e7abe3b4a795b056d9a0ae33eb12d6e66a92b29bc623f2f536a4ef3dc7f7"
-        ],
-        "generatedRepoSpecs": {
-          "multitool.shellcheck.macos_arm64": {
-            "repoRuleId": "@@rules_multitool+//multitool/private:multitool.bzl%tool_repo",
-            "attributes": {
-              "tool_name": "shellcheck",
-              "binary": "{\"cpu\":\"arm64\",\"file\":\"shellcheck-v0.10.0/shellcheck\",\"kind\":\"archive\",\"os\":\"macos\",\"sha256\":\"bbd2f14826328eee7679da7221f2bc3afb011f6a928b848c80c321f6046ddf81\",\"type\":\"tar.xz\",\"url\":\"https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.darwin.aarch64.tar.xz\"}"
-            }
-          },
-          "multitool.shellcheck.macos_x86_64": {
-            "repoRuleId": "@@rules_multitool+//multitool/private:multitool.bzl%tool_repo",
-            "attributes": {
-              "tool_name": "shellcheck",
-              "binary": "{\"cpu\":\"x86_64\",\"file\":\"shellcheck-v0.10.0/shellcheck\",\"kind\":\"archive\",\"os\":\"macos\",\"sha256\":\"ef27684f4f798cf2d65ecb28bdd5f8b6590e29d35d4638701f539b6f45f0c0c6\",\"type\":\"tar.xz\",\"url\":\"https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.darwin.x86_64.tar.xz\"}"
-            }
-          },
-          "multitool.shellcheck.linux_x86_64": {
-            "repoRuleId": "@@rules_multitool+//multitool/private:multitool.bzl%tool_repo",
-            "attributes": {
-              "tool_name": "shellcheck",
-              "binary": "{\"cpu\":\"x86_64\",\"file\":\"shellcheck-v0.10.0/shellcheck\",\"kind\":\"archive\",\"os\":\"linux\",\"sha256\":\"6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e92d9b589c7dcb5\",\"type\":\"tar.xz\",\"url\":\"https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz\"}"
-            }
-          },
-          "multitool.shellcheck.linux_arm64": {
-            "repoRuleId": "@@rules_multitool+//multitool/private:multitool.bzl%tool_repo",
-            "attributes": {
-              "tool_name": "shellcheck",
-              "binary": "{\"cpu\":\"arm64\",\"file\":\"shellcheck-v0.10.0/shellcheck\",\"kind\":\"archive\",\"os\":\"linux\",\"sha256\":\"324a7cb92d7b0f6f2db02fed7125700e5b7ca3f9e8bcd8464c09e3b3c9d3b5d1\",\"type\":\"tar.xz\",\"url\":\"https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.aarch64.tar.xz\"}"
-            }
-          },
-          "multitool": {
-            "repoRuleId": "@@rules_multitool+//multitool/private:multitool.bzl%_multitool_hub",
-            "attributes": {
-              "lockfiles": [
-                "@@//:multitool.lock.json"
               ]
             }
           }

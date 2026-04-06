@@ -1,0 +1,12 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "macos_setup_bats_test",
+    srcs = ["run_bats.sh"],
+    data = [
+        "setup.bats",
+        "setup.sh",
+        "@bats_core//:bats_tree",
+    ],
+    size = "small",
+)
