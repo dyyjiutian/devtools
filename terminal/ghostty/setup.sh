@@ -284,7 +284,7 @@ configure_starship_env() {
         return 1
     fi
 
-    log "检测到 $shell_name，配置 $shell_rc..."
+    log "检测到 ${shell_name}，配置 ${shell_rc}..."
 
     # 检查是否已配置
     if grep -q "starship init" "$shell_rc" 2>/dev/null; then
