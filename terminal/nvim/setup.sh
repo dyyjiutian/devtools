@@ -202,13 +202,34 @@ install_deps_linux() {
     info "Installing dependencies..."
     if command -v apt-get &>/dev/null; then
         sudo apt-get update
-        sudo apt-get install -y nodejs npm ripgrep fd-find git curl
+        # Install packages individually to avoid failure on missing packages
+        for pkg in nodejs npm ripgrep git curl; do
+            sudo apt-get install -y "$pkg" 2>/dev/null || warn "Failed to install $pkg"
+        done
+        # fd-find may not be available on all systems, try fd or fd-find
+        if sudo apt-get install -y fd-find 2>/dev/null; then
+            # Create fd symlink if needed
+            if ! command -v fd &>/dev/null && command -v fdfind &>/dev/null; then
+                sudo ln -sf /usr/bin/fdfind /usr/bin/fd
+            fi
+        else
+            warn "fd-find not available, skipping"
+        fi
     elif command -v yum &>/dev/null; then
-        sudo yum install -y nodejs npm ripgrep fd git curl
+        for pkg in nodejs npm ripgrep git curl; do
+            sudo yum install -y "$pkg" 2>/dev/null || warn "Failed to install $pkg"
+        done
+        sudo yum install -y fd 2>/dev/null || warn "Failed to install fd"
     elif command -v dnf &>/dev/null; then
-        sudo dnf install -y nodejs npm ripgrep fd-find git curl
+        for pkg in nodejs npm ripgrep git curl; do
+            sudo dnf install -y "$pkg" 2>/dev/null || warn "Failed to install $pkg"
+        done
+        sudo dnf install -y fd-find 2>/dev/null || warn "Failed to install fd-find"
     elif command -v pacman &>/dev/null; then
-        sudo pacman -S --noconfirm nodejs npm ripgrep fd git curl
+        for pkg in nodejs npm ripgrep git curl; do
+            sudo pacman -S --noconfirm "$pkg" 2>/dev/null || warn "Failed to install $pkg"
+        done
+        sudo pacman -S --noconfirm fd 2>/dev/null || warn "Failed to install fd"
     else
         warn "Could not install dependencies automatically"
     fi
