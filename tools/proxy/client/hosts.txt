@@ -1,0 +1,53 @@
+# =============================================================================
+# 海外加速 Hosts 配置模板
+# 将 SERVER_IP 替换为你的新加坡 ECS 公网 IP
+# =============================================================================
+# 使用方法：
+#   Linux/macOS: sudo sh -c 'cat >> /etc/hosts' < hosts.txt
+#   Windows:     追加到 C:\Windows\System32\drivers\etc\hosts
+# =============================================================================
+
+# ── GitHub ────────────────────────────────────────────────────────────────────
+SERVER_IP  github.com
+SERVER_IP  www.github.com
+SERVER_IP  api.github.com
+SERVER_IP  gist.github.com
+SERVER_IP  codeload.github.com
+SERVER_IP  assets-cdn.github.com
+SERVER_IP  documentcloud.github.com
+SERVER_IP  collector.github.com
+
+# GitHub 静态资源
+SERVER_IP  raw.githubusercontent.com
+SERVER_IP  gist.githubusercontent.com
+SERVER_IP  cloud.githubusercontent.com
+SERVER_IP  camo.githubusercontent.com
+SERVER_IP  avatars.githubusercontent.com
+SERVER_IP  avatars0.githubusercontent.com
+SERVER_IP  avatars1.githubusercontent.com
+SERVER_IP  avatars2.githubusercontent.com
+SERVER_IP  avatars3.githubusercontent.com
+SERVER_IP  avatars4.githubusercontent.com
+SERVER_IP  avatars5.githubusercontent.com
+SERVER_IP  avatars6.githubusercontent.com
+SERVER_IP  avatars7.githubusercontent.com
+SERVER_IP  avatars8.githubusercontent.com
+SERVER_IP  user-images.githubusercontent.com
+SERVER_IP  objects.githubusercontent.com
+SERVER_IP  github-releases.githubusercontent.com
+SERVER_IP  github-registry-files.githubusercontent.com
+SERVER_IP  media.githubusercontent.com
+SERVER_IP  private-user-images.githubusercontent.com
+
+# GitHub 资产
+SERVER_IP  github.githubassets.com
+
+# ── Docker Hub ────────────────────────────────────────────────────────────────
+SERVER_IP  registry-1.docker.io
+SERVER_IP  auth.docker.io
+SERVER_IP  index.docker.io
+SERVER_IP  production.cloudflare.docker.com
+SERVER_IP  hub.docker.com
+SERVER_IP  download.docker.com
+
+# =============================================================================
