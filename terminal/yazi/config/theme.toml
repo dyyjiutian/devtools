@@ -1,0 +1,167 @@
+# Yazi 主题配置文件
+# 文档: https://yazi-rs.github.io/docs/configuration/theme
+# 基于 Tokyo Night 配色方案
+
+[flavor]
+use = ""
+
+# ===== 管理器 =====
+[mgr]
+cwd = { fg = "#7aa2f7" }
+
+# 悬停状态 (光标所在行)
+hovered         = { fg = "#c0caf5", bg = "#283457", bold = true }
+preview_hovered = { underline = true }
+
+# 查找/过滤结果高亮
+find_keyword  = { fg = "#e0af68", bold = true, italic = true, underline = true }
+find_position = { fg = "#f7768e", bg = "reset", bold = true, italic = true }
+
+# 标记状态
+marker_copied  = { fg = "#9ece6a", bg = "#9ece6a" }
+marker_cut     = { fg = "#f7768e", bg = "#f7768e" }
+marker_marked  = { fg = "#7aa2f7", bg = "#7aa2f7" }
+marker_selected = { fg = "#bb9af7", bg = "#bb9af7" }
+
+# 选中状态
+selected = { fg = "#bb9af7", reversed = true }
+count_copied   = { fg = "#1a1b26", bg = "#9ece6a" }
+count_cut      = { fg = "#1a1b26", bg = "#f7768e" }
+count_selected = { fg = "#1a1b26", bg = "#bb9af7" }
+
+# 标签页
+tab_active   = { fg = "#1a1b26", bg = "#7aa2f7", bold = true }
+tab_inactive = { fg = "#565f89", bg = "#24283b" }
+tab_width    = 1
+
+# 边框
+border_symbol = "│"
+border_style  = { fg = "#3b4261" }
+
+# ===== 状态栏 =====
+[status]
+separator_open  = ""
+separator_close = ""
+separator_style = { fg = "#24283b", bg = "#24283b" }
+
+# 模式显示
+mode_normal = { fg = "#1a1b26", bg = "#7aa2f7", bold = true }
+mode_select = { fg = "#1a1b26", bg = "#9ece6a", bold = true }
+mode_unset  = { fg = "#1a1b26", bg = "#bb9af7", bold = true }
+
+# 进度条
+progress_label  = { fg = "#c0caf5", bold = true }
+progress_normal = { fg = "#7aa2f7", bg = "#24283b" }
+progress_error  = { fg = "#f7768e", bg = "#24283b" }
+
+# 权限位
+perm_type  = { fg = "#7aa2f7" }
+perm_read  = { fg = "#e0af68" }
+perm_write = { fg = "#f7768e" }
+perm_exec  = { fg = "#9ece6a" }
+perm_sep   = { fg = "#565f89" }
+
+# ===== 输入框 =====
+[input]
+border   = { fg = "#7aa2f7" }
+title    = { fg = "#7aa2f7" }
+value    = { fg = "#c0caf5" }
+selected = { reversed = true }
+
+# ===== 选择框 =====
+[select]
+border   = { fg = "#7aa2f7" }
+active   = { fg = "#7dcfff", bold = true }
+inactive = { fg = "#565f89" }
+
+# ===== 任务管理器 =====
+[tasks]
+border  = { fg = "#7aa2f7" }
+title   = { fg = "#7aa2f7" }
+hovered = { underline = true }
+
+# ===== 帮助面板 =====
+[help]
+on      = { fg = "#7dcfff" }
+exec    = { fg = "#9ece6a" }
+desc    = { fg = "#565f89" }
+hovered = { bg = "#283457", bold = true }
+footer  = { fg = "#1a1b26", bg = "#7aa2f7" }
+
+# ===== 文件类型图标和颜色 =====
+[filetype]
+rules = [
+  # 图片
+  { mime = "image/*", fg = "#7dcfff" },
+  # 视频
+  { mime = "video/*", fg = "#bb9af7" },
+  # 音频
+  { mime = "audio/*", fg = "#ff9e64" },
+  # 压缩包
+  { mime = "application/zip",             fg = "#f7768e" },
+  { mime = "application/gzip",            fg = "#f7768e" },
+  { mime = "application/x-tar",           fg = "#f7768e" },
+  { mime = "application/x-bzip",          fg = "#f7768e" },
+  { mime = "application/x-bzip2",         fg = "#f7768e" },
+  { mime = "application/x-7z-compressed", fg = "#f7768e" },
+  { mime = "application/x-rar",           fg = "#f7768e" },
+  # 文档
+  { mime = "application/pdf", fg = "#f7768e" },
+  # 文本
+  { mime = "text/*", fg = "#9ece6a" },
+  # 可执行文件
+  { name = "*.sh",  fg = "#9ece6a" },
+  { name = "*.bash",fg = "#9ece6a" },
+  { name = "*.zsh", fg = "#9ece6a" },
+  # 目录
+  { name = "*/", fg = "#7aa2f7", bold = true },
+  # 隐藏文件
+  { name = ".*", fg = "#565f89" },
+  # 默认
+  { name = "*", fg = "#c0caf5" },
+]
+
+# ===== 图标 =====
+[icon]
+rules = [
+  # 常见文件夹
+  { name = ".git/",      text = "", fg = "#f7768e" },
+  { name = "Desktop/",   text = "", fg = "#7aa2f7" },
+  { name = "Downloads/", text = "", fg = "#7aa2f7" },
+  { name = "Documents/", text = "", fg = "#7aa2f7" },
+  { name = "Pictures/",  text = "", fg = "#7dcfff" },
+  { name = "Videos/",    text = "", fg = "#bb9af7" },
+  { name = "Music/",     text = "", fg = "#ff9e64" },
+
+  # 常见文件
+  { name = "*.sh",       text = "", fg = "#9ece6a" },
+  { name = "*.zsh",      text = "", fg = "#9ece6a" },
+  { name = "*.bash",     text = "", fg = "#9ece6a" },
+  { name = "*.py",       text = "", fg = "#e0af68" },
+  { name = "*.rs",       text = "", fg = "#f7768e" },
+  { name = "*.go",       text = "", fg = "#7dcfff" },
+  { name = "*.js",       text = "", fg = "#e0af68" },
+  { name = "*.ts",       text = "", fg = "#7aa2f7" },
+  { name = "*.json",     text = "", fg = "#e0af68" },
+  { name = "*.toml",     text = "", fg = "#e0af68" },
+  { name = "*.yaml",     text = "", fg = "#e0af68" },
+  { name = "*.yml",      text = "", fg = "#e0af68" },
+  { name = "*.md",       text = "", fg = "#c0caf5" },
+  { name = "*.txt",      text = "", fg = "#c0caf5" },
+  { name = "*.pdf",      text = "", fg = "#f7768e" },
+  { name = "*.zip",      text = "", fg = "#f7768e" },
+  { name = "*.tar",      text = "", fg = "#f7768e" },
+  { name = "*.gz",       text = "", fg = "#f7768e" },
+  { name = "*.png",      text = "", fg = "#7dcfff" },
+  { name = "*.jpg",      text = "", fg = "#7dcfff" },
+  { name = "*.jpeg",     text = "", fg = "#7dcfff" },
+  { name = "*.gif",      text = "", fg = "#7dcfff" },
+  { name = "*.mp4",      text = "", fg = "#bb9af7" },
+  { name = "*.mp3",      text = "", fg = "#ff9e64" },
+  { name = "Makefile",   text = "", fg = "#f7768e" },
+  { name = "Dockerfile", text = "", fg = "#7dcfff" },
+
+  # 通用图标
+  { name = "*/", text = "", fg = "#7aa2f7" },
+  { name = "*",  text = "", fg = "#c0caf5" },
+]

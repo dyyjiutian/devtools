@@ -1,0 +1,62 @@
+# Yazi 主配置文件
+# 文档: https://yazi-rs.github.io/docs/configuration/yazi
+
+[mgr]
+# 显示隐藏文件
+show_hidden = false
+# 排序方式: "alphabetical" | "created" | "modified" | "natural" | "size"
+sort_by = "natural"
+# 排序方向: false = 升序, true = 降序
+sort_reverse = false
+# 目录优先显示
+sort_dir_first = true
+# 显示符号链接元信息
+show_symlink = true
+# 制表符宽度
+tab_size = 2
+# 列数 [父目录, 当前目录, 预览]
+ratio = [1, 2, 4]
+
+[preview]
+# 最大预览文件大小 (字节)
+max_width = 600
+max_height = 900
+# 图片预览协议: "auto" | "kitty" | "iterm2" | "sixel"
+image_filter = "triangle"
+image_quality = 75
+ueberzug_scale = 1
+ueberzug_offset = [0, 0, 0, 0]
+
+[opener]
+edit = [
+  { run = '${EDITOR:-vim} "$@"', block = true, for = "unix" },
+]
+open = [
+  { run = 'xdg-open "$@"', for = "linux" },
+  { run = 'open "$@"', for = "macos" },
+]
+reveal = [
+  { run = 'xdg-open "$(dirname "$0")"', for = "linux" },
+  { run = 'open -R "$@"', for = "macos" },
+]
+
+[open]
+prepend_rules = [
+  { mime = "text/*", use = "edit" },
+  { mime = "inode/x-empty", use = "edit" },
+]
+
+[tasks]
+# 微任务批量大小
+micro_workers = 10
+# 宏任务批量大小
+macro_workers = 25
+bizarre_retry = 5
+# 任务完成后的通知延迟 (毫秒)
+image_alloc = 536870912
+image_bound = [0, 0]
+suppress_preload = false
+
+[log]
+# 是否启用日志 (调试用)
+enabled = false

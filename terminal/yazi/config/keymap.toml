@@ -1,0 +1,45 @@
+# Yazi 快捷键配置文件
+# 文档: https://yazi-rs.github.io/docs/configuration/keymap
+# 使用 prepend_keymap 在默认快捷键基础上添加自定义键绑定
+
+# ===== 文件管理器 (mgr) =====
+[mgr]
+prepend_keymap = [
+  # 用 <leader>. 切换隐藏文件 (额外绑定)
+  { on = "<Space>.", run = "toggle_hidden", desc = "切换隐藏文件显示" },
+
+  # 用 g 前缀快速跳转常用目录
+  { on = ["g", "h"], run = "cd ~", desc = "跳转到 Home 目录" },
+  { on = ["g", "t"], run = "cd /tmp", desc = "跳转到 /tmp" },
+  { on = ["g", "r"], run = "cd /", desc = "跳转到根目录" },
+
+  # 使用 <C-f> 通过 fzf 搜索文件
+  { on = "<C-f>", run = "shell 'yazi $(fzf)' --block", desc = "使用 fzf 搜索并跳转" },
+
+  # 快速打开编辑器
+  { on = "e", run = "open --interactive", desc = "用编辑器打开文件" },
+
+  # 创建文件/目录
+  { on = "a", run = "create", desc = "新建文件或目录" },
+]
+
+# ===== 输入框 (input) =====
+[input]
+prepend_keymap = [
+  # Emacs 风格在输入框中移动光标
+  { on = "<C-a>", run = "move -999", desc = "移动到行首" },
+  { on = "<C-e>", run = "move 999",  desc = "移动到行尾" },
+  { on = "<C-f>", run = "move 1",    desc = "向右移动一个字符" },
+  { on = "<C-b>", run = "move -1",   desc = "向左移动一个字符" },
+  { on = "<C-k>", run = "delete --cut --eol",   desc = "删除到行尾" },
+  { on = "<C-u>", run = "delete --cut --bol",   desc = "删除到行首" },
+  { on = "<C-w>", run = "delete --cut --backward --word", desc = "删除上一个单词" },
+  { on = "<C-d>", run = "delete --cut",         desc = "删除当前字符" },
+]
+
+# ===== 选择框 (select) =====
+[select]
+prepend_keymap = [
+  { on = "<C-j>", run = "arrow 1",  desc = "向下移动" },
+  { on = "<C-k>", run = "arrow -1", desc = "向上移动" },
+]
