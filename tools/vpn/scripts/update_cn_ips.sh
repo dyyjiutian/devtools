@@ -79,7 +79,9 @@ CN_COUNT=$(wc -l < "$CN_CIDR_FILE")
 ok "Found ${CN_COUNT} China IPv4 CIDR blocks"
 
 if [[ -n "$OUTPUT_FILE" ]]; then
-    cp "$CN_CIDR_FILE" "$OUTPUT_FILE"
+    if [[ "$(realpath "$OUTPUT_FILE")" != "$(realpath "$CN_CIDR_FILE")" ]]; then
+        cp "$CN_CIDR_FILE" "$OUTPUT_FILE"
+    fi
     ok "Written to: $OUTPUT_FILE"
 else
     cat "$CN_CIDR_FILE"

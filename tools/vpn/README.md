@@ -26,7 +26,10 @@
 vpn/
 ├── README.md
 ├── server/
-│   └── setup.sh              # 服务端一键部署
+│   ├── setup.sh              # 服务端一键部署（WireGuard）
+│   ├── setup_clash.sh        # 住宅IP透明代理部署（mihomo + tproxy）
+│   └── clash/
+│       └── config.yaml       # Clash 路由规则（AI 站点走住宅IP）
 ├── client/
 │   ├── gen_config.sh         # 生成客户端配置（含分流路由）
 │   ├── setup_macos.sh        # macOS 一键安装
@@ -36,6 +39,30 @@ vpn/
 └── scripts/
     ├── update_cn_ips.sh      # 下载/更新中国 IP 段（APNIC）
     └── cn_cidr_complement.py # 计算非中国 AllowedIPs（Python 3）
+```
+
+## 完整流量架构
+
+```
+客户端（中国）
+  │
+  ├─ 中国 IP 流量 ──────────────────────────────► 直连（不走 VPN）
+  │
+  └─ 海外 IP 流量 ──► WireGuard 隧道 ──► 新加坡 ECS
+                                              │
+                                    iptables TPROXY (wg0 TCP 80/443)
+                                              │
+                                          mihomo (Clash)
+                                              │
+                              ┌───────────────┴────────────────┐
+                              │                                │
+                     claude.ai / anthropic.com          所有其他流量
+                     openai.com / chatgpt.com                  │
+                              │                           ECS 公网 IP
+                     住宅 IP 代理 (iproyal JP)                  │
+                              │                          海外互联网
+                         真实住宅 IP
+                         访问 AI 服务
 ```
 
 ## 快速部署
@@ -194,6 +221,42 @@ curl -s --max-time 5 http://www.baidu.com -o /dev/null -w '%{http_code}\n'
 traceroute 8.8.8.8      # 第一跳应为 10.8.0.1（VPN 服务器）
 traceroute 14.215.177.38 # 第一跳应为本地网关（直连）
 ```
+
+---
+
+### 第四步：部署住宅 IP 透明代理（访问 claude.ai 等 AI 服务）
+
+部分 AI 服务（claude.ai、ChatGPT 等）封锁了数据中心 IP，需要住宅 IP 才能访问。
+
+```bash
+# 在服务器上一键部署（已内置 iproyal 住宅IP配置）
+sudo ./server/setup_clash.sh
+
+# 更新代理凭证（住宅IP账号更换时）
+sudo ./server/setup_clash.sh --update-proxy "user:pass@geo.iproyal.com:12321"
+
+# 验证住宅 IP 可用
+curl -x "http://user:pass@geo.iproyal.com:12321" https://ipv4.icanhazip.com
+```
+
+**客户端无需任何修改**——透明代理在服务端完成，WireGuard 连上后自动生效。
+
+服务管理：
+```bash
+systemctl status mihomo          # 状态
+journalctl -u mihomo -f          # 实时日志
+systemctl restart mihomo         # 重启
+sudo ./server/setup_clash.sh --clean   # 卸载
+```
+
+添加更多需走住宅 IP 的域名（编辑 `/etc/mihomo/config.yaml`，在 `rules:` 中追加）：
+```yaml
+rules:
+  - DOMAIN-SUFFIX,perplexity.ai,AI-Sites   # 新增
+  - DOMAIN-SUFFIX,claude.ai,AI-Sites
+  ...
+```
+然后 `systemctl restart mihomo` 生效。
 
 ---
 

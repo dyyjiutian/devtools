@@ -20,6 +20,13 @@ step()    { echo -e "\n${CYAN}=== $* ===${NC}"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VPN_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Prefer a Python 3.9+ interpreter (system root may have older Python)
+PYTHON3=$(command -v python3.9 2>/dev/null || command -v python3.11 2>/dev/null || \
+          command -v python3.12 2>/dev/null || \
+          { python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)" 2>/dev/null && echo "python3"; } || \
+          echo "/opt/aiext/bin/python3")
+PYTHON3="${PYTHON3:-python3}"
+
 WG_DIR="/etc/wireguard"
 WG_IFACE="wg0"
 WG_PORT="51820"
@@ -118,19 +125,21 @@ CN_CIDR_FILE="$CACHE_DIR/cn_cidrs.txt"
 REFRESH_FLAG=""
 $FORCE_REFRESH_IPS && REFRESH_FLAG="--force"
 
-# Download/update China IPs
+# Download/update China IPs (write to file, not stdout)
 bash "$VPN_ROOT/scripts/update_cn_ips.sh" --output "$CN_CIDR_FILE" $REFRESH_FLAG
 
 CN_COUNT=$(wc -l < "$CN_CIDR_FILE")
 info "China CIDR blocks: $CN_COUNT"
 
-# Compute complement
-ALLOWED_IPS_RAW=$(python3 "$VPN_ROOT/scripts/cn_cidr_complement.py" \
-    --cn-file "$CN_CIDR_FILE" --wg-format --stats 2>&1 | grep -v '^\[')
-
-# The script prints stats to stderr and CIDRs to stdout via --wg-format
-ALLOWED_IPS=$(python3 "$VPN_ROOT/scripts/cn_cidr_complement.py" \
-    --cn-file "$CN_CIDR_FILE" --wg-format 2>/dev/null)
+# Compute complement — O(n log n), typically <2s for 8000+ CIDRs
+# IMPORTANT: exclude the server's endpoint IP to prevent routing loop.
+# (If the server IP is in AllowedIPs, WireGuard packets to the server
+#  get routed back into the tunnel → loop → total network blackout.)
+info "Computing non-China AllowedIPs (this takes ~2s)..."
+ALLOWED_IPS=$("$PYTHON3" "$VPN_ROOT/scripts/cn_cidr_complement.py" \
+    --cn-file "$CN_CIDR_FILE" \
+    --exclude "${SERVER_IP}" \
+    --wg-format --stats 2>/dev/null)
 
 ALLOWED_COUNT=$(echo "$ALLOWED_IPS" | tr ',' '\n' | wc -l)
 success "AllowedIPs blocks: $ALLOWED_COUNT (overseas/non-China routes)"
@@ -149,6 +158,7 @@ cat > "$CLIENT_CONF" <<EOF
 Address    = ${CLIENT_IP}/24
 PrivateKey = ${CLIENT_PRIVATE}
 DNS        = ${DNS}
+MTU        = 1420
 
 [Peer]
 # Singapore ECS WireGuard server
@@ -171,6 +181,23 @@ if ! $NO_SERVER_UPDATE; then
 # Name: ${CLIENT_NAME}
 PublicKey  = ${CLIENT_PUBLIC}
 AllowedIPs = ${CLIENT_IP}/32"
+
+    # Remove existing peer with same Name to prevent duplicates on re-generation
+    if grep -q "# Name: ${CLIENT_NAME}$" "$WG_DIR/$WG_IFACE.conf" 2>/dev/null; then
+        warn "Replacing existing peer '${CLIENT_NAME}' in server config"
+        # Delete the [Peer] block for this client (from [Peer] line to next blank line or EOF)
+        "$PYTHON3" - "$WG_DIR/$WG_IFACE.conf" "${CLIENT_NAME}" <<'PYEOF'
+import sys, re
+conf_file, name = sys.argv[1], sys.argv[2]
+with open(conf_file) as f:
+    content = f.read()
+# Remove peer block that contains "# Name: <name>"
+pattern = r'\n\[Peer\][^\[]*# Name: ' + re.escape(name) + r'[^\[]*'
+content = re.sub(pattern, '', content)
+with open(conf_file, 'w') as f:
+    f.write(content)
+PYEOF
+    fi
 
     echo "$PEER_BLOCK" >> "$WG_DIR/$WG_IFACE.conf"
     success "Peer added to server config"

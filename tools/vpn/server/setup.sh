@@ -139,19 +139,23 @@ fi
 write_conf() {
 # WireGuard conf does NOT support backslash line continuation.
 # Each PostUp/PostDown must be a single line or repeated keys.
+# Delete-before-add pattern makes rules idempotent across restarts.
 cat > "$WG_CONF" <<WGCONF
 [Interface]
 Address    = ${WG_SERVER_IP}/24
 ListenPort = ${WG_PORT}
 PrivateKey = ${SERVER_PRIVATE}
+MTU        = 1420
 
-# NAT: route client traffic through the server's WAN interface
-PostUp   = iptables -t nat -A POSTROUTING -s ${WG_SUBNET} -o ${NET_IFACE} -j MASQUERADE
+    # PostUp adds rules; PostDown removes them with || true so wg-quick set -e is not triggered
 PostUp   = iptables -A FORWARD -i ${WG_IFACE} -j ACCEPT
 PostUp   = iptables -A FORWARD -o ${WG_IFACE} -j ACCEPT
-PostDown = iptables -t nat -D POSTROUTING -s ${WG_SUBNET} -o ${NET_IFACE} -j MASQUERADE
-PostDown = iptables -D FORWARD -i ${WG_IFACE} -j ACCEPT
-PostDown = iptables -D FORWARD -o ${WG_IFACE} -j ACCEPT
+PostUp   = iptables -t nat -A POSTROUTING -s ${WG_SUBNET} -o ${NET_IFACE} -j MASQUERADE
+PostUp   = iptables -t mangle -A FORWARD -i ${WG_IFACE} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1380
+PostDown = iptables -D FORWARD -i ${WG_IFACE} -j ACCEPT 2>/dev/null || true
+PostDown = iptables -D FORWARD -o ${WG_IFACE} -j ACCEPT 2>/dev/null || true
+PostDown = iptables -t nat -D POSTROUTING -s ${WG_SUBNET} -o ${NET_IFACE} -j MASQUERADE 2>/dev/null || true
+PostDown = iptables -t mangle -D FORWARD -i ${WG_IFACE} -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1380 2>/dev/null || true
 
 # -------- Add client [Peer] sections below --------
 # Use client/gen_config.sh to generate client keys and append [Peer] sections here.
