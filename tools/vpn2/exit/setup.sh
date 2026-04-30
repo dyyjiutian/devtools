@@ -109,6 +109,54 @@ else
     success "Xray 已安装: v${XRAY_VER}"
 fi
 
+# ── 内核参数优化 ──────────────────────────────────────────────────────────────
+step "优化内核网络参数（BBR + TCP 缓冲区）"
+
+tune_kernel() {
+    SYSCTL_CONF="/etc/sysctl.d/99-vpn2-exit.conf"
+    cat > "$SYSCTL_CONF" <<'SYSCTL'
+# VPN2 出口节点 - 网络性能优化
+
+# BBR 拥塞控制（需内核 4.9+）
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# 网络缓冲区
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.core.rmem_default = 65536
+net.core.wmem_default = 65536
+net.core.netdev_max_backlog = 4096
+net.core.somaxconn = 4096
+
+# TCP 优化
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_keepalive_time = 1200
+net.ipv4.tcp_max_syn_backlog = 4096
+net.ipv4.tcp_max_tw_buckets = 5000
+net.ipv4.tcp_rmem = 4096 87380 67108864
+net.ipv4.tcp_wmem = 4096 65536 67108864
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.ip_local_port_range = 1024 65535
+SYSCTL
+    sysctl -p "$SYSCTL_CONF" > /dev/null
+}
+
+if $DRY_RUN; then
+    info "[dry-run] 将写入 /etc/sysctl.d/99-vpn2-exit.conf 并应用内核参数"
+else
+    tune_kernel
+    CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
+    if [[ "$CC" == "bbr" ]]; then
+        success "BBR 拥塞控制已启用"
+    else
+        warn "BBR 未生效（当前: ${CC}），可能需要升级内核至 4.9+"
+    fi
+    success "内核网络参数已优化（配置: /etc/sysctl.d/99-vpn2-exit.conf）"
+fi
+
 # ── 生成密钥与配置参数 ────────────────────────────────────────────────────────
 step "生成 Reality 密钥对与 UUID"
 

@@ -105,22 +105,56 @@ enable_ip_forward() {
 
     # 持久化（重启后生效）
     SYSCTL_CONF="/etc/sysctl.d/99-vpn2-relay.conf"
-    cat > "$SYSCTL_CONF" <<EOF
-# VPN2 中继节点 - IP 转发
+    cat > "$SYSCTL_CONF" <<'SYSCTL'
+# VPN2 中继节点 - IP 转发 + 网络性能优化
+
+# IP 转发（DNAT 必需）
 net.ipv4.ip_forward = 1
+
 # 关闭 ICMP 重定向（避免路由泄漏）
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
-EOF
+
+# BBR 拥塞控制（需内核 4.9+）
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# 网络缓冲区
+net.core.rmem_max = 67108864
+net.core.wmem_max = 67108864
+net.core.rmem_default = 65536
+net.core.wmem_default = 65536
+net.core.netdev_max_backlog = 4096
+net.core.somaxconn = 4096
+
+# TCP 优化
+net.ipv4.tcp_syncookies = 1
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 30
+net.ipv4.tcp_keepalive_time = 1200
+net.ipv4.tcp_max_syn_backlog = 4096
+net.ipv4.tcp_max_tw_buckets = 5000
+net.ipv4.tcp_rmem = 4096 87380 67108864
+net.ipv4.tcp_wmem = 4096 65536 67108864
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.ip_local_port_range = 1024 65535
+SYSCTL
     sysctl -p "$SYSCTL_CONF" > /dev/null
+
+    CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
+    if [[ "$CC" == "bbr" ]]; then
+        success "BBR 拥塞控制已启用"
+    else
+        warn "BBR 未生效（当前: ${CC}），可能需要升级内核至 4.9+"
+    fi
 }
 
 if $DRY_RUN; then
     info "[dry-run] echo 1 > /proc/sys/net/ipv4/ip_forward"
-    info "[dry-run] 写入 /etc/sysctl.d/99-vpn2-relay.conf"
+    info "[dry-run] 写入 /etc/sysctl.d/99-vpn2-relay.conf（IP 转发 + BBR + TCP 优化）"
 else
     enable_ip_forward
-    success "IP 转发已开启（持久化配置: /etc/sysctl.d/99-vpn2-relay.conf）"
+    success "IP 转发及网络优化参数已应用（配置: /etc/sysctl.d/99-vpn2-relay.conf）"
 fi
 
 # ── 配置 iptables 转发规则 ────────────────────────────────────────────────────
