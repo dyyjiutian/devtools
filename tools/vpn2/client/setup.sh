@@ -17,6 +17,12 @@ warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
 step()    { echo -e "\n${BOLD}==> $*${RESET}"; }
 
+# ── OS 检测 ───────────────────────────────────────────────────────────────────
+OS_TYPE="linux"
+if [[ "$(uname)" == "Darwin" ]]; then
+    OS_TYPE="macos"
+fi
+
 # ── 参数解析 ──────────────────────────────────────────────────────────────────
 DRY_RUN=false
 RELAY_IP="198.51.100.10"
@@ -45,7 +51,9 @@ for arg in "$@"; do
         --status)        ACTION="status" ;;
         --help|-h)
             cat <<'HELP'
-Usage: sudo ./client/setup.sh --uuid=<UUID> --public-key=<KEY> --short-id=<SID> [OPTIONS]
+Usage: ./client/setup.sh --uuid=<UUID> --public-key=<KEY> --short-id=<SID> [OPTIONS]
+       (macOS 不需要 sudo；Linux 需要 sudo)
+
 
 必需参数（从出口节点部署输出中获取）:
   --uuid=UUID          VLESS 用户 UUID
@@ -72,15 +80,27 @@ done
 # ── 状态查询模式 ──────────────────────────────────────────────────────────────
 if [[ "$ACTION" == "status" ]]; then
     echo -e "\n${BOLD}━━━ Xray 客户端状态 ━━━${RESET}"
-    systemctl status xray-client 2>/dev/null || \
-    systemctl status xray 2>/dev/null || \
-    echo "Xray 服务未找到"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
+        launchctl list | grep "com.vpn2.xray-client" 2>/dev/null \
+            || echo "Xray 服务未运行（launchctl 中未找到 com.vpn2.xray-client）"
+        [[ -f "$PLIST" ]] && echo "Plist: $PLIST" || echo "Plist 文件不存在: $PLIST"
+    else
+        systemctl status xray-client 2>/dev/null || \
+        systemctl status xray 2>/dev/null || \
+        echo "Xray 服务未找到"
+    fi
     echo ""
     echo -e "${BOLD}━━━ 代理端口监听 ━━━${RESET}"
-    ss -tlnp | grep -E "10808|10809" || echo "代理端口未监听"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        lsof -iTCP:${SOCKS_PORT} -sTCP:LISTEN 2>/dev/null || echo "SOCKS5 端口 ${SOCKS_PORT} 未监听"
+        lsof -iTCP:${HTTP_PORT} -sTCP:LISTEN 2>/dev/null || echo "HTTP 端口 ${HTTP_PORT} 未监听"
+    else
+        ss -tlnp | grep -E "10808|10809" || echo "代理端口未监听"
+    fi
     echo ""
     echo -e "${BOLD}━━━ 连通性测试（通过代理访问 claude.ai）━━━${RESET}"
-    curl -x "socks5h://127.0.0.1:10808" -fsSL --connect-timeout 10 \
+    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
         -o /dev/null -w "HTTP 状态: %{http_code}\n" https://claude.ai/ 2>/dev/null \
         || echo "连接失败，请检查代理配置"
     exit 0
@@ -89,19 +109,31 @@ fi
 # ── 清除模式 ──────────────────────────────────────────────────────────────────
 if [[ "$ACTION" == "clean" ]]; then
     step "停止并移除 Xray 客户端"
-    systemctl stop xray-client 2>/dev/null || true
-    systemctl disable xray-client 2>/dev/null || true
-    rm -f /etc/systemd/system/xray-client.service
-    rm -f /usr/local/etc/xray/client.json
-    systemctl daemon-reload
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
+        launchctl unload "$PLIST" 2>/dev/null || true
+        rm -f "$PLIST"
+        BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/usr/local")
+        rm -f "${BREW_PREFIX}/etc/xray/client.json"
+    else
+        systemctl stop xray-client 2>/dev/null || true
+        systemctl disable xray-client 2>/dev/null || true
+        rm -f /etc/systemd/system/xray-client.service
+        rm -f /usr/local/etc/xray/client.json
+        systemctl daemon-reload
+    fi
     success "Xray 客户端已停止并移除"
     exit 0
 fi
 
 # ── 前置检查 ──────────────────────────────────────────────────────────────────
-if [[ $EUID -ne 0 ]]; then
-    error "请以 root 权限运行: sudo $0"
+if [[ "$OS_TYPE" == "linux" && $EUID -ne 0 ]]; then
+    error "Linux 下请以 root 权限运行: sudo $0"
     exit 1
+fi
+
+if [[ "$OS_TYPE" == "macos" && $EUID -eq 0 ]]; then
+    warn "macOS 下不建议以 root 运行，使用普通用户权限即可"
 fi
 
 if [[ -z "$UUID" || -z "$PUBLIC_KEY" || -z "$SHORT_ID" ]]; then
@@ -114,6 +146,29 @@ if [[ -z "$UUID" || -z "$PUBLIC_KEY" || -z "$SHORT_ID" ]]; then
     echo "          --short-id=<8_hex_chars>"
     exit 1
 fi
+
+UUID_NORM=$(echo "$UUID" | tr '[:upper:]' '[:lower:]')
+if [[ ! "$UUID_NORM" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    error "UUID 格式无效（须为十六进制且形如 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx）。"
+    error "请从出口节点 cat /root/.vpn2_exit_config 完整复制，避免手打出错字符。"
+    exit 1
+fi
+SHORT_ID_NORM=$(echo "$SHORT_ID" | tr '[:upper:]' '[:lower:]')
+if [[ ! "$SHORT_ID_NORM" =~ ^[0-9a-f]+$ ]] || [[ ${#SHORT_ID_NORM} -gt 16 ]]; then
+    error "Short ID 须为非空的十六进制字符串（常见长度 8）。当前值无效。"
+    exit 1
+fi
+UUID="$UUID_NORM"
+SHORT_ID="$SHORT_ID_NORM"
+
+port_listening() {
+    local p="$1"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        lsof -iTCP:"$p" -sTCP:LISTEN &>/dev/null
+    else
+        ss -tlnp | grep -q ":$p"
+    fi
+}
 
 run() {
     if $DRY_RUN; then
@@ -135,9 +190,27 @@ $DRY_RUN && warn "[dry-run] 仅预览，不执行实际操作"
 # ── 安装 Xray ─────────────────────────────────────────────────────────────────
 step "安装 Xray-core"
 
-XRAY_CONFIG_DIR="/usr/local/etc/xray"
+if [[ "$OS_TYPE" == "macos" ]]; then
+    BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/usr/local")
+    XRAY_BIN="${BREW_PREFIX}/bin/xray"
+    XRAY_CONFIG_DIR="${BREW_PREFIX}/etc/xray"
+    LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
+else
+    XRAY_BIN="/usr/local/bin/xray"
+    XRAY_CONFIG_DIR="/usr/local/etc/xray"
+fi
 
 install_xray() {
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        if ! command -v brew &>/dev/null; then
+            error "需要 Homebrew，请先安装: https://brew.sh"
+            exit 1
+        fi
+        info "通过 Homebrew 安装 Xray..."
+        brew install xray
+        return
+    fi
+
     if ! command -v curl &>/dev/null; then
         if [[ -f /etc/os-release ]]; then
             # shellcheck source=/dev/null
@@ -163,7 +236,7 @@ if ! command -v xray &>/dev/null; then
         install_xray
     fi
 else
-    XRAY_VER=$(/usr/local/bin/xray version 2>&1 | head -1 | grep -oP '[\d.]+' | head -1)
+    XRAY_VER=$(xray version 2>&1 | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     success "Xray 已安装: v${XRAY_VER}"
 fi
 
@@ -172,7 +245,7 @@ step "写入 Xray 客户端配置"
 
 write_client_config() {
     mkdir -p "$XRAY_CONFIG_DIR"
-    cat > "${XRAY_CONFIG_DIR}/client.json" <<EOF
+    cat > "${XRAY_CONFIG_DIR}/client.json" <<JSON_EOF
 {
   "log": {
     "loglevel": "warning"
@@ -282,7 +355,7 @@ write_client_config() {
     ]
   }
 }
-EOF
+JSON_EOF
     chmod 644 "${XRAY_CONFIG_DIR}/client.json"
 }
 
@@ -293,11 +366,63 @@ else
     success "客户端配置已写入: ${XRAY_CONFIG_DIR}/client.json"
 fi
 
-# ── 配置 systemd 服务（独立于服务端实例）────────────────────────────────────
-step "配置 xray-client systemd 服务"
+# ── 配置后台服务 ──────────────────────────────────────────────────────────────
+if [[ "$OS_TYPE" == "macos" ]]; then
+    step "配置 xray-client LaunchAgent（macOS）"
 
-write_systemd_service() {
-    cat > /etc/systemd/system/xray-client.service <<EOF
+    write_launch_agent() {
+        mkdir -p "$HOME/Library/LaunchAgents"
+        cat > "$LAUNCH_AGENT_PLIST" <<PLIST_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.vpn2.xray-client</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${XRAY_BIN}</string>
+        <string>run</string>
+        <string>-config</string>
+        <string>${XRAY_CONFIG_DIR}/client.json</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/xray-client.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/xray-client.log</string>
+</dict>
+</plist>
+PLIST_EOF
+    }
+
+    if $DRY_RUN; then
+        info "[dry-run] 将创建 ${LAUNCH_AGENT_PLIST}"
+    else
+        write_launch_agent
+        launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
+        launchctl load -w "$LAUNCH_AGENT_PLIST"
+        sleep 2
+        if port_listening "${SOCKS_PORT}"; then
+            success "xray-client LaunchAgent 运行中（SOCKS 端口 ${SOCKS_PORT} 已监听）"
+        else
+            error "xray-client 未监听 SOCKS 端口 ${SOCKS_PORT}，进程可能因配置错误退出。"
+            error "查看日志: tail -50 /tmp/xray-client.log"
+            if [[ -f /tmp/xray-client.log ]]; then
+                echo ""
+                tail -15 /tmp/xray-client.log >&2 || true
+            fi
+            exit 1
+        fi
+    fi
+else
+    step "配置 xray-client systemd 服务（Linux）"
+
+    write_systemd_service() {
+        cat > /etc/systemd/system/xray-client.service <<EOF
 [Unit]
 Description=Xray Client - VPN2 VLESS+Reality
 Documentation=https://xtls.github.io
@@ -308,7 +433,7 @@ User=nobody
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
-ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/client.json
+ExecStart=${XRAY_BIN} run -config ${XRAY_CONFIG_DIR}/client.json
 Restart=on-failure
 RestartPreventExitStatus=23
 LimitNPROC=10000
@@ -317,21 +442,22 @@ LimitNOFILE=1000000
 [Install]
 WantedBy=multi-user.target
 EOF
-}
+    }
 
-if $DRY_RUN; then
-    info "[dry-run] 将创建 /etc/systemd/system/xray-client.service"
-else
-    write_systemd_service
-    systemctl daemon-reload
-    systemctl enable xray-client
-    systemctl restart xray-client
-    sleep 2
-    if systemctl is-active --quiet xray-client; then
-        success "xray-client 服务运行中"
+    if $DRY_RUN; then
+        info "[dry-run] 将创建 /etc/systemd/system/xray-client.service"
     else
-        error "xray-client 启动失败，查看日志: journalctl -u xray-client -n 50"
-        exit 1
+        write_systemd_service
+        systemctl daemon-reload
+        systemctl enable xray-client
+        systemctl restart xray-client
+        sleep 2
+        if systemctl is-active --quiet xray-client; then
+            success "xray-client 服务运行中"
+        else
+            error "xray-client 启动失败，查看日志: journalctl -u xray-client -n 50"
+            exit 1
+        fi
     fi
 fi
 
@@ -343,7 +469,7 @@ if ! $DRY_RUN; then
     sleep 1
 
     # 验证 SOCKS 端口
-    if ss -tlnp | grep -q ":${SOCKS_PORT}"; then
+    if port_listening "${SOCKS_PORT}"; then
         success "SOCKS5 代理端口 ${SOCKS_PORT} 监听中"
     else
         warn "SOCKS5 端口 ${SOCKS_PORT} 未监听，检查 Xray 日志"
@@ -385,10 +511,15 @@ ${BOLD}━━━ 环境变量（终端全局代理）━━━${RESET}
   export http_proxy=http://127.0.0.1:${HTTP_PORT}
 
 ${BOLD}━━━ 服务管理命令 ━━━${RESET}
-  查看状态   : sudo $0 --status
-  查看日志   : journalctl -u xray-client -f
-  重启服务   : systemctl restart xray-client
-  停止卸载   : sudo $0 --clean
+  查看状态   : $0 --status
+  停止卸载   : $0 --clean
+$(if [[ "$OS_TYPE" == "macos" ]]; then
+echo "  查看日志   : tail -f /tmp/xray-client.log"
+echo "  重启服务   : launchctl unload ~/Library/LaunchAgents/com.vpn2.xray-client.plist && launchctl load -w ~/Library/LaunchAgents/com.vpn2.xray-client.plist"
+else
+echo "  查看日志   : journalctl -u xray-client -f"
+echo "  重启服务   : systemctl restart xray-client"
+fi)
 
 ${BOLD}━━━ 路由策略说明 ━━━${RESET}
   国内域名/IP     → 直连（不走代理）
