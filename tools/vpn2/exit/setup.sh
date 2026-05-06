@@ -109,6 +109,59 @@ else
     success "Xray 已安装: v${XRAY_VER}"
 fi
 
+# ── 安装配置 Cloudflare WARP ──────────────────────────────────────────────────
+# Cloudflare 对数据中心 IP 的出站连接会触发 Bot Challenge（cf-mitigated: challenge），
+# 导致 Claude iOS App 等原生客户端无法通过 TLS 握手后的 HTTP 层鉴权。
+# WARP 将 Anthropic 域名流量从 Cloudflare 自有 IP 出站，绕过该拦截。
+step "安装配置 Cloudflare WARP（绕过 Cloudflare Bot 防护）"
+
+install_warp() {
+    # 添加仓库
+    case $OS in
+        rhel)
+            if [[ ! -f /etc/yum.repos.d/cloudflare-warp.repo ]]; then
+                curl -fsSL https://pkg.cloudflareclient.com/cloudflare-warp-ascii.repo \
+                    -o /etc/yum.repos.d/cloudflare-warp.repo
+            fi
+            yum install -y cloudflare-warp
+            ;;
+        debian)
+            curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+                | gpg --dearmor > /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+            echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] \
+https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
+                > /etc/apt/sources.list.d/cloudflare-client.list
+            apt-get update -qq && apt-get install -y cloudflare-warp
+            ;;
+    esac
+
+    systemctl enable --now warp-svc
+    sleep 2
+
+    warp-cli --accept-tos registration new 2>/dev/null || true
+    warp-cli --accept-tos mode proxy
+    warp-cli --accept-tos connect
+    sleep 3
+}
+
+if $DRY_RUN; then
+    info "[dry-run] 将安装 Cloudflare WARP 并设置 proxy 模式（SOCKS5 on 40000）"
+else
+    # 已安装且已连接则跳过
+    if command -v warp-cli &>/dev/null && warp-cli --accept-tos status 2>/dev/null | grep -q "Connected"; then
+        WARP_IP=$(curl -s --connect-timeout 5 -x socks5h://127.0.0.1:40000 https://api4.ipify.org 2>/dev/null || echo "unknown")
+        success "WARP 已连接，出口 IP: ${WARP_IP}"
+    else
+        install_warp
+        if warp-cli --accept-tos status 2>/dev/null | grep -q "Connected"; then
+            WARP_IP=$(curl -s --connect-timeout 5 -x socks5h://127.0.0.1:40000 https://api4.ipify.org 2>/dev/null || echo "unknown")
+            success "WARP 已连接，出口 IP: ${WARP_IP}"
+        else
+            warn "WARP 连接失败，Anthropic 流量将直连（可能被 Cloudflare Bot 防护拦截）"
+        fi
+    fi
+fi
+
 # ── 内核参数优化 ──────────────────────────────────────────────────────────────
 step "优化内核网络参数（BBR + TCP 缓冲区）"
 
@@ -133,7 +186,9 @@ net.core.somaxconn = 4096
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 30
-net.ipv4.tcp_keepalive_time = 1200
+net.ipv4.tcp_keepalive_time = 60
+net.ipv4.tcp_keepalive_intvl = 10
+net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_max_syn_backlog = 4096
 net.ipv4.tcp_max_tw_buckets = 5000
 net.ipv4.tcp_rmem = 4096 87380 67108864
@@ -256,6 +311,18 @@ write_xray_config() {
       }
     },
     {
+      "protocol": "socks",
+      "tag": "warp",
+      "settings": {
+        "servers": [
+          {
+            "address": "127.0.0.1",
+            "port": 40000
+          }
+        ]
+      }
+    },
+    {
       "protocol": "blackhole",
       "tag": "block"
     }
@@ -267,6 +334,14 @@ write_xray_config() {
         "type": "field",
         "ip": ["geoip:private"],
         "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "domain:anthropic.com",
+          "domain:claude.ai"
+        ],
+        "outboundTag": "warp"
       }
     ]
   }
@@ -340,8 +415,11 @@ ${BOLD}━━━ 客户端连接参数（填入 client/setup.sh 或手动配置�
 ${BOLD}━━━ 中继节点需填写的目标地址 ━━━${RESET}
   转发目标   : ${SERVER_IP}:${LISTEN_PORT}
 
-${BOLD}━━━ VLESS 链接（可导入 v2rayN / Shadowrocket 等客户端）━━━${RESET}
+${BOLD}━━━ VLESS 链接（macOS / Windows / Linux 客户端）━━━${RESET}
   vless://${UUID}@<中继IP>:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN2-Claude
+
+${BOLD}━━━ VLESS 链接（iOS Shadowrocket 专用，fp=ios）━━━${RESET}
+  vless://${UUID}@<中继IP>:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN2-Claude-iOS
 
 ${BOLD}━━━ 服务管理命令 ━━━${RESET}
   查看状态   : systemctl status xray

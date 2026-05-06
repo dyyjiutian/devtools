@@ -128,10 +128,14 @@ net.core.netdev_max_backlog = 4096
 net.core.somaxconn = 4096
 
 # TCP 优化
+# 注：中继节点做 iptables DNAT 纯转发，OS 层 keepalive 对转发流量无效，
+#     实际连接保活依赖出口节点/客户端；此处设置仅对中继本机直连生效
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 30
-net.ipv4.tcp_keepalive_time = 1200
+net.ipv4.tcp_keepalive_time = 60
+net.ipv4.tcp_keepalive_intvl = 10
+net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_max_syn_backlog = 4096
 net.ipv4.tcp_max_tw_buckets = 5000
 net.ipv4.tcp_rmem = 4096 87380 67108864

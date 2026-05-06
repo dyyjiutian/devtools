@@ -57,8 +57,11 @@ sudo ./exit/setup.sh
 
 脚本会自动：
 - 安装 Xray-core
+- 安装 Cloudflare WARP 并设置为 proxy 模式（SOCKS5 on 40000）
 - 生成 UUID、Reality X25519 密钥对、Short ID
 - 写入 VLESS + Reality 服务端配置（伪装 `www.microsoft.com`）
+  - `anthropic.com` / `claude.ai` 流量经 WARP 出站（绕过 Cloudflare Bot 防护）
+  - 其余流量直连
 - 配置 systemd 服务并开放防火墙 443 端口
 
 **记录输出中的客户端连接参数**，后续步骤需要：
@@ -254,13 +257,13 @@ export http_proxy=http://127.0.0.1:10809
 
 **导入 VLESS 链接：**
 
-先拼好 VLESS 链接（将实际参数填入）：
+先拼好 VLESS 链接（将实际参数填入），macOS 使用 `fp=chrome`：
 
 ```
 vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#VPN2
 ```
 
-> 出口节点部署完成后脚本会自动输出完整链接，`<中继IP>` 替换为 `198.51.100.10`。
+> 出口节点部署完成后脚本会自动输出完整链接（同时输出 iOS 专用版本），`<中继IP>` 替换为 `198.51.100.10`。
 
 导入步骤：
 1. 复制上面的 VLESS 链接
@@ -277,14 +280,26 @@ vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=
 
 需要**非国区 Apple ID**（如美区），在 App Store 搜索 Shadowrocket，约 $2.99。
 
+> **重要**：iOS 使用专用 VLESS 链接（`fp=ios`），不能直接用 macOS 的链接。iOS 系统无法模拟 Chrome TLS 指纹，必须使用 `fp=ios`，否则握手会失败。
+
+**获取 iOS 专用 VLESS 链接：**
+
+在出口节点执行 `cat /root/.vpn2_exit_config` 获取参数，然后拼接以下格式（注意 `fp=ios`）：
+
+```
+vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=ios&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#VPN2-Claude-iOS
+```
+
+重新运行 `exit/setup.sh` 也会自动输出 iOS 专用链接。
+
 **导入 VLESS 链接：**
 
 方式一：扫二维码
-1. 在电脑上将 VLESS 链接转为二维码（可用 [qrcode.tec-it.com](https://qrcode.tec-it.com) 在线生成）
+1. 在电脑上将 iOS 专用 VLESS 链接转为二维码（可用 [qrcode.tec-it.com](https://qrcode.tec-it.com) 在线生成）
 2. 打开 Shadowrocket → 右上角 **+** → **扫描二维码**
 
 方式二：复制链接
-1. 在 iPhone 上复制 VLESS 链接
+1. 在 iPhone 上复制 iOS 专用 VLESS 链接
 2. 打开 Shadowrocket，顶部会提示「检测到剪贴板内容」→ 点击**添加**
 
 方式三：手动填写
@@ -302,7 +317,7 @@ vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=
 | SNI | `www.microsoft.com` |
 | Public Key | `<PUBLIC_KEY>` |
 | Short ID | `<SHORT_ID>` |
-| Fingerprint | `chrome` |
+| Fingerprint | `ios`（**注意：不是 chrome**） |
 
 3. 保存 → 点击节点旁的连接按钮 → 允许添加 VPN 配置
 
@@ -385,9 +400,19 @@ A: 两者均监听 443 端口，存在冲突。建议：
 - 方案一：中继节点使用不同端口（如 `--listen-port=8443`），客户端对应修改 `--relay-port=8443`
 - 方案二：中继节点为专用机器，不部署其他服务
 
+**Q: Claude iOS App 能用但 ChatGPT/Gemini App 正常，是什么原因？**
+
+A: 根本原因是 **Cloudflare Bot Challenge**。Claude 的服务器（`claude.ai`、`a-api.anthropic.com`）部署在 Cloudflare 后，Cloudflare 对数据中心 IP（如阿里云 ECS）的出站连接触发 `cf-mitigated: challenge`，返回需要 JS 执行的挑战页面。浏览器能通过（有 JS 引擎），iOS 原生 App 无法通过（URLSession 没有 JS 引擎），所以 App 反复得到 403 并重试。ChatGPT/Gemini 使用自有 CDN 基础设施，不经过 Cloudflare 此机制，不受影响。
+
+解决方案：出口节点安装 Cloudflare WARP，将 Anthropic 域名流量通过 WARP（Cloudflare 自有 IP 出站），Cloudflare 不会 challenge 自家 WARP 的流量。
+
 **Q: 出口节点重新部署会导致 UUID 和密钥变化吗？**
 
 A: 不会。脚本会读取 `/root/.vpn2_exit_config` 缓存，复用已有参数。如需重新生成，删除该文件后重新运行。
+
+**Q: macOS 能连上，但 iOS Shadowrocket 连不上？**
+
+A: iOS 无法模拟 Chrome TLS 指纹，必须将 VLESS 链接中的 `fp=chrome` 改为 `fp=ios`。使用 `fp=chrome` 时 Reality 握手会在 iOS 侧失败，表现为超时或连接被重置。重新运行出口节点的 `exit/setup.sh` 会同时输出 macOS 版和 iOS 专用版 VLESS 链接。
 
 **Q: 如何添加更多受代理站点？**
 
