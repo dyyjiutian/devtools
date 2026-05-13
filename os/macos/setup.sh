@@ -51,9 +51,10 @@ ${BOLD}安装的软件:${NC}
     tmux, fzf, yazi, zoxide, lazygit  - 终端增强工具
 
   GUI 应用 (brew casks):
-    iterm2          - 终端模拟器
-    sublime-text    - 代码编辑器
-    obsidian        - 知识库 / 笔记应用
+    iterm2                 - 终端模拟器
+    visual-studio-code     - VS Code 编辑器（AI 开发首选）
+    docker                 - Docker Desktop
+    obsidian               - 知识库 / 笔记应用
 
   Node.js:
     nvm             - Node 版本管理器
@@ -63,9 +64,11 @@ ${BOLD}安装的软件:${NC}
     oh-my-zsh       - Zsh 配置管理框架（包含插件和主题支持）
 
 ${BOLD}示例:${NC}
-  $(basename "$0")                 # 完整安装
-  $(basename "$0") --info-only     # 仅查看系统信息
-  $(basename "$0") --skip-casks    # 仅安装 CLI 工具
+  $(basename "$0")                    # 完整安装
+  $(basename "$0") --info-only        # 仅查看系统信息
+  $(basename "$0") --skip-casks       # 仅安装 CLI 工具
+  $(basename "$0") --skip-docker      # 跳过 Docker Desktop
+  $(basename "$0") --skip-vscode      # 跳过 VS Code
 
 EOF
 }
@@ -191,11 +194,14 @@ install_formulae() {
 install_casks() {
   step "GUI 应用安装"
 
-  local casks=(
-    "iterm2:iTerm2 终端"
-    "sublime-text:Sublime Text 编辑器"
-    "obsidian:Obsidian 知识库"
-  )
+  local _skip_docker="${MACOS_SKIP_DOCKER:-false}"
+  local _skip_vscode="${MACOS_SKIP_VSCODE:-false}"
+
+  local casks=()
+  casks+=("iterm2:iTerm2 终端")
+  [[ "$_skip_vscode" != true ]]  && casks+=("visual-studio-code:VS Code 编辑器")
+  [[ "$_skip_docker" != true ]]  && casks+=("docker:Docker Desktop")
+  casks+=("obsidian:Obsidian 知识库")
 
   for entry in "${casks[@]}"; do
     local cask="${entry%%:*}"
@@ -331,6 +337,17 @@ post_install_notes() {
   echo -e "    查看主题: ls ~/.oh-my-zsh/themes/"
   echo -e "    查看插件: ls ~/.oh-my-zsh/plugins/"
   echo -e ""
+  echo -e "  ${YELLOW}VS Code${NC}: AI 扩展可通过以下脚本安装："
+  echo -e "    ${BOLD}./editors/vscode/setup.sh${NC}"
+  echo -e ""
+  echo -e "  ${YELLOW}下一步（AI 研发环境）${NC}："
+  echo -e "    lang/python/setup.sh    # Python + AI 包"
+  echo -e "    lang/go/setup.sh        # Go 环境"
+  echo -e "    lang/java/setup.sh      # Java + SDKMan"
+  echo -e "    lang/rust/setup.sh      # Rust 环境"
+  echo -e "    ai/coding/setup.sh      # Claude Code + Aider"
+  echo -e "    ai/local-llm/setup.sh   # Ollama 本地大模型"
+  echo -e ""
 }
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
@@ -341,6 +358,9 @@ main() {
   local skip_formulae=false
   local skip_node=false
   local skip_omz=false
+  # 可通过环境变量或标志控制 cask 中的可选组件
+  MACOS_SKIP_DOCKER=false
+  MACOS_SKIP_VSCODE=false
 
   # 参数解析
   while [[ $# -gt 0 ]]; do
@@ -366,6 +386,12 @@ main() {
         ;;
       --skip-omz)
         skip_omz=true
+        ;;
+      --skip-docker)
+        MACOS_SKIP_DOCKER=true
+        ;;
+      --skip-vscode)
+        MACOS_SKIP_VSCODE=true
         ;;
       *)
         error "未知参数: $1"
