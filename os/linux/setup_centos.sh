@@ -26,6 +26,25 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
+# ─── 本地缓存配置 ────────────────────────────────────────────────────────────
+# 若 cache/ 目录中存在对应文件，优先使用本地缓存，否则从官方 URL 下载。
+# 运行 `cache/download.sh linux` 可预先下载所有文件。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${SCRIPT_DIR}/../../cache"
+
+# 本地缓存优先下载：有缓存用缓存，否则从官方 URL 下载
+# 用法: fetch <cache相对路径> <官方URL> <输出文件>
+fetch() {
+  local cache_rel="$1" url="$2" out="$3"
+  if [[ -f "${CACHE_DIR}/${cache_rel}" ]]; then
+    info "使用本地缓存: ${cache_rel}"
+    cp "${CACHE_DIR}/${cache_rel}" "$out"
+  else
+    info "网络下载: $(basename "$url")"
+    curl -fsSL "$url" -o "$out"
+  fi
+}
+
 # ─── 用法说明 ────────────────────────────────────────────────────────────────────
 usage() {
   cat <<EOF
@@ -207,7 +226,11 @@ install_docker() {
 
   # 添加 Docker 官方仓库
   info "添加 Docker 官方仓库..."
-  run_cmd yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+  local tmp_repo
+  tmp_repo=$(mktemp --suffix=.repo)
+  fetch "scripts/docker-ce.repo" "https://download.docker.com/linux/centos/docker-ce.repo" "$tmp_repo"
+  run_cmd cp "$tmp_repo" /etc/yum.repos.d/docker-ce.repo
+  rm -f "$tmp_repo"
 
   # 安装 Docker
   info "安装 Docker CE..."
@@ -288,8 +311,11 @@ install_node() {
   local node_version="20"  # LTS 版本
   info "安装 Node.js ${node_version}.x LTS..."
 
-  # 下载并运行 NodeSource 安装脚本
-  curl -fsSL "https://rpm.nodesource.com/setup_${node_version}.x" | run_cmd bash -
+  local tmp_node
+  tmp_node=$(mktemp)
+  fetch "scripts/nodesource-setup-${node_version}.x" "https://rpm.nodesource.com/setup_${node_version}.x" "$tmp_node"
+  run_cmd bash "$tmp_node"
+  rm -f "$tmp_node"
 
   # 安装 Node.js
   run_cmd "$pkg_manager" install -y nodejs
@@ -379,22 +405,28 @@ install_tools() {
     success "fzf 已安装"
   else
     info "正在安装 fzf..."
-    # 尝试从仓库安装
     if run_cmd "$pkg_manager" install -y fzf 2>/dev/null; then
       success "fzf 安装完成"
     else
-      # 从源码安装
-      info "从 GitHub 安装 fzf..."
-      if [[ -d "$HOME/.fzf" ]]; then
-        rm -rf "$HOME/.fzf"
-      fi
-      git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf" 2>/dev/null || true
-      if [[ -f "$HOME/.fzf/install" ]]; then
-        "$HOME/.fzf/install" --all --no-bash --no-fish
+      local fzf_version="0.72.0"
+      local fzf_arch
+      case "$(uname -m)" in
+        aarch64) fzf_arch="linux_arm64" ;;
+        *)       fzf_arch="linux_amd64" ;;
+      esac
+      local fzf_filename="fzf-${fzf_version}-${fzf_arch}.tar.gz"
+      local tmpdir; tmpdir=$(mktemp -d)
+      if fetch "binaries/${fzf_filename}" \
+           "https://github.com/junegunn/fzf/releases/download/v${fzf_version}/${fzf_filename}" \
+           "$tmpdir/fzf.tar.gz" && \
+         tar -xzf "$tmpdir/fzf.tar.gz" -C "$tmpdir" fzf 2>/dev/null; then
+        run_cmd mv "$tmpdir/fzf" /usr/local/bin/fzf
+        run_cmd chmod +x /usr/local/bin/fzf
         success "fzf 安装完成"
       else
         warn "fzf 安装失败，请手动安装"
       fi
+      rm -rf "$tmpdir"
     fi
   fi
 
@@ -411,12 +443,15 @@ install_tools() {
 
     # 尝试下载最新版本
     local yazi_version="0.3.3"
-    local yazi_url="https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/yazi-${yazi_arch}-unknown-linux-gnu.zip"
+    local yazi_filename="yazi-${yazi_arch}-unknown-linux-gnu.zip"
 
     info "下载 yazi v${yazi_version}..."
     local tmpdir
     tmpdir=$(mktemp -d)
-    if curl -fsSL "$yazi_url" -o "$tmpdir/yazi.zip" 2>/dev/null; then
+    fetch "binaries/${yazi_filename}" \
+      "https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/${yazi_filename}" \
+      "$tmpdir/yazi.zip" 2>/dev/null
+    if [[ -f "$tmpdir/yazi.zip" ]]; then
       if command -v unzip &>/dev/null; then
         unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
         if [[ -f "$tmpdir/yazi" ]]; then
@@ -448,12 +483,25 @@ install_tools() {
     success "zoxide 已安装"
   else
     info "正在安装 zoxide..."
-    # 使用官方安装脚本
-    if curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | run_cmd bash -s -- --bin-dir /usr/local/bin 2>/dev/null; then
+    local zoxide_version="0.9.4"
+    local zoxide_arch
+    case "$(uname -m)" in
+      aarch64) zoxide_arch="aarch64-unknown-linux-musl" ;;
+      *)       zoxide_arch="x86_64-unknown-linux-musl" ;;
+    esac
+    local zoxide_filename="zoxide-${zoxide_version}-${zoxide_arch}.tar.gz"
+    local tmpdir; tmpdir=$(mktemp -d)
+    if fetch "binaries/${zoxide_filename}" \
+         "https://github.com/ajeetdsouza/zoxide/releases/download/v${zoxide_version}/${zoxide_filename}" \
+         "$tmpdir/zoxide.tar.gz" && \
+       tar -xzf "$tmpdir/zoxide.tar.gz" -C "$tmpdir" zoxide 2>/dev/null; then
+      run_cmd mv "$tmpdir/zoxide" /usr/local/bin/zoxide
+      run_cmd chmod +x /usr/local/bin/zoxide
       success "zoxide 安装完成"
     else
       warn "zoxide 安装失败，请手动安装"
     fi
+    rm -rf "$tmpdir"
   fi
 
   # lazygit
@@ -469,11 +517,14 @@ install_tools() {
     [[ "$arch" == "x86_64" ]] && lazygit_arch="x86_64"
     [[ "$arch" == "aarch64" ]] && lazygit_arch="arm64"
 
-    local lazygit_url="https://github.com/jesseduffield/lazygit/releases/download/v${lazygit_version}/lazygit_${lazygit_version}_Linux_${lazygit_arch}.tar.gz"
+    local lazygit_filename="lazygit_${lazygit_version}_Linux_${lazygit_arch}.tar.gz"
 
     local tmpdir
     tmpdir=$(mktemp -d)
-    if curl -fsSL "$lazygit_url" -o "$tmpdir/lazygit.tar.gz" 2>/dev/null; then
+    fetch "binaries/${lazygit_filename}" \
+      "https://github.com/jesseduffield/lazygit/releases/download/v${lazygit_version}/${lazygit_filename}" \
+      "$tmpdir/lazygit.tar.gz" 2>/dev/null
+    if [[ -f "$tmpdir/lazygit.tar.gz" ]]; then
       if tar -xzf "$tmpdir/lazygit.tar.gz" -C "$tmpdir" lazygit 2>/dev/null; then
         run_cmd mv "$tmpdir/lazygit" /usr/local/bin/lazygit
         run_cmd chmod +x /usr/local/bin/lazygit

@@ -26,6 +26,25 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
+# ─── 本地缓存配置 ────────────────────────────────────────────────────────────
+# 若 cache/ 目录中存在对应文件，优先使用本地缓存，否则从官方 URL 下载。
+# 运行 `cache/download.sh macos` 可预先下载所有文件。
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${SCRIPT_DIR}/../../cache"
+
+# 本地缓存优先下载：有缓存用缓存，否则从官方 URL 下载
+# 用法: fetch <cache相对路径> <官方URL> <输出文件>
+fetch() {
+  local cache_rel="$1" url="$2" out="$3"
+  if [[ -f "${CACHE_DIR}/${cache_rel}" ]]; then
+    info "使用本地缓存: ${cache_rel}"
+    cp "${CACHE_DIR}/${cache_rel}" "$out"
+  else
+    info "网络下载: $(basename "$url")"
+    curl -fsSL "$url" -o "$out"
+  fi
+}
+
 # ─── 用法说明 ────────────────────────────────────────────────────────────────
 usage() {
   cat <<EOF
@@ -143,7 +162,11 @@ install_brew() {
     brew update --quiet && success "Homebrew 已更新"
   else
     info "正在安装 Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    local tmp
+    tmp=$(mktemp)
+    fetch "scripts/homebrew-install.sh" "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" "$tmp"
+    /bin/bash "$tmp"
+    rm -f "$tmp"
 
     # Apple Silicon 需要配置 PATH
     if [[ "$(uname -m)" == "arm64" ]]; then
@@ -233,8 +256,11 @@ install_node() {
     success "nvm 已安装：$(nvm --version)"
   else
     info "正在安装 nvm..."
-    # 用 bash 执行官方安装脚本（脚本本身用 bash 运行）
-    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/HEAD/install.sh | bash
+    local tmp
+    tmp=$(mktemp)
+    fetch "scripts/nvm-install.sh" "https://raw.githubusercontent.com/nvm-sh/nvm/HEAD/install.sh" "$tmp"
+    bash "$tmp"
+    rm -f "$tmp"
     # shellcheck source=/dev/null
     [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
     success "nvm 安装完成：$(nvm --version)"
@@ -287,12 +313,15 @@ install_omz() {
     success "Oh My Zsh 已安装，跳过"
   else
     info "正在安装 Oh My Zsh..."
-    # 使用官方安装脚本，保持静默安装
-    if sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; then
+    local tmp
+    tmp=$(mktemp)
+    fetch "scripts/ohmyzsh-install.sh" "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" "$tmp"
+    if sh "$tmp" "" --unattended; then
       success "Oh My Zsh 安装完成"
     else
       warn "Oh My Zsh 安装失败，请手动安装"
     fi
+    rm -f "$tmp"
   fi
 }
 
