@@ -443,7 +443,8 @@ install_tools() {
 
     # 尝试下载最新版本
     local yazi_version="0.3.3"
-    local yazi_filename="yazi-${yazi_arch}-unknown-linux-gnu.zip"
+    # 使用 musl 静态编译版本，不依赖系统 glibc，兼容 CentOS/RHEL 8（glibc 2.28）
+    local yazi_filename="yazi-${yazi_arch}-unknown-linux-musl.zip"
 
     info "下载 yazi v${yazi_version}..."
     local tmpdir
@@ -456,7 +457,7 @@ install_tools() {
         run_cmd "$pkg_manager" install -y unzip
       fi
       unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
-      local yazi_bin="$tmpdir/yazi-${yazi_arch}-unknown-linux-gnu/yazi"
+      local yazi_bin="$tmpdir/yazi-${yazi_arch}-unknown-linux-musl/yazi"
       if [[ -f "$yazi_bin" ]]; then
         run_cmd mv "$yazi_bin" /usr/local/bin/yazi
         run_cmd chmod +x /usr/local/bin/yazi

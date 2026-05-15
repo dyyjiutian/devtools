@@ -68,11 +68,11 @@ download_linux() {
   local fzf_version="0.72.0"
   local zoxide_version="0.9.4"
 
-  # yazi (x86_64 / arm64)
+  # yazi (x86_64 / arm64) — musl 静态编译版，兼容 CentOS/RHEL 8（glibc 2.28）
   for arch in x86_64 aarch64; do
     download \
-      "https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/yazi-${arch}-unknown-linux-gnu.zip" \
-      "${BINARIES_DIR}/yazi-${arch}-unknown-linux-gnu.zip"
+      "https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/yazi-${arch}-unknown-linux-musl.zip" \
+      "${BINARIES_DIR}/yazi-${arch}-unknown-linux-musl.zip"
   done
 
   # lazygit (x86_64 / arm64)
