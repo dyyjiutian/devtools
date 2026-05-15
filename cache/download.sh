@@ -7,6 +7,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="${SCRIPT_DIR}/scripts"
 BINARIES_DIR="${SCRIPT_DIR}/binaries"
+FONTS_DIR="${SCRIPT_DIR}/fonts"
+
+mkdir -p "$SCRIPTS_DIR" "$BINARIES_DIR" "$FONTS_DIR"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -67,6 +70,7 @@ download_linux() {
   local lazygit_version="0.44.1"
   local fzf_version="0.72.0"
   local zoxide_version="0.9.4"
+  local nerd_fonts_version="3.3.0"
 
   # yazi (x86_64 / arm64) — musl 静态编译版，兼容 CentOS/RHEL 8（glibc 2.28）
   for arch in x86_64 aarch64; do
@@ -95,6 +99,11 @@ download_linux() {
       "https://github.com/ajeetdsouza/zoxide/releases/download/v${zoxide_version}/zoxide-${zoxide_version}-${arch}.tar.gz" \
       "${BINARIES_DIR}/zoxide-${zoxide_version}-${arch}.tar.gz"
   done
+
+  # Nerd Fonts Symbols Only — 架构无关，yazi/终端图标字体
+  download \
+    "https://github.com/ryanoasis/nerd-fonts/releases/download/v${nerd_fonts_version}/NerdFontsSymbolsOnly.tar.xz" \
+    "${SCRIPT_DIR}/fonts/NerdFontsSymbolsOnly.tar.xz"
 }
 
 target="${1:-all}"

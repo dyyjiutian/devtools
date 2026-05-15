@@ -63,6 +63,7 @@ ${BOLD}选项:${NC}
   --skip-node         跳过 Node.js / npm 安装
   --skip-cloc         跳过 cloc 安装
   --skip-tools        跳过终端工具安装 (tmux, fzf, yazi, zoxide, lazygit)
+  --skip-fonts        跳过 Nerd Fonts 安装 (yazi 图标字体)
 
 ${BOLD}安装的软件:${NC}
   Docker CE:
@@ -86,6 +87,9 @@ ${BOLD}安装的软件:${NC}
     yazi             - 终端文件管理器
     zoxide           - 快速目录跳转工具
     lazygit          - 终端 Git TUI 客户端
+
+  Nerd Fonts:
+    NerdFontsSymbolsOnly  - yazi/终端图标字体 (安装到 /usr/share/fonts/nerd-fonts/)
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
@@ -532,6 +536,42 @@ install_tools() {
   fi
 }
 
+# ─── 安装 Nerd Fonts (yazi 图标字体) ────────────────────────────────────────────
+install_nerd_fonts() {
+  step "Nerd Fonts 安装 (yazi 图标字体)"
+
+  local font_dir="/usr/share/fonts/nerd-fonts"
+  local marker="${font_dir}/.nerd-fonts-installed"
+
+  if [[ -f "$marker" ]]; then
+    success "Nerd Fonts 已安装"
+    return
+  fi
+
+  info "正在安装 NerdFontsSymbolsOnly..."
+  local nerd_version="3.3.0"
+  local nerd_filename="NerdFontsSymbolsOnly.tar.xz"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+
+  fetch "fonts/${nerd_filename}" \
+    "https://github.com/ryanoasis/nerd-fonts/releases/download/v${nerd_version}/${nerd_filename}" \
+    "$tmpdir/${nerd_filename}" 2>/dev/null
+
+  if [[ -f "$tmpdir/${nerd_filename}" ]]; then
+    run_cmd mkdir -p "$font_dir"
+    run_cmd tar -xf "$tmpdir/${nerd_filename}" -C "$font_dir" --wildcards '*.ttf' '*.otf' 2>/dev/null || true
+    run_cmd touch "$marker"
+    if is_installed fc-cache; then
+      run_cmd fc-cache -f "$font_dir"
+    fi
+    success "Nerd Fonts 安装完成 → ${font_dir}"
+  else
+    warn "Nerd Fonts 下载失败，请手动安装: https://www.nerdfonts.com/font-downloads"
+  fi
+  rm -rf "$tmpdir"
+}
+
 # ─── 安装后提示 ──────────────────────────────────────────────────────────────────
 post_install_notes() {
   step "安装后注意事项"
@@ -567,6 +607,11 @@ post_install_notes() {
   echo -e "    lazygit                     # 终端 Git TUI 客户端"
   echo -e "    注意: zoxide 需要添加到 shell 配置: eval \"\$(zoxide init bash)\""
   echo -e ""
+  echo -e "  ${YELLOW}Nerd Fonts (yazi 图标)${NC}:"
+  echo -e "    字体已安装到 /usr/share/fonts/nerd-fonts/"
+  echo -e "    请在终端模拟器（iTerm2/Alacritty 等）的设置中，将字体改为"
+  echo -e "    ${BOLD}SymbolsNerdFontMono${NC} 或启用 Nerd Font 兼容字体，yazi 图标方可正常显示。"
+  echo -e ""
 }
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────────
@@ -577,6 +622,7 @@ main() {
   local skip_node=false
   local skip_cloc=false
   local skip_tools=false
+  local skip_fonts=false
 
   # 参数解析
   while [[ $# -gt 0 ]]; do
@@ -602,6 +648,9 @@ main() {
         ;;
       --skip-tools)
         skip_tools=true
+        ;;
+      --skip-fonts)
+        skip_fonts=true
         ;;
       *)
         error "未知参数: $1"
@@ -640,6 +689,7 @@ main() {
   $skip_node   || install_node
   $skip_cloc   || install_cloc
   $skip_tools  || install_tools
+  $skip_fonts  || install_nerd_fonts
 
   post_install_notes
 
