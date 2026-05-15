@@ -452,25 +452,17 @@ install_tools() {
       "https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/${yazi_filename}" \
       "$tmpdir/yazi.zip" 2>/dev/null
     if [[ -f "$tmpdir/yazi.zip" ]]; then
-      if command -v unzip &>/dev/null; then
-        unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
-        if [[ -f "$tmpdir/yazi" ]]; then
-          run_cmd mv "$tmpdir/yazi" /usr/local/bin/yazi
-          run_cmd chmod +x /usr/local/bin/yazi
-          success "yazi 安装完成"
-        else
-          warn "yazi 解压失败"
-        fi
-      else
+      if ! command -v unzip &>/dev/null; then
         run_cmd "$pkg_manager" install -y unzip
-        unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
-        if [[ -f "$tmpdir/yazi" ]]; then
-          run_cmd mv "$tmpdir/yazi" /usr/local/bin/yazi
-          run_cmd chmod +x /usr/local/bin/yazi
-          success "yazi 安装完成"
-        else
-          warn "yazi 解压失败"
-        fi
+      fi
+      unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
+      local yazi_bin="$tmpdir/yazi-${yazi_arch}-unknown-linux-gnu/yazi"
+      if [[ -f "$yazi_bin" ]]; then
+        run_cmd mv "$yazi_bin" /usr/local/bin/yazi
+        run_cmd chmod +x /usr/local/bin/yazi
+        success "yazi 安装完成"
+      else
+        warn "yazi 解压失败"
       fi
       rm -rf "$tmpdir"
     else
