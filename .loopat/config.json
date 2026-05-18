@@ -1,0 +1,11 @@
+{
+  "providers": {
+    "kimi-2.6": {
+      "model": "kimi-k2.5",
+      "baseUrl": "https://api.moonshot.cn/anthropic",
+      "apiKey": {
+        "vault": "provider-keys/kimi-2.6"
+      }
+    }
+  }
+}
