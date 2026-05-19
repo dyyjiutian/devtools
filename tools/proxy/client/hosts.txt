@@ -1,9 +1,9 @@
 # =============================================================================
 # 海外加速 Hosts 配置模板
-# 将 SERVER_IP 替换为你的新加坡 ECS 公网 IP
+# 将 SERVER_IP 替换为你的新加坡 ECS 公网 IP（当前: 198.51.100.30）
 # =============================================================================
 # 使用方法：
-#   Linux/macOS: sudo sh -c 'cat >> /etc/hosts' < hosts.txt
+#   Linux/macOS: sudo sed 's/SERVER_IP/198.51.100.30/g' hosts.txt >> /etc/hosts
 #   Windows:     追加到 C:\Windows\System32\drivers\etc\hosts
 # =============================================================================
 
@@ -35,12 +35,13 @@ SERVER_IP  avatars8.githubusercontent.com
 SERVER_IP  user-images.githubusercontent.com
 SERVER_IP  objects.githubusercontent.com
 SERVER_IP  github-releases.githubusercontent.com
-SERVER_IP  github-registry-files.githubusercontent.com
 SERVER_IP  media.githubusercontent.com
-SERVER_IP  private-user-images.githubusercontent.com
 
 # GitHub 资产
 SERVER_IP  github.githubassets.com
+
+# GitHub Container Registry
+SERVER_IP  ghcr.io
 
 # ── Docker Hub ────────────────────────────────────────────────────────────────
 SERVER_IP  registry-1.docker.io
@@ -49,5 +50,31 @@ SERVER_IP  index.docker.io
 SERVER_IP  production.cloudflare.docker.com
 SERVER_IP  hub.docker.com
 SERVER_IP  download.docker.com
+
+# ── Google Container Registry / k8s ──────────────────────────────────────────
+SERVER_IP  gcr.io
+SERVER_IP  k8s.gcr.io
+SERVER_IP  registry.k8s.io
+SERVER_IP  quay.io
+
+# ── npm ───────────────────────────────────────────────────────────────────────
+SERVER_IP  registry.npmjs.org
+SERVER_IP  www.npmjs.com
+
+# ── Python PyPI ───────────────────────────────────────────────────────────────
+SERVER_IP  pypi.org
+SERVER_IP  files.pythonhosted.org
+
+# ── Go modules ────────────────────────────────────────────────────────────────
+SERVER_IP  proxy.golang.org
+SERVER_IP  sum.golang.org
+SERVER_IP  pkg.go.dev
+
+# ── Helm ──────────────────────────────────────────────────────────────────────
+SERVER_IP  charts.helm.sh
+
+# ── Rust crates ───────────────────────────────────────────────────────────────
+SERVER_IP  crates.io
+SERVER_IP  static.crates.io
 
 # =============================================================================
