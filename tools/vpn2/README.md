@@ -29,7 +29,8 @@
 vpn2/
 ├── README.md
 ├── exit/
-│   └── setup.sh    # 新加坡出口节点：安装 Xray，配置 VLESS+Reality
+│   ├── setup.sh    # 新加坡出口节点：安装 Xray，配置 VLESS+Reality（支持多用户）
+│   └── manage.sh   # 用户管理：新增/移除用户、流量统计、配额控制
 ├── relay/
 │   └── setup.sh    # 杭州中继节点：配置 iptables DNAT 转发
 └── client/
@@ -51,34 +52,71 @@ vpn2/
 # 登录新加坡 ECS
 ssh root@198.51.100.30
 
-# 上传并执行部署脚本
+# 单用户（默认，创建 user1）
 sudo ./exit/setup.sh
+
+# 多用户：一次创建多个用户（每人独立 UUID / VLESS 链接）
+sudo ./exit/setup.sh --users=alice,bob,carol
+
+# 也可传数字：--users=3 → 创建 user1 user2 user3
+sudo ./exit/setup.sh --users=3
 ```
 
 脚本会自动：
 - 安装 Xray-core
 - 安装 Cloudflare WARP 并设置为 proxy 模式（SOCKS5 on 40000）
-- 生成 UUID、Reality X25519 密钥对、Short ID
+- 生成 Reality X25519 密钥对、Short ID，以及每用户独立 UUID
 - 写入 VLESS + Reality 服务端配置（伪装 `www.microsoft.com`）
   - `anthropic.com` / `claude.ai` 流量经 WARP 出站（绕过 Cloudflare Bot 防护）
   - 其余流量直连
+  - **Stats API** 监听 `127.0.0.1:10085`，用于流量统计与配额控制
 - 配置 systemd 服务并开放防火墙 443 端口
 
-**记录输出中的客户端连接参数**，后续步骤需要：
+每个用户对应一条独立 VLESS 链接，部署完成后脚本逐用户打印。
 
-```
-UUID       : xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-Public Key : <base64_public_key>
-Short ID   : <8_hex_chars>
-```
-
-参数同时持久化在 `/root/.vpn2_exit_config`，可随时查看：
+参数持久化在 `/root/.vpn2_exit_config`，可随时查看：
 
 ```bash
 cat /root/.vpn2_exit_config
 ```
 
 阿里云控制台：放行**入方向** `TCP 443`。
+
+#### 多用户日常管理（manage.sh）
+
+```bash
+# 列出所有用户 + 流量统计
+sudo ./exit/manage.sh list
+
+# 新增用户（立即生效，输出 VLESS 链接）
+sudo ./exit/manage.sh add carol
+
+# 移除用户（立即踢出，Xray 热重载，无需重启）
+sudo ./exit/manage.sh remove bob
+
+# 打印某用户的 VLESS 链接
+RELAY_IP=198.51.100.10 sudo ./exit/manage.sh vless alice
+
+# 查看流量统计
+sudo ./exit/manage.sh stats
+sudo ./exit/manage.sh stats alice
+
+# 设置月流量配额（超限自动移除，0 = 无限制）
+sudo ./exit/manage.sh quota alice 50
+
+# 安装每小时配额巡检 cron（超限用户自动踢出）
+sudo ./exit/manage.sh install-cron
+
+# 重置流量计数（all 会重启 Xray）
+sudo ./exit/manage.sh reset-stats all
+sudo ./exit/manage.sh reset-stats alice
+```
+
+**流量控制说明：**
+- 统计基于 Xray Stats API，按用户 email（`alice@vpn2`）分项记录上行/下行流量
+- 配额单位为 GB，`check-quotas` 子命令检查所有设有配额的用户，超限者从配置移除并热重载 Xray
+- `install-cron` 将 `check-quotas` 注册为每小时 cron，日志写入 `/var/log/vpn2-quota.log`
+- 流量统计从 Xray 上次重启开始累计；月初重置可执行 `sudo ./exit/manage.sh reset-stats all`
 
 ---
 
