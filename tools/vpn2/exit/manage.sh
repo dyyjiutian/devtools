@@ -48,7 +48,7 @@ write_config() {
         echo "SHORT_ID=${SHORT_ID}"
         echo "LISTEN_PORT=${LISTEN_PORT}"
         echo "REALITY_SNI=${REALITY_SNI}"
-        echo "USERS=${USERS}"
+        echo "USERS=\"${USERS}\""
         for u in $USERS; do
             local uuid_var="USER_${u}_UUID"
             local quota_var="USER_${u}_QUOTA_GB"
@@ -276,7 +276,8 @@ cmd_quota() {
 # ── 命令：vless ────────────────────────────────────────────────────────────────
 cmd_vless() {
     local name="${1:-}"
-    [[ -n "$name" ]] || { error "用法: sudo $0 vless <用户名>"; exit 1; }
+    local relay_ip="${2:-${RELAY_IP:-198.51.100.11}}"
+    [[ -n "$name" ]] || { error "用法: sudo $0 vless <用户名> [中继IP]"; exit 1; }
 
     load_config
     [[ " ${USERS} " == *" ${name} "* ]] || { error "用户 '${name}' 不存在"; exit 1; }
@@ -284,18 +285,16 @@ cmd_vless() {
     local uuid_var="USER_${name}_UUID"
     local uuid="${!uuid_var}"
 
-    # 读取中继 IP（优先从环境变量 RELAY_IP，否则从配置，否则提示手动替换）
-    local relay_ip="${RELAY_IP:-<中继IP>}"
-
     echo ""
     echo -e "${BOLD}用户: ${name}${RESET}"
     echo -e "UUID: ${uuid}"
+    echo -e "中继: ${relay_ip}:${LISTEN_PORT}"
     echo ""
     echo -e "${CYAN}macOS / Windows / Linux (fp=chrome):${RESET}"
-    echo "vless://${uuid}@${relay_ip}:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN2-${name}"
+    echo "vless://${uuid}@${relay_ip}:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#${name}"
     echo ""
     echo -e "${CYAN}iOS Shadowrocket (fp=ios):${RESET}"
-    echo "vless://${uuid}@${relay_ip}:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN2-${name}-iOS"
+    echo "vless://${uuid}@${relay_ip}:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#${name}-iOS"
     echo ""
 }
 
@@ -421,7 +420,7 @@ VPN2 出口节点用户管理
   add    <name>              新增用户，输出 VLESS 链接
   remove <name>              移除用户（立即生效，Xray 热重载）
   quota  <name> <GB>         设置月流量配额（0 = 无限制）
-  vless  <name>              打印指定用户的 VLESS 链接
+  vless  <name> [relay_ip]   打印指定用户的 VLESS 链接（默认中继 IP: 198.51.100.11）
   stats  [name]              显示流量统计（可选：指定单用户）
   reset-stats [name|all]     重置流量计数（all 会重启 Xray）
   check-quotas               检查并执行配额限制（供 cron 调用）
@@ -435,7 +434,8 @@ VPN2 出口节点用户管理
   sudo ./exit/manage.sh add alice
   sudo ./exit/manage.sh quota alice 50
   sudo ./exit/manage.sh remove bob
-  RELAY_IP=198.51.100.10 sudo ./exit/manage.sh vless alice
+  sudo ./exit/manage.sh vless alice
+  sudo ./exit/manage.sh vless alice 1.2.3.4
   sudo ./exit/manage.sh reset-stats all
   sudo ./exit/manage.sh install-cron
 HELP
