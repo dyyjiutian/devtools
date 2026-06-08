@@ -12,10 +12,10 @@
 #   eval "$(./linux-shell-proxy.sh on --emit)"
 #
 # 环境变量（可选，覆盖默认）:
-#   VPN2_SOCKS_HOST     默认 127.0.0.1
-#   VPN2_SOCKS_PORT     默认 10808
-#   VPN2_HTTP_HOST      默认 127.0.0.1
-#   VPN2_HTTP_PORT      默认 10809
+#   VPN_SOCKS_HOST     默认 127.0.0.1
+#   VPN_SOCKS_PORT     默认 10808
+#   VPN_HTTP_HOST      默认 127.0.0.1
+#   VPN_HTTP_PORT      默认 10809
 # =============================================================================
 
 set -euo pipefail
@@ -28,16 +28,16 @@ success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
 
-PROXY_DIR="${HOME}/.config/vpn2"
+PROXY_DIR="${HOME}/.config/vpn"
 PROXY_ENV="${PROXY_DIR}/proxy.env"
-MARKER_BEGIN="# >>> vpn2-shell-proxy managed >>>"
-MARKER_END="# <<< vpn2-shell-proxy managed <<<"
-HOOK_LINE='[ -f "${HOME}/.config/vpn2/proxy.env" ] && . "${HOME}/.config/vpn2/proxy.env"'
+MARKER_BEGIN="# >>> vpn-shell-proxy managed >>>"
+MARKER_END="# <<< vpn-shell-proxy managed <<<"
+HOOK_LINE='[ -f "${HOME}/.config/vpn/proxy.env" ] && . "${HOME}/.config/vpn/proxy.env"'
 
-SOCKS_HOST="${VPN2_SOCKS_HOST:-127.0.0.1}"
-SOCKS_PORT="${VPN2_SOCKS_PORT:-10808}"
-HTTP_HOST="${VPN2_HTTP_HOST:-127.0.0.1}"
-HTTP_PORT="${VPN2_HTTP_PORT:-10809}"
+SOCKS_HOST="${VPN_SOCKS_HOST:-127.0.0.1}"
+SOCKS_PORT="${VPN_SOCKS_PORT:-10808}"
+HTTP_HOST="${VPN_HTTP_HOST:-127.0.0.1}"
+HTTP_PORT="${VPN_HTTP_PORT:-10809}"
 
 ACTION=""
 EMIT=false
@@ -53,7 +53,7 @@ usage() {
   source ./linux-shell-proxy.sh on
   eval "$(./linux-shell-proxy.sh on --emit)"
 
-环境变量（可选）: VPN2_SOCKS_HOST, VPN2_SOCKS_PORT, VPN2_HTTP_HOST, VPN2_HTTP_PORT
+环境变量（可选）: VPN_SOCKS_HOST, VPN_SOCKS_PORT, VPN_HTTP_HOST, VPN_HTTP_PORT
 HELP
     exit "${1:-0}"
 }
@@ -120,7 +120,7 @@ remove_shell_hook() {
 write_proxy_env() {
     mkdir -p "$PROXY_DIR"
     cat > "$PROXY_ENV" <<EOF
-# VPN2 shell proxy — managed by linux-shell-proxy.sh
+# VPN shell proxy — managed by linux-shell-proxy.sh
 export http_proxy="http://${HTTP_HOST}:${HTTP_PORT}"
 export https_proxy="http://${HTTP_HOST}:${HTTP_PORT}"
 export HTTP_PROXY="http://${HTTP_HOST}:${HTTP_PORT}"

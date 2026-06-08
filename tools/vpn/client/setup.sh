@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPN2 客户端部署脚本 - 国内机器
+# VPN 客户端部署脚本 - 国内机器
 # 方案：Xray VLESS + Reality 客户端，通过杭州中继访问 claude.ai
 # 用法：sudo ./client/setup.sh --relay-ip=198.51.100.10 --uuid=<UUID> \
 #           --public-key=<PUB_KEY> --short-id=<SHORT_ID> [OPTIONS]
@@ -98,9 +98,9 @@ if [[ "$ACTION" == "status" ]]; then
 
     echo -e "\n${BOLD}━━━ Xray 客户端状态 ━━━${RESET}"
     if [[ "$OS_TYPE" == "macos" ]]; then
-        PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
-        launchctl list | grep "com.vpn2.xray-client" 2>/dev/null \
-            || echo "Xray 服务未运行（launchctl 中未找到 com.vpn2.xray-client）"
+        PLIST="$HOME/Library/LaunchAgents/com.vpn.xray-client.plist"
+        launchctl list | grep "com.vpn.xray-client" 2>/dev/null \
+            || echo "Xray 服务未运行（launchctl 中未找到 com.vpn.xray-client）"
         [[ -f "$PLIST" ]] && echo "Plist: $PLIST" || echo "Plist 文件不存在: $PLIST"
     else
         systemctl status xray-client 2>/dev/null || \
@@ -158,7 +158,7 @@ fi
 if [[ "$ACTION" == "clean" ]]; then
     step "停止并移除 Xray 客户端"
     if [[ "$OS_TYPE" == "macos" ]]; then
-        PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
+        PLIST="$HOME/Library/LaunchAgents/com.vpn.xray-client.plist"
         launchctl unload "$PLIST" 2>/dev/null || true
         rm -f "$PLIST"
         BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/usr/local")
@@ -198,7 +198,7 @@ fi
 UUID_NORM=$(echo "$UUID" | tr '[:upper:]' '[:lower:]')
 if [[ ! "$UUID_NORM" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
     error "UUID 格式无效（须为十六进制且形如 xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx）。"
-    error "请从出口节点 cat /root/.vpn2_exit_config 完整复制，避免手打出错字符。"
+    error "请从出口节点 cat /root/.vpn_exit_config 完整复制，避免手打出错字符。"
     exit 1
 fi
 SHORT_ID_NORM=$(echo "$SHORT_ID" | tr '[:upper:]' '[:lower:]')
@@ -364,7 +364,7 @@ if [[ "$OS_TYPE" == "macos" ]]; then
     XRAY_BIN="${BREW_PREFIX}/bin/xray"
     XRAY_CONFIG_DIR="${BREW_PREFIX}/etc/xray"
     XRAY_DAT_DIR="${BREW_PREFIX}/share/xray"
-    LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
+    LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.vpn.xray-client.plist"
 else
     XRAY_BIN="/usr/local/bin/xray"
     XRAY_CONFIG_DIR="/usr/local/etc/xray"
@@ -638,7 +638,7 @@ if [[ "$OS_TYPE" == "macos" ]]; then
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.vpn2.xray-client</string>
+    <string>com.vpn.xray-client</string>
     <key>ProgramArguments</key>
     <array>
         <string>${XRAY_BIN}</string>
@@ -684,7 +684,7 @@ else
     write_systemd_service() {
         cat > /etc/systemd/system/xray-client.service <<EOF
 [Unit]
-Description=Xray Client - VPN2 VLESS+Reality
+Description=Xray Client - VPN VLESS+Reality
 Documentation=https://xtls.github.io
 After=network.target nss-lookup.target
 
@@ -777,7 +777,7 @@ ${BOLD}━━━ 服务管理命令 ━━━${RESET}
   停止卸载   : $0 --clean
 $(if [[ "$OS_TYPE" == "macos" ]]; then
 echo "  查看日志   : tail -f /tmp/xray-client.log"
-echo "  重启服务   : launchctl unload ~/Library/LaunchAgents/com.vpn2.xray-client.plist && launchctl load -w ~/Library/LaunchAgents/com.vpn2.xray-client.plist"
+echo "  重启服务   : launchctl unload ~/Library/LaunchAgents/com.vpn.xray-client.plist && launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist"
 else
 echo "  查看日志   : journalctl -u xray-client -f"
 echo "  重启服务   : systemctl restart xray-client"

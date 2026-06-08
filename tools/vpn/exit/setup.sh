@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPN2 出口节点部署脚本 - 新加坡 ECS (198.51.100.30)
+# VPN 出口节点部署脚本 - 新加坡 ECS (198.51.100.30)
 # 方案：Xray VLESS + Reality，伪装 www.microsoft.com，支持多用户
 # 用法：sudo ./exit/setup.sh [--dry-run] [--port PORT] [--users=NAME[,NAME...]]
 # =============================================================================
@@ -177,9 +177,9 @@ fi
 step "优化内核网络参数（BBR + TCP 缓冲区）"
 
 tune_kernel() {
-    SYSCTL_CONF="/etc/sysctl.d/99-vpn2-exit.conf"
+    SYSCTL_CONF="/etc/sysctl.d/99-vpn-exit.conf"
     cat > "$SYSCTL_CONF" <<'SYSCTL'
-# VPN2 出口节点 - 网络性能优化
+# VPN 出口节点 - 网络性能优化
 
 # BBR 拥塞控制（需内核 4.9+）
 net.core.default_qdisc = fq
@@ -211,17 +211,17 @@ SYSCTL
 }
 
 if $DRY_RUN; then
-    info "[dry-run] 将写入 /etc/sysctl.d/99-vpn2-exit.conf 并应用内核参数"
+    info "[dry-run] 将写入 /etc/sysctl.d/99-vpn-exit.conf 并应用内核参数"
 else
     tune_kernel
     CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
     [[ "$CC" == "bbr" ]] && success "BBR 拥塞控制已启用" \
         || warn "BBR 未生效（当前: ${CC}），可能需要升级内核至 4.9+"
-    success "内核网络参数已优化（配置: /etc/sysctl.d/99-vpn2-exit.conf）"
+    success "内核网络参数已优化（配置: /etc/sysctl.d/99-vpn-exit.conf）"
 fi
 
 # ── 配置缓存读写 ───────────────────────────────────────────────────────────────
-CONFIG_CACHE="/root/.vpn2_exit_config"
+CONFIG_CACHE="/root/.vpn_exit_config"
 
 # 全局变量（由 load_or_init_config 填充）
 USERS=""
@@ -321,7 +321,7 @@ build_clients_json() {
         $first || result="${result},"
         first=false
         result="${result}
-          {\"id\":\"${!uuid_var}\",\"flow\":\"xtls-rprx-vision\",\"email\":\"${u}@vpn2\"}"
+          {\"id\":\"${!uuid_var}\",\"flow\":\"xtls-rprx-vision\",\"email\":\"${u}@vpn\"}"
     done
     echo "$result"
 }
@@ -508,10 +508,10 @@ ${BOLD}━━━ 用户: ${u}（配额: ${quota_str}）━━━${RESET}
   UUID: ${uuid}
 
   macOS / Windows / Linux (fp=chrome):
-  vless://${uuid}@<中继IP>:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN2-${u}
+  vless://${uuid}@<中继IP>:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN-${u}
 
   iOS Shadowrocket (fp=ios):
-  vless://${uuid}@<中继IP>:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN2-${u}-iOS
+  vless://${uuid}@<中继IP>:${LISTEN_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SNI}&fp=ios&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VPN-${u}-iOS
 
 EOF
 done

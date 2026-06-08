@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # 清理旧 VPN 方案（mihomo + WireGuard + gost + tproxy iptables 规则）
-# 用法：sudo ./vpn2/cleanup_vpn1.sh
+# 用法：sudo ./vpn/cleanup_vpn1.sh
 # =============================================================================
 
 set -euo pipefail
@@ -77,7 +77,7 @@ fi
 
 # 清除 WireGuard MASQUERADE（10.8.0.0/24 出 eth0）
 iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE 2>/dev/null || true
-iptables -t nat -D POSTROUTING -d 198.51.100.30 -j MASQUERADE 2>/dev/null || true  # 旧 vpn2 relay 规则（如有）
+iptables -t nat -D POSTROUTING -d 198.51.100.30 -j MASQUERADE 2>/dev/null || true  # 旧 vpn relay 规则（如有）
 
 success "tproxy 规则已清除"
 
@@ -118,7 +118,7 @@ echo ""
 success "旧 VPN 方案清理完成！"
 echo ""
 echo -e "${BOLD}━━━ 下一步 ━━━${RESET}"
-echo "  部署新方案请按 vpn2/README.md 操作："
-echo "  1. 新加坡出口节点: sudo ./vpn2/exit/setup.sh"
-echo "  2. 杭州中继节点:   sudo ./vpn2/relay/setup.sh"
-echo "  3. 本机客户端:     sudo ./vpn2/client/setup.sh --uuid=... --public-key=... --short-id=..."
+echo "  部署新方案请按 vpn/README.md 操作："
+echo "  1. 新加坡出口节点: sudo ./vpn/exit/setup.sh"
+echo "  2. 杭州中继节点:   sudo ./vpn/relay/setup.sh"
+echo "  3. 本机客户端:     sudo ./vpn/client/setup.sh --uuid=... --public-key=... --short-id=..."

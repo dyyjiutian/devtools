@@ -1,3 +1,0 @@
-# WireGuard client configs contain private keys — never commit
-*
-!.gitignore

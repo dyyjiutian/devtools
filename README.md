@@ -22,8 +22,7 @@ devtools/
 ├── tools/
 │   ├── bazel/                    # Bazelisk + buildifier + starpls
 │   ├── proxy/                    # SNI proxy for GitHub/Docker Hub
-│   ├── vpn/                      # WireGuard VPN with split tunneling
-│   └── vpn2/                     # Xray VLESS + Reality three-hop proxy
+│   └── vpn/                      # Xray VLESS + Reality three-hop proxy
 ├── vcs/git/
 │   ├── scripts/                  # git_config.sh, alias.sh
 │   └── config/github.gitconfig   # GitHub-specific git aliases
@@ -153,45 +152,28 @@ sudo ./tools/proxy/client/configure.sh <ECS_IP>  # Configure client
 
 See [`tools/proxy/README.md`](tools/proxy/README.md) for full setup and extending to more domains.
 
-### WireGuard VPN with Split Tunneling (`tools/vpn/`)
-
-WireGuard VPN on a Singapore ECS with smart routing: overseas traffic goes through the tunnel, domestic (China) traffic connects directly. Supports macOS, Linux, and iOS. Optionally routes AI service domains (claude.ai, ChatGPT) through a residential IP proxy via Cloudflare WARP + mihomo.
-
-```bash
-# Server (Singapore ECS)
-sudo ./tools/vpn/server/setup.sh
-
-# Generate per-device client config (run on server)
-sudo ./tools/vpn/client/gen_config.sh --name macbook --server-ip <ECS_IP>
-
-# Install on macOS client
-sudo ./tools/vpn/client/setup_macos.sh --config client/output/wg_macbook.conf
-```
-
-See [`tools/vpn/README.md`](tools/vpn/README.md) for iOS setup, residential IP proxy, and traffic verification.
-
-### Xray VLESS + Reality Proxy (`tools/vpn2/`)
+### Xray VLESS + Reality Proxy (`tools/vpn/`)
 
 Three-hop proxy chain (domestic client → Hangzhou relay ECS → Singapore exit ECS) using the Xray VLESS + Reality protocol. Designed to bypass GFW detection when accessing AI services. Supports Linux, macOS (script + system proxy toggle), and iOS (Shadowrocket).
 
 ```bash
 # 1. Deploy exit node (Singapore ECS)
-sudo ./tools/vpn2/exit/setup.sh
+sudo ./tools/vpn/exit/setup.sh
 
 # 2. Deploy relay node (Hangzhou ECS)
-sudo ./tools/vpn2/relay/setup.sh
+sudo ./tools/vpn/relay/setup.sh
 
 # 3. Install client (domestic machine)
-./tools/vpn2/client/setup.sh \
+./tools/vpn/client/setup.sh \
   --relay-ip=<RELAY_IP> --uuid=<UUID> \
   --public-key=<PUB_KEY> --short-id=<SHORT_ID>
 
 # macOS: toggle system-wide proxy
-./tools/vpn2/client/proxy-on.sh
-./tools/vpn2/client/proxy-off.sh
+./tools/vpn/client/proxy-on.sh
+./tools/vpn/client/proxy-off.sh
 ```
 
-See [`tools/vpn2/README.md`](tools/vpn2/README.md) for GUI client setup (V2RayXS, Shadowrocket) and troubleshooting.
+See [`tools/vpn/README.md`](tools/vpn/README.md) for GUI client setup (V2RayXS, Shadowrocket) and troubleshooting.
 
 ## Git Utilities
 

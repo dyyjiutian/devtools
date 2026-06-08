@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPN2 中继节点部署脚本 - 杭州 ECS (198.51.100.10)
+# VPN 中继节点部署脚本 - 杭州 ECS (198.51.100.10)
 # 方案：iptables DNAT 透明转发，无需安装任何代理软件
 # 用法：sudo ./relay/setup.sh --exit-ip=198.51.100.30 [--exit-port=443] [--listen-port=443] [--dry-run]
 # =============================================================================
@@ -104,9 +104,9 @@ enable_ip_forward() {
     echo 1 > /proc/sys/net/ipv4/ip_forward
 
     # 持久化（重启后生效）
-    SYSCTL_CONF="/etc/sysctl.d/99-vpn2-relay.conf"
+    SYSCTL_CONF="/etc/sysctl.d/99-vpn-relay.conf"
     cat > "$SYSCTL_CONF" <<'SYSCTL'
-# VPN2 中继节点 - IP 转发 + 网络性能优化
+# VPN 中继节点 - IP 转发 + 网络性能优化
 
 # IP 转发（DNAT 必需）
 net.ipv4.ip_forward = 1
@@ -155,10 +155,10 @@ SYSCTL
 
 if $DRY_RUN; then
     info "[dry-run] echo 1 > /proc/sys/net/ipv4/ip_forward"
-    info "[dry-run] 写入 /etc/sysctl.d/99-vpn2-relay.conf（IP 转发 + BBR + TCP 优化）"
+    info "[dry-run] 写入 /etc/sysctl.d/99-vpn-relay.conf（IP 转发 + BBR + TCP 优化）"
 else
     enable_ip_forward
-    success "IP 转发及网络优化参数已应用（配置: /etc/sysctl.d/99-vpn2-relay.conf）"
+    success "IP 转发及网络优化参数已应用（配置: /etc/sysctl.d/99-vpn-relay.conf）"
 fi
 
 # ── 配置 iptables 转发规则 ────────────────────────────────────────────────────
@@ -238,13 +238,13 @@ detect_and_persist() {
 
 # 使用 systemd oneshot 作为通用持久化备选方案
 create_systemd_restore_service() {
-    RULES_FILE="/etc/iptables-vpn2-relay.rules"
+    RULES_FILE="/etc/iptables-vpn-relay.rules"
     run sh -c "iptables-save > ${RULES_FILE}"
     chmod 600 "$RULES_FILE"
 
-    cat > /etc/systemd/system/vpn2-relay-iptables.service <<EOF
+    cat > /etc/systemd/system/vpn-relay-iptables.service <<EOF
 [Unit]
-Description=VPN2 中继节点 iptables 转发规则恢复
+Description=VPN 中继节点 iptables 转发规则恢复
 Before=network.target
 After=local-fs.target
 
@@ -258,8 +258,8 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 EOF
     run systemctl daemon-reload
-    run systemctl enable vpn2-relay-iptables.service
-    success "iptables 规则已持久化（systemd: vpn2-relay-iptables.service）"
+    run systemctl enable vpn-relay-iptables.service
+    success "iptables 规则已持久化（systemd: vpn-relay-iptables.service）"
 }
 
 if $DRY_RUN; then

@@ -9,11 +9,11 @@
 #   ./macos-system-proxy.sh list-services
 #
 # 环境变量（可选，覆盖默认）:
-#   VPN2_PROXY_SERVICE  网络服务名，默认 Wi-Fi
-#   VPN2_SOCKS_HOST     默认 127.0.0.1
-#   VPN2_SOCKS_PORT     默认 10808
-#   VPN2_HTTP_HOST      默认 127.0.0.1
-#   VPN2_HTTP_PORT      默认 10809
+#   VPN_PROXY_SERVICE  网络服务名，默认 Wi-Fi
+#   VPN_SOCKS_HOST     默认 127.0.0.1
+#   VPN_SOCKS_PORT     默认 10808
+#   VPN_HTTP_HOST      默认 127.0.0.1
+#   VPN_HTTP_PORT      默认 10809
 # =============================================================================
 
 set -euo pipefail
@@ -34,8 +34,8 @@ usage() {
   ./macos-system-proxy.sh status [--service=Wi-Fi]
   ./macos-system-proxy.sh list-services
 
-环境变量（可选）: VPN2_PROXY_SERVICE, VPN2_SOCKS_HOST, VPN2_SOCKS_PORT,
-                  VPN2_HTTP_HOST, VPN2_HTTP_PORT
+环境变量（可选）: VPN_PROXY_SERVICE, VPN_SOCKS_HOST, VPN_SOCKS_PORT,
+                  VPN_HTTP_HOST, VPN_HTTP_PORT
 HELP
     exit "${1:-0}"
 }
@@ -45,11 +45,11 @@ if [[ "$(uname)" != "Darwin" ]]; then
     exit 1
 fi
 
-SERVICE="${VPN2_PROXY_SERVICE:-Wi-Fi}"
-SOCKS_HOST="${VPN2_SOCKS_HOST:-127.0.0.1}"
-SOCKS_PORT="${VPN2_SOCKS_PORT:-10808}"
-HTTP_HOST="${VPN2_HTTP_HOST:-127.0.0.1}"
-HTTP_PORT="${VPN2_HTTP_PORT:-10809}"
+SERVICE="${VPN_PROXY_SERVICE:-Wi-Fi}"
+SOCKS_HOST="${VPN_SOCKS_HOST:-127.0.0.1}"
+SOCKS_PORT="${VPN_SOCKS_PORT:-10808}"
+HTTP_HOST="${VPN_HTTP_HOST:-127.0.0.1}"
+HTTP_PORT="${VPN_HTTP_PORT:-10809}"
 
 ACTION=""
 for arg in "$@"; do

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# VPN2 出口节点用户管理脚本
+# VPN 出口节点用户管理脚本
 # 用法：sudo ./exit/manage.sh <command> [args]
 # =============================================================================
 
@@ -16,12 +16,12 @@ error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
 
 [[ $EUID -eq 0 ]] || { error "请以 root 权限运行: sudo $0 $*"; exit 1; }
 
-CONFIG_CACHE="/root/.vpn2_exit_config"
+CONFIG_CACHE="/root/.vpn_exit_config"
 XRAY_BIN="/usr/local/bin/xray"
 XRAY_CONFIG="/usr/local/etc/xray/config.json"
 XRAY_LOG_DIR="/var/log/xray"
 STATS_SERVER="127.0.0.1:10085"
-QUOTA_LOG="/var/log/vpn2-quota.log"
+QUOTA_LOG="/var/log/vpn-quota.log"
 
 # ── 配置加载/写入 ──────────────────────────────────────────────────────────────
 load_config() {
@@ -73,7 +73,7 @@ reload_xray_clients() {
         local uuid_var="USER_${u}_UUID"
         $first || clients_arr="${clients_arr},"
         first=false
-        clients_arr="${clients_arr}{\"id\":\"${!uuid_var}\",\"flow\":\"xtls-rprx-vision\",\"email\":\"${u}@vpn2\"}"
+        clients_arr="${clients_arr}{\"id\":\"${!uuid_var}\",\"flow\":\"xtls-rprx-vision\",\"email\":\"${u}@vpn\"}"
     done
     clients_arr="${clients_arr}]"
 
@@ -141,7 +141,7 @@ bytes_to_human() {
 # 查询单个用户的 up/down 字节数，失败时返回 "0 0"
 get_user_traffic() {
     local user="$1"
-    local email="${user}@vpn2"
+    local email="${user}@vpn"
     local up=0 down=0 val
 
     val=$("$XRAY_BIN" api statget --server="$STATS_SERVER" \
@@ -342,7 +342,7 @@ cmd_reset_stats() {
         [[ " ${USERS} " == *" ${target} "* ]] || { error "用户 '${target}' 不存在"; exit 1; }
         stats_api_alive || { warn "Stats API 不可用，无法单独重置；可用 reset-stats all 重启 Xray"; exit 1; }
 
-        local email="${target}@vpn2"
+        local email="${target}@vpn"
         "$XRAY_BIN" api statget --server="$STATS_SERVER" \
             -name "user>>>${email}>>>traffic>>>uplink" --reset &>/dev/null || true
         "$XRAY_BIN" api statget --server="$STATS_SERVER" \
@@ -393,12 +393,12 @@ cmd_check_quotas() {
 cmd_install_cron() {
     local script_path
     script_path=$(realpath "$0")
-    local cron_file="/etc/cron.d/vpn2-quota"
+    local cron_file="/etc/cron.d/vpn-quota"
     cat > "$cron_file" <<EOF
-# VPN2 配额巡检：每小时执行一次
+# VPN 配额巡检：每小时执行一次
 0 * * * * root ${script_path} check-quotas >> ${QUOTA_LOG} 2>&1
 
-# VPN2 月度流量重置：每月 1 日 00:05 清零，配额从头计算
+# VPN 月度流量重置：每月 1 日 00:05 清零，配额从头计算
 5 0 1 * * root ${script_path} reset-stats all >> ${QUOTA_LOG} 2>&1
 EOF
     chmod 644 "$cron_file"
@@ -411,7 +411,7 @@ EOF
 # ── 帮助 ──────────────────────────────────────────────────────────────────────
 cmd_help() {
     cat <<'HELP'
-VPN2 出口节点用户管理
+VPN 出口节点用户管理
 
 用法：sudo ./exit/manage.sh <command> [args]
 
