@@ -181,6 +181,9 @@ tune_kernel() {
     cat > "$SYSCTL_CONF" <<'SYSCTL'
 # VPN 出口节点 - 网络性能优化
 
+vm.swappiness = 0
+kernel.sysrq = 1
+
 # BBR 拥塞控制（需内核 4.9+）
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
@@ -193,7 +196,15 @@ net.core.wmem_default = 65536
 net.core.netdev_max_backlog = 4096
 net.core.somaxconn = 4096
 
-# TCP 优化
+# 邻居表 / ARP（云主机多网卡场景，见 https://help.aliyun.com/knowledge_detail/39428.html）
+net.ipv4.neigh.default.gc_stale_time = 120
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 0
+net.ipv4.conf.default.arp_announce = 2
+net.ipv4.conf.lo.arp_announce = 2
+net.ipv4.conf.all.arp_announce = 2
+
+# TCP 优化（见 https://help.aliyun.com/knowledge_detail/41334.html）
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_tw_reuse = 1
 net.ipv4.tcp_fin_timeout = 30
@@ -202,6 +213,8 @@ net.ipv4.tcp_keepalive_intvl = 10
 net.ipv4.tcp_keepalive_probes = 3
 net.ipv4.tcp_max_syn_backlog = 4096
 net.ipv4.tcp_max_tw_buckets = 5000
+net.ipv4.tcp_synack_retries = 2
+net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_rmem = 4096 87380 67108864
 net.ipv4.tcp_wmem = 4096 65536 67108864
 net.ipv4.tcp_mtu_probing = 1
