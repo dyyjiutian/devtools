@@ -25,6 +25,8 @@ fi
 
 # ── 参数解析 ──────────────────────────────────────────────────────────────────
 DRY_RUN=false
+USE_MIRROR=true
+FORCE_SETUP=false
 RELAY_IP="198.51.100.10"
 RELAY_PORT=443
 UUID=""
@@ -47,6 +49,8 @@ for arg in "$@"; do
         --socks-port=*)  SOCKS_PORT="${arg#*=}" ;;
         --http-port=*)   HTTP_PORT="${arg#*=}" ;;
         --dry-run)       DRY_RUN=true ;;
+        --no-mirror)     USE_MIRROR=false ;;
+        --force)         FORCE_SETUP=true ;;
         --clean)         ACTION="clean" ;;
         --status)        ACTION="status" ;;
         --help|-h)
@@ -67,6 +71,8 @@ Usage: ./client/setup.sh --uuid=<UUID> --public-key=<KEY> --short-id=<SID> [OPTI
   --socks-port=PORT    本地 SOCKS5 监听端口（默认 10808）
   --http-port=PORT     本地 HTTP 代理监听端口（默认 10809）
   --dry-run            预览操作，不实际执行
+  --no-mirror          禁用国内镜像，仅从 GitHub 下载（境外环境可用）
+  --force              跳过中继节点 TCP 连通性预检
   --clean              停止并卸载 Xray 客户端
   --status             查看运行状态
   --help               显示帮助
@@ -79,6 +85,17 @@ done
 
 # ── 状态查询模式 ──────────────────────────────────────────────────────────────
 if [[ "$ACTION" == "status" ]]; then
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/opt/homebrew")
+        XRAY_BIN="${BREW_PREFIX}/bin/xray"
+        XRAY_CONFIG_DIR="${BREW_PREFIX}/etc/xray"
+        XRAY_DAT_DIR="${BREW_PREFIX}/share/xray"
+    else
+        XRAY_BIN="/usr/local/bin/xray"
+        XRAY_CONFIG_DIR="/usr/local/etc/xray"
+        XRAY_DAT_DIR="/usr/local/share/xray"
+    fi
+
     echo -e "\n${BOLD}━━━ Xray 客户端状态 ━━━${RESET}"
     if [[ "$OS_TYPE" == "macos" ]]; then
         PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
@@ -91,6 +108,24 @@ if [[ "$ACTION" == "status" ]]; then
         echo "Xray 服务未找到"
     fi
     echo ""
+    echo -e "${BOLD}━━━ Geo 路由数据 ━━━${RESET}"
+    for f in geoip.dat geosite.dat; do
+        fp="${XRAY_DAT_DIR}/${f}"
+        if [[ -f "$fp" ]]; then
+            sz=$(stat -c%s "$fp" 2>/dev/null || stat -f%z "$fp" 2>/dev/null || echo 0)
+            echo "  ${f}: 存在 (${sz} bytes)"
+        else
+            echo "  ${f}: ${RED}缺失${RESET} — 路由规则 geoip:cn / geosite:cn 无法生效"
+        fi
+    done
+    echo ""
+    echo -e "${BOLD}━━━ 中继节点连通性 ━━━${RESET}"
+    if tcp_reachable "${RELAY_IP}" "${RELAY_PORT}"; then
+        echo "  ${RELAY_IP}:${RELAY_PORT} TCP 可达"
+    else
+        echo "  ${RELAY_IP}:${RELAY_PORT} ${RED}TCP 不可达${RESET} — 请检查中继节点部署与安全组"
+    fi
+    echo ""
     echo -e "${BOLD}━━━ 代理端口监听 ━━━${RESET}"
     if [[ "$OS_TYPE" == "macos" ]]; then
         lsof -iTCP:${SOCKS_PORT} -sTCP:LISTEN 2>/dev/null || echo "SOCKS5 端口 ${SOCKS_PORT} 未监听"
@@ -98,11 +133,24 @@ if [[ "$ACTION" == "status" ]]; then
     else
         ss -tlnp | grep -E "10808|10809" || echo "代理端口未监听"
     fi
+    if [[ -f "${XRAY_CONFIG_DIR}/client.json" ]] && command -v xray &>/dev/null; then
+        echo ""
+        echo -e "${BOLD}━━━ 配置校验 ━━━${RESET}"
+        if xray run -test -config "${XRAY_CONFIG_DIR}/client.json" 2>/tmp/xray-status-test.log; then
+            echo "  配置文件校验通过"
+        else
+            echo "  ${RED}配置文件校验失败${RESET}:"
+            tail -5 /tmp/xray-status-test.log 2>/dev/null | sed 's/^/    /'
+        fi
+    fi
     echo ""
-    echo -e "${BOLD}━━━ 连通性测试（通过代理访问 claude.ai）━━━${RESET}"
+    echo -e "${BOLD}━━━ 连通性测试（通过代理访问）━━━${RESET}"
     curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
-        -o /dev/null -w "HTTP 状态: %{http_code}\n" https://claude.ai/ 2>/dev/null \
-        || echo "连接失败，请检查代理配置"
+        -o /dev/null -w "  ipify.org HTTP: %{http_code}\n" https://api4.ipify.org 2>/dev/null \
+        || echo "  ipify.org 连接失败"
+    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+        -o /dev/null -w "  claude.ai HTTP: %{http_code}\n" https://claude.ai/ 2>/dev/null \
+        || echo "  claude.ai 连接失败（403 也可能表示代理已通）"
     exit 0
 fi
 
@@ -178,6 +226,123 @@ run() {
     fi
 }
 
+file_size() {
+    local f="$1"
+    if [[ "$OS_TYPE" == "macos" ]]; then
+        stat -f%z "$f" 2>/dev/null || echo 0
+    else
+        stat -c%s "$f" 2>/dev/null || echo 0
+    fi
+}
+
+tcp_reachable() {
+    local host="$1" port="$2"
+    if command -v nc &>/dev/null; then
+        if [[ "$OS_TYPE" == "macos" ]]; then
+            nc -z -G 5 "$host" "$port" 2>/dev/null
+        else
+            nc -z -w 5 "$host" "$port" 2>/dev/null
+        fi
+        return $?
+    fi
+    (echo > /dev/tcp/"$host"/"$port") 2>/dev/null
+}
+
+download_file_with_mirrors() {
+    local dest="$1"
+    shift
+    local urls=("$@") url max_time="${DOWNLOAD_MAX_TIME:-120}"
+    mkdir -p "$(dirname "$dest")"
+    for url in "${urls[@]}"; do
+        info "下载: ${url%%\?*} ..."
+        if curl -fsSL --connect-timeout 25 --max-time "$max_time" \
+            --retry 2 --retry-delay 2 -o "$dest" "$url" \
+            && [[ -s "$dest" ]]; then
+            return 0
+        fi
+        warn "下载失败，尝试下一源..."
+        rm -f "$dest"
+    done
+    return 1
+}
+
+ensure_geo_data() {
+    local dat_dir="$1"
+    local geoip="${dat_dir}/geoip.dat"
+    local geosite="${dat_dir}/geosite.dat"
+    local min_size=65536 need=false
+
+    [[ ! -f "$geoip" ]] || [[ $(file_size "$geoip") -lt $min_size ]] && need=true
+    [[ ! -f "$geosite" ]] || [[ $(file_size "$geosite") -lt $min_size ]] && need=true
+
+    if ! $need; then
+        success "Geo 路由数据已就绪: ${dat_dir}"
+        return 0
+    fi
+
+    step "下载 Geo 路由数据（国内镜像，路由规则必需）"
+    mkdir -p "$dat_dir"
+    DOWNLOAD_MAX_TIME=300
+
+    local geoip_urls geosite_urls
+    if $USE_MIRROR; then
+        geoip_urls=(
+            "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat"
+            "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat"
+            "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+        )
+        geosite_urls=(
+            "https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat"
+            "https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat"
+            "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+        )
+    else
+        geoip_urls=("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat")
+        geosite_urls=("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat")
+    fi
+
+    download_file_with_mirrors "$geoip" "${geoip_urls[@]}" \
+        || { error "geoip.dat 下载失败"; return 1; }
+    download_file_with_mirrors "$geosite" "${geosite_urls[@]}" \
+        || { error "geosite.dat 下载失败"; return 1; }
+    unset DOWNLOAD_MAX_TIME
+    success "Geo 路由数据已下载: ${dat_dir}"
+}
+
+preflight_relay_check() {
+    step "检查到中继节点的网络连通性"
+    if tcp_reachable "${RELAY_IP}" "${RELAY_PORT}"; then
+        success "中继节点 ${RELAY_IP}:${RELAY_PORT} TCP 可达"
+        return 0
+    fi
+    warn "无法连接中继节点 ${RELAY_IP}:${RELAY_PORT}"
+    warn "请确认：① relay/setup.sh 已在中继 ECS 部署  ② 安全组放行 TCP ${RELAY_PORT}  ③ 本机防火墙未拦截"
+    if $FORCE_SETUP; then
+        warn "--force 已启用，跳过中继连通性检查"
+        return 0
+    fi
+    error "中止安装。若确认中继正常，可加 --force 跳过此检查"
+    exit 1
+}
+
+validate_xray_config() {
+    local cfg="${XRAY_CONFIG_DIR}/client.json"
+    step "校验 Xray 配置文件"
+    if "$XRAY_BIN" run -test -config "$cfg" 2>/tmp/xray-config-test.log; then
+        success "配置文件校验通过"
+        return 0
+    fi
+    error "配置文件校验失败:"
+    tail -10 /tmp/xray-config-test.log >&2 || true
+    if grep -qiE 'geo(ip|site)|geodata|not found|failed to load' /tmp/xray-config-test.log 2>/dev/null; then
+        warn "检测到 Geo 数据问题，尝试重新下载..."
+        ensure_geo_data "$XRAY_DAT_DIR" \
+            && "$XRAY_BIN" run -test -config "$cfg" \
+            && { success "重新下载 Geo 数据后配置校验通过"; return 0; }
+    fi
+    exit 1
+}
+
 step "部署 Xray 客户端"
 info "中继节点  : ${RELAY_IP}:${RELAY_PORT}"
 info "UUID      : ${UUID}"
@@ -187,18 +352,68 @@ info "HTTP代理  : 127.0.0.1:${HTTP_PORT}"
 
 $DRY_RUN && warn "[dry-run] 仅预览，不执行实际操作"
 
+if ! $DRY_RUN; then
+    preflight_relay_check
+fi
+
 # ── 安装 Xray ─────────────────────────────────────────────────────────────────
 step "安装 Xray-core"
 
 if [[ "$OS_TYPE" == "macos" ]]; then
-    BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/usr/local")
+    BREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/opt/homebrew")
     XRAY_BIN="${BREW_PREFIX}/bin/xray"
     XRAY_CONFIG_DIR="${BREW_PREFIX}/etc/xray"
+    XRAY_DAT_DIR="${BREW_PREFIX}/share/xray"
     LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.vpn2.xray-client.plist"
 else
     XRAY_BIN="/usr/local/bin/xray"
     XRAY_CONFIG_DIR="/usr/local/etc/xray"
+    XRAY_DAT_DIR="/usr/local/share/xray"
 fi
+
+install_xray_linux_from_mirror() {
+    local machine tmpdir zip
+    case "$(uname -m)" in
+        x86_64|amd64)  machine=64 ;;
+        aarch64|arm64) machine=arm64-v8a ;;
+        armv7l)        machine=arm32-v7a ;;
+        *) error "不支持的 CPU 架构: $(uname -m)"; return 1 ;;
+    esac
+
+    if ! command -v unzip &>/dev/null; then
+        if [[ -f /etc/os-release ]]; then
+            # shellcheck source=/dev/null
+            source /etc/os-release
+            case "$ID" in
+                centos|rhel|almalinux|rocky|alinux|anolis) yum install -y unzip ;;
+                ubuntu|debian) apt-get update -qq && apt-get install -y unzip ;;
+            esac
+        fi
+    fi
+    command -v unzip &>/dev/null || { error "需要 unzip 命令"; return 1; }
+
+    tmpdir=$(mktemp -d)
+    zip="${tmpdir}/xray.zip"
+    local urls
+    if $USE_MIRROR; then
+        urls=(
+            "https://ghfast.top/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip"
+            "https://mirror.ghproxy.com/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip"
+            "https://cdn.jsdelivr.net/gh/XTLS/Xray-core@latest-release/Xray-linux-${machine}.zip"
+            "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip"
+        )
+    else
+        urls=("https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip")
+    fi
+
+    info "从镜像下载 Xray 二进制（linux-${machine}）..."
+    download_file_with_mirrors "$zip" "${urls[@]}" || { rm -rf "$tmpdir"; return 1; }
+    unzip -o -q "$zip" xray -d "$tmpdir"
+    install -m 755 "${tmpdir}/xray" /usr/local/bin/xray
+    mkdir -p /usr/local/share/xray /usr/local/etc/xray /var/log/xray
+    rm -rf "$tmpdir"
+    success "Xray 二进制已安装: /usr/local/bin/xray"
+}
 
 install_xray() {
     if [[ "$OS_TYPE" == "macos" ]]; then
@@ -207,6 +422,10 @@ install_xray() {
             exit 1
         fi
         info "通过 Homebrew 安装 Xray..."
+        if $USE_MIRROR; then
+            export HOMEBREW_BOTTLE_DOMAIN="${HOMEBREW_BOTTLE_DOMAIN:-https://mirrors.aliyun.com/homebrew/homebrew-bottles}"
+            info "使用 Homebrew 国内镜像加速（可通过 HOMEBREW_BOTTLE_DOMAIN 覆盖）"
+        fi
         brew install xray
         return
     fi
@@ -222,11 +441,28 @@ install_xray() {
         fi
     fi
 
-    info "下载 Xray 官方安装脚本..."
-    INSTALL_SCRIPT=$(mktemp)
-    curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o "$INSTALL_SCRIPT"
-    bash "$INSTALL_SCRIPT" install
-    rm -f "$INSTALL_SCRIPT"
+    local script_urls install_script
+    if $USE_MIRROR; then
+        script_urls=(
+            "https://cdn.jsdelivr.net/gh/XTLS/Xray-install@main/install-release.sh"
+            "https://ghfast.top/https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
+            "https://github.com/XTLS/Xray-install/raw/main/install-release.sh"
+        )
+    else
+        script_urls=("https://github.com/XTLS/Xray-install/raw/main/install-release.sh")
+    fi
+
+    install_script=$(mktemp)
+    info "下载 Xray 安装脚本..."
+    if download_file_with_mirrors "$install_script" "${script_urls[@]}" \
+        && bash "$install_script" install; then
+        rm -f "$install_script"
+        return
+    fi
+    rm -f "$install_script"
+
+    warn "官方安装脚本失败（国内访问 GitHub 常受限），尝试镜像直装..."
+    install_xray_linux_from_mirror || { error "Xray 安装失败，请检查网络或手动安装"; exit 1; }
 }
 
 if ! command -v xray &>/dev/null; then
@@ -240,6 +476,10 @@ else
     success "Xray 已安装: v${XRAY_VER}"
 fi
 
+if ! $DRY_RUN; then
+    ensure_geo_data "$XRAY_DAT_DIR" || exit 1
+fi
+
 # ── 写入客户端配置 ────────────────────────────────────────────────────────────
 step "写入 Xray 客户端配置"
 
@@ -249,6 +489,25 @@ write_client_config() {
 {
   "log": {
     "loglevel": "warning"
+  },
+  "dns": {
+    "servers": [
+      {
+        "address": "223.5.5.5",
+        "port": 53,
+        "domains": ["geosite:cn"],
+        "expectIPs": ["geoip:cn"]
+      },
+      {
+        "address": "119.29.29.29",
+        "port": 53,
+        "domains": ["geosite:cn"],
+        "expectIPs": ["geoip:cn"]
+      },
+      "223.5.5.5"
+    ],
+    "queryStrategy": "UseIPv4",
+    "disableFallback": true
   },
   "inbounds": [
     {
@@ -364,6 +623,7 @@ if $DRY_RUN; then
 else
     write_client_config
     success "客户端配置已写入: ${XRAY_CONFIG_DIR}/client.json"
+    validate_xray_config
 fi
 
 # ── 配置后台服务 ──────────────────────────────────────────────────────────────
@@ -475,17 +735,19 @@ if ! $DRY_RUN; then
         warn "SOCKS5 端口 ${SOCKS_PORT} 未监听，检查 Xray 日志"
     fi
 
-    # 尝试通过代理访问 claude.ai
-    info "测试通过代理访问 claude.ai..."
+    # 尝试通过代理访问（ipify 比 claude.ai 更可靠；claude 可能返回 403）
+    info "测试通过代理访问 api4.ipify.org..."
     HTTP_CODE=$(curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" \
         -fsSL --connect-timeout 15 \
         -o /dev/null -w "%{http_code}" \
-        https://claude.ai/ 2>/dev/null) || HTTP_CODE="000"
+        https://api4.ipify.org 2>/dev/null) || HTTP_CODE="000"
 
-    if [[ "$HTTP_CODE" =~ ^[23] ]]; then
-        success "claude.ai 访问成功！HTTP 状态: ${HTTP_CODE}"
+    if [[ "$HTTP_CODE" =~ ^2 ]]; then
+        success "代理链路畅通！ipify.org HTTP 状态: ${HTTP_CODE}"
     else
-        warn "claude.ai 访问测试返回: ${HTTP_CODE}（可能需要几秒钟预热，或检查出口节点配置）"
+        warn "ipify.org 访问测试返回: ${HTTP_CODE}"
+        warn "若 SOCKS 端口已监听，请检查 UUID / PublicKey / ShortID 是否与出口节点一致"
+        warn "诊断命令: $0 --status  或  journalctl -u xray-client -n 30"
     fi
 fi
 
