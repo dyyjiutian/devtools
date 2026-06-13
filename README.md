@@ -21,6 +21,7 @@ devtools/
 │   └── cursor/                   # Cursor editor backup/restore
 ├── tools/
 │   ├── bazel/                    # Bazelisk + buildifier + starpls
+│   ├── frp/                      # FRP reverse proxy for Mac SSH/VNC
 │   ├── proxy/                    # SNI proxy for GitHub/Docker Hub
 │   └── vpn/                      # Xray VLESS + Reality three-hop proxy
 ├── vcs/git/
@@ -140,6 +141,25 @@ Installs [Bazelisk](https://github.com/bazelbuild/bazelisk), [buildifier](https:
 ```
 
 See [`tools/bazel/README.md`](tools/bazel/README.md) for version management and editor integration.
+
+### FRP Remote Access (`tools/frp/`)
+
+FRP reverse proxy on Linux (frps) + macOS client (frpc) to SSH and VNC into Mac machines via the Linux server's IP.
+
+```bash
+# 1. Deploy server (Linux)
+sudo ./tools/frp/server/setup.sh
+
+# 2. Deploy client (macOS) — get token from server --status output
+./tools/frp/client/setup.sh \
+  --server-ip=<LINUX_IP> --token=<TOKEN> --client-name=$(hostname -s)
+
+# Connect
+ssh -p 6000 <mac_user>@<LINUX_IP>
+open vnc://<LINUX_IP>:6001
+```
+
+See [`tools/frp/README.md`](tools/frp/README.md) for multi-Mac port allocation and troubleshooting.
 
 ### SNI Proxy (`tools/proxy/`)
 
