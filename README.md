@@ -234,7 +234,7 @@ Provides `git review`: push current branch and open a PR via `gh`.
 
 ### Claude Code (`agent/claude/`)
 
-Install and configure [Claude Code](https://claude.ai/code) CLI tool.
+Install and configure [Claude Code](https://claude.ai/code) CLI tool. See [agent/claude/README.md](agent/claude/README.md) for full docs.
 
 ```bash
 ./agent/claude/setup.sh install      # Install Claude Code
@@ -245,6 +245,13 @@ Install and configure [Claude Code](https://claude.ai/code) CLI tool.
 Configure API key and models:
 ```bash
 ./agent/claude/setup.sh configure --api-key "sk-ant-..." --model "claude-sonnet-4-6"
+```
+
+Mac SSH remote session end notification (plays system sound when Claude session ends on remote Linux):
+```bash
+./agent/claude/mac_ssh_hook.sh install
+./agent/claude/mac_ssh_hook.sh setup-remote user@linux-host
+./agent/claude/mac_ssh_hook.sh ssh-hint user@linux-host
 ```
 
 ## Quick Start on a New Machine
