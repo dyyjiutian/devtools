@@ -221,22 +221,48 @@ var domains = [
 	"cloudfront.net",
 	"colwiz.com",
 
+	//AI - shared third-party (auth, analytics, support)
+	"auth0.com",
+	"intercom.io",
+	"intercomcdn.com",
+	"statsig.com",
+	"statsigapi.net",
+	"sentry.io",
+	"segment.io",
+	"segment.com",
+	"workos.com",
+	"livekit.cloud",
+
 	//AI - Anthropic / Claude
 	"anthropic.com",
 	"claude.ai",
+	"claude.com",
+	"clau.de",
 	"claudeusercontent.com",
+	"claudemcpclient.com",
+	"claudemcpcontent.com",
 
 	//AI - OpenAI / ChatGPT
 	"openai.com",
+	"openai.org",
 	"chatgpt.com",
+	"chat.com",
 	"oaiusercontent.com",
 	"oaistatic.com",
+	"oaistatsig.com",
 	"sora.com",
 
-	//AI - Google Gemini
+	//AI - Google Gemini / AI Studio / NotebookLM
 	"ai.google.dev",
+	"ai.studio",
 	"deepmind.com",
+	"deepmind.google",
+	"generativeai.google",
+	"gemini.google",
 	"gemini.google.com",
+	"labs.google",
+	"notebooklm.google",
+	"aistudio.google.com",
 
 	//AI - xAI / Grok
 	"x.ai",
@@ -273,6 +299,7 @@ var domains = [
 
 	//AI - Cohere
 	"cohere.com",
+	"cohere.ai",
 
 	//AI - Replicate
 	"replicate.com",
@@ -293,6 +320,29 @@ var domains = [
 	//AI - Cursor
 	"cursor.sh",
 	"cursor.com",
+	"cursorapi.com",
+	"cursor-cdn.com",
+
+	//AI - GitHub Copilot
+	"githubcopilot.com",
+	"githubnext.com",
+
+	//AI - API gateways & local inference
+	"openrouter.ai",
+	"together.ai",
+	"fireworks.ai",
+	"lmstudio.ai",
+	"ollama.com",
+	"langchain.com",
+
+	//AI - Other chat / coding agents
+	"jasper.ai",
+	"clipdrop.co",
+	"minimax.io",
+	"devin.ai",
+	"you.com",
+	"pi.ai",
+	"duck.ai",
 
 	//AI - Vercel / v0
 	"vercel.com",
