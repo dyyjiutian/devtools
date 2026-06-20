@@ -1,0 +1,71 @@
+{
+  "model": "sonnet",
+  "effortLevel": "high",
+  "theme": "dark",
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "claude-hud@claude-hud": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-hud": {
+      "source": {
+        "source": "github",
+        "repo": "jarrodwatts/claude-hud"
+      }
+    }
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "deny": [
+      "Bash(rm *)",
+      "Bash(scp *)",
+      "Bash(sftp *)",
+      "Bash(rsync * *:*)",
+      "Bash(rsync * *@*:*)"
+    ],
+    "allow": [
+      "Read",
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(echo *)",
+      "Bash(printf *)",
+      "Bash(pwd)",
+      "Bash(whoami)",
+      "Bash(date)",
+      "Bash(which *)",
+      "Bash(type *)",
+      "Bash(mkdir *)",
+      "Bash(touch *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(diff *)",
+      "Bash(wc *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(awk *)",
+      "Bash(sed *)",
+      "Bash(tr *)",
+      "Bash(xargs *)",
+      "Bash(jq *)",
+      "Bash(npm *)",
+      "Bash(yarn *)",
+      "Bash(pnpm *)",
+      "Bash(node *)",
+      "Bash(brew *)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(go *)",
+      "Bash(cargo *)",
+      "Bash(make *)",
+      "Bash(gh *)",
+      "Bash(starship *)",
+      "Bash(stty *)"
+    ]
+  }
+}

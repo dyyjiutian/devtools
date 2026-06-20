@@ -1,0 +1,14 @@
+{
+  "description": "自定义代理（LiteLLM / GLM 直连 / 百炼 / 国内中转）",
+  "base_url": "",
+  "model": "",
+  "fast_model": "",
+  "opus_model": "",
+  "key_hint": "代理服务的 API Key",
+  "notes": [
+    "base_url 需指向支持 Anthropic API 格式的端点",
+    "GLM 直连: https://open.bigmodel.cn/api/paas/v4  (OpenAI 格式，需额外适配层)",
+    "百炼直连: https://dashscope.aliyuncs.com/compatible-mode/v1  (同上)",
+    "推荐通过 LiteLLM 等网关统一转换为 Anthropic 格式后再接入"
+  ]
+}

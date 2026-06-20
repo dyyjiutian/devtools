@@ -1,0 +1,17 @@
+{
+  "description": "OpenRouter（聚合路由：Claude / GPT-4o / Gemini / Qwen / GLM 等）",
+  "base_url": "https://openrouter.ai/api/v1",
+  "model": "anthropic/claude-sonnet-4-6",
+  "fast_model": "anthropic/claude-haiku-4-5-20251001",
+  "opus_model": "anthropic/claude-opus-4-8",
+  "key_hint": "sk-or-v1-...",
+  "model_examples": {
+    "claude_sonnet":  "anthropic/claude-sonnet-4-6",
+    "claude_opus":    "anthropic/claude-opus-4-8",
+    "gpt4o":          "openai/gpt-4o",
+    "gemini_pro":     "google/gemini-2.5-pro",
+    "qwen_plus":      "qwen/qwen-plus",
+    "glm4":           "zhipuai/glm-4-plus",
+    "deepseek":       "deepseek/deepseek-chat"
+  }
+}

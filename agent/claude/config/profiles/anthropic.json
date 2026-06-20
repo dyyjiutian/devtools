@@ -1,0 +1,8 @@
+{
+  "description": "Anthropic 官方 API（claude.anthropic.com）",
+  "base_url": "https://api.anthropic.com",
+  "model": "claude-sonnet-4-6",
+  "fast_model": "claude-haiku-4-5-20251001",
+  "opus_model": "claude-opus-4-8",
+  "key_hint": "sk-ant-api03-..."
+}
