@@ -7,11 +7,11 @@ add_newline = false
 
 # 自定义格式 - 紧凑简洁的提示符
 format = """
-$username$hostname$directory$git_branch$git_state$git_status$cmd_duration$line_break$character"""
+$username$hostname$directory$git_branch$git_state$git_status$line_break$character"""
 
 # 右栏显示信息
 right_format = """
-$kubernetes$docker_context$golang$nodejs$python$java$rust$terraform$time"""
+$kubernetes$docker_context$golang$nodejs$python$java$rust$terraform$cmd_duration"""
 
 # 光标前的提示符字符
 [character]
@@ -21,12 +21,18 @@ vimcmd_symbol = '[❮](bold green)'
 
 # 当前目录
 [directory]
-truncation_length = 3
+truncation_length = 0
+truncate_to_repo = false
 truncation_symbol = '…/'
 home_symbol = '🏠 ~'
 read_only = ' 🔒'
-format = '[$path]($style) [$read_only]($read_only_style) '
+format = '[$path]($style)[$read_only]($read_only_style) '
 style = 'bold cyan'
+# 在 git 仓库内：git根目录之前的路径（暗色）/ git根目录（亮青色）/ 仓库内相对路径（黄色）
+repo_root_format = '[$before_root_path]($before_repo_root_style)[$repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) '
+before_repo_root_style = 'dimmed cyan'
+repo_root_style = 'bold cyan'
+style = 'bold yellow'
 
 # 用户名
 [username]
@@ -78,15 +84,16 @@ am_or_rebase = '[📦 AM/REBASE](bold red)'
 
 # 命令执行时间
 [cmd_duration]
-min_time = 2000
-format = '⏱️ [$duration](bold yellow) '
+min_time = 500
+format = '[$duration](bold yellow) '
+show_milliseconds = false
 disabled = false
 
 # 时间
 [time]
 disabled = true
-format = '🕙 [$time]($style) '
-time_format = '%T'
+format = '[$time]($style) '
+time_format = '%H:%M:%S'
 style = 'bold white'
 
 # 编程语言 --------------------
