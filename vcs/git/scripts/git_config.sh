@@ -159,6 +159,22 @@ header "Credential / Security"
 git_config credential.helper    "osxkeychain" "store credentials in macOS Keychain"
 git_config transfer.fsckObjects "true"        "verify object integrity on receive"
 
+# ── Delta (diff pager) ────────────────────────────────────────────────────────
+
+header "Delta (diff pager)"
+
+if command -v delta &>/dev/null; then
+  git_config core.pager                "delta"          "use delta as the default pager"
+  git_config interactive.diffFilter    "delta --color-only" "delta in interactive mode"
+  git_config delta.navigate            "true"           "use n/N to jump between diff sections"
+  git_config delta.side-by-side        "true"           "side-by-side diff layout"
+  git_config delta.line-numbers        "true"           "show line numbers in diff"
+  git_config delta.syntax-theme        "Dracula"        "syntax highlighting theme"
+  git_config delta.diff-highlight      "true"           "highlight changed words within a line"
+else
+  echo "  delta not found — skipping (install with: brew install git-delta)"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 
 echo ""

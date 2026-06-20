@@ -199,7 +199,7 @@ See [`tools/vpn/README.md`](tools/vpn/README.md) for GUI client setup (V2RayXS, 
 
 ### Global Configuration (`vcs/git/scripts/git_config.sh`)
 
-Interactive setup for `user.name`, `user.email`, and 15+ recommended global git settings.
+Interactive setup for `user.name`, `user.email`, and 15+ recommended global git settings. Also configures [git-delta](https://github.com/dandavison/delta) as the diff pager if it is installed.
 
 ```bash
 bash vcs/git/scripts/git_config.sh           # Interactive setup
@@ -211,7 +211,7 @@ bash vcs/git/scripts/git_config.sh --dry-run # Preview only
 Injects git helper functions into `~/.zshrc` or `~/.bashrc`.
 
 ```bash
-bash vcs/git/scripts/alias.sh        # Install
+bash vcs/git/scripts/alias.sh         # Install
 bash vcs/git/scripts/alias.sh --clean # Remove
 ```
 
@@ -220,7 +220,24 @@ bash vcs/git/scripts/alias.sh --clean # Remove
 | `gitroot` | cd to repository root |
 | `gitrebase` | Fetch and rebase onto the default remote branch |
 | `gitprune` | Delete local branches already merged into default branch |
+| `gitreview` | Create PR / MR / Gerrit review for the current branch (auto-detects platform) |
 | `gitalias` | List all aliases |
+
+`gitreview` detects the platform from the `origin` remote URL and targets the repository's default branch:
+
+| Platform | Detection | Action |
+|----------|-----------|--------|
+| GitHub | URL contains `github.com` | `gh pr create --fill --base <default>` |
+| GitLab | URL contains `gitlab` | `git push -o merge_request.create` (no extra CLI needed) |
+| Gerrit | Otherwise | `git push origin HEAD:refs/for/<default>` |
+
+### Delta — Enhanced Diff Pager
+
+`setup.sh` installs `git-delta` via Homebrew. After running `git_config.sh`, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
+
+```bash
+brew install git-delta   # or install via os/macos/setup.sh
+```
 
 ### GitHub gitconfig (`vcs/git/config/github.gitconfig`)
 
@@ -228,7 +245,7 @@ bash vcs/git/scripts/alias.sh --clean # Remove
 git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
 ```
 
-Provides `git review`: push current branch and open a PR via `gh`.
+Provides `git review` alias (GitHub-only). For multi-platform support use `gitreview` from `alias.sh`.
 
 ## AI Agent
 

@@ -65,13 +65,59 @@ gitprune() {
   fi
 }
 
+# Open a review/PR/MR for the current branch.
+# Auto-detects the platform from the remote URL:
+#   github.com  → gh pr create --fill
+#   gitlab      → git push with MR push options
+#   other       → Gerrit: git push origin HEAD:refs/for/<branch>
+gitreview() {
+  local remote_url branch default_branch
+  remote_url=$(git remote get-url origin 2>/dev/null || true)
+  if [[ -z "$remote_url" ]]; then
+    echo "gitreview: no 'origin' remote found" >&2
+    return 1
+  fi
+
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
+    echo "gitreview: could not determine current branch" >&2
+    return 1
+  fi
+
+  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
+    | sed 's|refs/remotes/origin/||')
+  default_branch="${default_branch:-main}"
+
+  if echo "$remote_url" | grep -qi "github\.com"; then
+    # GitHub — requires gh CLI
+    if ! command -v gh &>/dev/null; then
+      echo "gitreview: 'gh' CLI not found (install: brew install gh)" >&2
+      return 1
+    fi
+    echo "Creating GitHub PR for branch '$branch' → '$default_branch' ..."
+    gh pr create --fill --base "$default_branch"
+  elif echo "$remote_url" | grep -qi "gitlab"; then
+    # GitLab — uses server-side push options (no extra CLI required)
+    echo "Creating GitLab MR for branch '$branch' → '$default_branch' ..."
+    git push origin HEAD \
+      -o merge_request.create \
+      -o "merge_request.target=${default_branch}" \
+      -o merge_request.remove_source_branch
+  else
+    # Gerrit (or unknown) — push to refs/for/<default_branch>
+    echo "Pushing to Gerrit review for branch '$branch' → '$default_branch' ..."
+    git push origin "HEAD:refs/for/${default_branch}"
+  fi
+}
+
 # List all git-related aliases defined by this script
 gitalias() {
   echo "Git aliases installed by alias.sh:"
-  echo "  gitroot   – cd to the repository root"
-  echo "  gitrebase – fetch default branch and rebase current branch onto it"
-  echo "  gitprune  – delete local branches merged into default branch"
-  echo "  gitalias  – show this help"
+  echo "  gitroot    – cd to the repository root"
+  echo "  gitrebase  – fetch default branch and rebase current branch onto it"
+  echo "  gitprune   – delete local branches merged into default branch"
+  echo "  gitreview  – create PR/MR/Gerrit review for current branch (auto-detects platform)"
+  echo "  gitalias   – show this help"
 }
 
 # >>> git-aliases END <<<
@@ -163,6 +209,7 @@ Aliases installed:
   gitroot    cd to the repository root from any subdirectory
   gitrebase  fetch the default branch from origin and rebase current branch
   gitprune   delete local branches already merged into the default branch
+  gitreview  create a PR/MR/Gerrit review for the current branch (auto-detects platform)
   gitalias   list all git aliases added by this script
 
 Examples:

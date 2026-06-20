@@ -200,6 +200,7 @@ install_formulae() {
     yazi
     zoxide
     lazygit
+    git-delta
   )
 
   for pkg in "${formulae[@]}"; do

@@ -8,6 +8,7 @@
 - [alias.sh — 安装 Git 快捷命令](#aliassh--安装-git-快捷命令)
 - [git_config.sh — 初始化 Git 全局配置](#git_configsh--初始化-git-全局配置)
 - [github.gitconfig — Git 别名配置](#githubgitconfig--git-别名配置)
+- [Delta — 增强 diff 显示](#delta--增强-diff-显示)
 - [在新机器上快速上手](#在新机器上快速上手)
 
 ---
@@ -49,10 +50,22 @@ bash alias.sh --clean
 | `gitroot` | 从仓库任意子目录跳转到根目录 |
 | `gitrebase` | 拉取远端默认分支最新代码并 rebase 当前分支 |
 | `gitprune` | 列出已合入默认分支的本地分支，确认后批量删除 |
+| `gitreview` | 为当前分支创建 PR / MR / Gerrit Review，自动识别平台 |
 | `gitalias` | 打印以上所有命令的说明 |
 
-> `gitrebase` 和 `gitprune` 通过 `git symbolic-ref refs/remotes/origin/HEAD`
-> 自动识别默认分支（main / master 等），无需硬编码。
+> 所有命令均通过 `git symbolic-ref refs/remotes/origin/HEAD` 自动识别默认分支（main / master 等），无需硬编码。
+
+### gitreview 平台识别规则
+
+`gitreview` 根据 `origin` remote URL 自动选择提交方式，目标分支统一为仓库主干分支：
+
+| 平台 | 识别条件 | 执行操作 |
+|------|---------|---------|
+| GitHub | URL 含 `github.com` | `gh pr create --fill --base <主干>` |
+| GitLab | URL 含 `gitlab` | `git push -o merge_request.create -o merge_request.target=<主干>` |
+| Gerrit | 其余情况 | `git push origin HEAD:refs/for/<主干>` |
+
+GitLab 使用服务端 push options，无需额外 CLI。GitHub 需要安装 [`gh`](https://cli.github.com/) 并已登录认证。
 
 ---
 
@@ -80,6 +93,7 @@ bash git_config.sh --dry-run
 | Identity | `user.name` / `user.email` | 提交署名，交互输入 |
 | Core | `core.autocrlf = input` | 提交时 CRLF → LF |
 | Core | `core.ignorecase = false` | 文件名大小写敏感 |
+| Core | `core.pager = delta` | 使用 delta 渲染 diff（需安装 delta） |
 | Pull/Rebase | `pull.rebase = true` | pull 默认 rebase |
 | Pull/Rebase | `rebase.autoStash = true` | rebase 前自动 stash |
 | Pull/Rebase | `merge.conflictstyle = diff3` | 冲突标记显示 base 版本 |
@@ -87,6 +101,8 @@ bash git_config.sh --dry-run
 | Push | `push.autoSetupRemote = true` | 首次推送自动 `--set-upstream` |
 | Fetch | `fetch.prune = true` | 自动清理过期远端追踪分支 |
 | Diff | `diff.algorithm = histogram` | 更精准的代码 diff |
+| Delta | `delta.side-by-side = true` | 左右对比显示 diff |
+| Delta | `delta.navigate = true` | `n` / `N` 在 diff 段间跳转 |
 | Branch | `branch.sort = -committerdate` | 分支按最近提交时间排序 |
 | Branch | `init.defaultBranch = main` | 新仓库默认分支名 |
 | Security | `credential.helper = osxkeychain` | 凭据存入 macOS Keychain |
@@ -118,9 +134,46 @@ git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
 
 | 别名 | 功能 |
 |------|------|
-| `git review` | 推送当前分支到 origin 并使用 `gh` 命令行创建 PR（`--fill` 自动填充标题和描述） |
+| `git review` | 推送当前分支到 origin 并使用 `gh` 命令行创建 GitHub PR |
 
-> **前提**: 需要安装 [GitHub CLI](https://cli.github.com/) (`gh`) 并已认证。
+> **注意**: 此别名仅适用于 GitHub。跨平台的 PR/MR/Gerrit 提交请使用 `alias.sh` 安装的 `gitreview` 命令。
+
+---
+
+## Delta — 增强 diff 显示
+
+[git-delta](https://github.com/dandavison/delta) 是 git diff / log / show 的增强 pager，提供语法高亮和左右对比视图。
+
+### 安装
+
+```bash
+brew install git-delta          # macOS（或通过 os/macos/setup.sh 一并安装）
+```
+
+### 配置
+
+`git_config.sh` 会自动检测 delta 是否已安装并写入以下配置：
+
+```ini
+[core]
+    pager = delta
+[interactive]
+    diffFilter = delta --color-only
+[delta]
+    navigate = true        # n/N 在 diff 段间跳转
+    side-by-side = true    # 左右对比布局
+    line-numbers = true    # 显示行号
+    syntax-theme = Dracula # 语法高亮主题
+    diff-highlight = true  # 行内变更词高亮
+```
+
+### 常用键位（delta pager 中）
+
+| 按键 | 功能 |
+|------|------|
+| `n` / `N` | 跳到下 / 上一个 diff 段 |
+| `q` | 退出 |
+| `Space` / `b` | 向下 / 向上翻页 |
 
 ---
 
@@ -130,10 +183,17 @@ git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
 # 1. 克隆 devtools
 git clone <repo-url> ~/devtools
 
-# 2. 初始化 Git 全局配置
+# 2. 安装 git-delta（macOS）
+brew install git-delta
+
+# 3. 初始化 Git 全局配置（含 delta pager 配置）
 bash ~/devtools/vcs/git/scripts/git_config.sh
 
-# 3. 安装 Git 快捷命令
+# 4. 安装 Git 快捷命令
 bash ~/devtools/vcs/git/scripts/alias.sh
 source ~/.zshrc   # 或 source ~/.bashrc
+
+# 验证
+git config --global --list
+gitalias
 ```
