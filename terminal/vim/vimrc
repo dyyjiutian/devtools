@@ -30,6 +30,12 @@ else
   Plug 'vim-scripts/AutoComplPop'
 endif
 
+" AI inline completion (ghost text, Tab to accept — like Cursor)
+" Option A: GitHub Copilot (requires subscription + :Copilot setup)
+Plug 'github/copilot.vim'
+" Option B: Codeium (free alternative, requires :Codeium Auth)
+" Plug 'Exafunction/codeium.vim'
+
 " Syntax highlighting
 Plug 'sheerun/vim-polyglot'
 
@@ -183,12 +189,18 @@ autocmd BufEnter * if winnr('$') == 1 && exists('b:NERDTree') && b:NERDTree.isTa
 " coc.nvim Settings (Auto-completion & LSP)
 " ============================================================
 if has('nvim') || (v:version >= 801 && has('patch1719'))
-" Tab to trigger completion and navigate
+" Tab: Copilot suggestion → coc popup → normal Tab
+" Copilot manages its own Tab map when g:copilot_no_tab_map = v:true
+let g:copilot_no_tab_map = v:true
 inoremap <silent><expr> <TAB>
+      \ exists('*copilot#Accept') && copilot#GetDisplayedSuggestion().text != '' ? copilot#Accept('') :
       \ coc#pum#visible() ? coc#pum#next(1) :
       \ CheckBackspace() ? "\<Tab>" :
       \ coc#refresh()
 inoremap <expr><S-TAB> coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"
+
+" Accept next word of Copilot suggestion (partial accept)
+imap <C-]> <Plug>(copilot-accept-word)
 
 " Enter to confirm completion
 inoremap <silent><expr> <CR> coc#pum#visible() ? coc#pum#confirm()
@@ -222,6 +234,21 @@ nmap <Leader>rn <Plug>(coc-rename)
 nmap <silent> [d <Plug>(coc-diagnostic-prev)
 nmap <silent> ]d <Plug>(coc-diagnostic-next)
 endif
+
+" ============================================================
+" Copilot Settings (AI inline completion)
+" ============================================================
+" Dismiss suggestion
+imap <C-e> <Plug>(copilot-dismiss)
+" Cycle through suggestions
+imap <M-]> <Plug>(copilot-next)
+imap <M-[> <Plug>(copilot-previous)
+" Disable for certain filetypes
+let g:copilot_filetypes = {
+      \ 'gitcommit': v:false,
+      \ 'markdown': v:true,
+      \ 'yaml': v:true,
+      \ }
 
 " ============================================================
 " Airline Settings

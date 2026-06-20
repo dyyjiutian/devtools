@@ -48,7 +48,14 @@ Vim Setup Script - 一键配置 Vim 开发环境
   ,gs        Git status
   ,gb        Git blame
   ,gd        Git diff
-  Tab/S-Tab  补全导航
+  Tab        接受 Copilot AI 建议（优先）或 coc 补全列表
+  Ctrl+]     接受 Copilot 建议中的下一个单词
+  Ctrl+E     关闭 Copilot 建议
+  Alt+]/[    切换 Copilot 候选建议
+
+AI 补全初始化（首次使用）:
+  :Copilot setup    登录 GitHub Copilot（需要订阅）
+  如需免费方案，在 vimrc 中切换到 Codeium 插件后运行 :Codeium Auth
 EOF
     exit 0
 }
@@ -111,18 +118,7 @@ restore_vimrc() {
         "coc-yaml"
     )
 
-    mkdir -p "$HOME/.config/coc/extensions"
-    cd "$HOME/.config/coc/extensions"
-
-    for ext in "${EXTENSIONS[@]}"; do
-        if [ -d "node_modules/$ext" ]; then
-            success "$ext already installed"
-        else
-            info "Installing $ext..."
-            npm install "$ext" --global-style --ignore-scripts --no-bin-links --no-package-lock 2>&1 | grep -v "npm WARN" || warn "Failed to install $ext (install manually: cd ~/.config/coc/extensions && npm install $ext)"
-        fi
-    done
-    success "Language servers configured"
+    install_coc_extensions "${EXTENSIONS[@]}"
 
     # Install Nerd Font
     install_nerd_font
@@ -137,6 +133,33 @@ case "${1:-}" in
     --backup|-b)   backup_vimrc ;;
     --restore|-r)  restore_vimrc ;;
 esac
+
+# --- Install coc.nvim extensions ---
+install_coc_extensions() {
+    local extensions=("$@")
+    local ext_dir="$HOME/.config/coc/extensions"
+
+    mkdir -p "$ext_dir"
+
+    # Create package.json if missing (required for npm to manage deps correctly)
+    if [ ! -f "$ext_dir/package.json" ]; then
+        echo '{"dependencies":{}}' > "$ext_dir/package.json"
+    fi
+
+    cd "$ext_dir"
+
+    for ext in "${extensions[@]}"; do
+        if [ -d "node_modules/$ext" ]; then
+            success "$ext already installed"
+        else
+            info "Installing $ext..."
+            # Do NOT use --ignore-scripts or --no-bin-links: LSP binaries need post-install scripts
+            npm install "$ext" --global-style --no-package-lock 2>&1 | grep -v "npm WARN" \
+                || warn "Failed to install $ext (install manually inside Vim: :CocInstall $ext)"
+        fi
+    done
+    success "Language servers configured"
+}
 
 # --- Detect OS ---
 OS="$(uname -s)"
@@ -353,18 +376,7 @@ else
         "coc-yaml"
     )
 
-    mkdir -p "$HOME/.config/coc/extensions"
-    cd "$HOME/.config/coc/extensions"
-
-    for ext in "${EXTENSIONS[@]}"; do
-        if [ -d "node_modules/$ext" ]; then
-            success "$ext already installed"
-        else
-            info "Installing $ext..."
-            npm install "$ext" --global-style --ignore-scripts --no-bin-links --no-package-lock 2>&1 | grep -v "npm WARN" || warn "Failed to install $ext (install manually: cd ~/.config/coc/extensions && npm install $ext)"
-        fi
-    done
-    success "Language servers configured"
+    install_coc_extensions "${EXTENSIONS[@]}"
 fi
 
 # --- Done ---
@@ -382,10 +394,16 @@ echo "  K          Show documentation"
 echo "  ,-gs       Git status"
 echo "  ,-gb       Git blame"
 echo "  ,-gd       Git diff"
-echo "  Tab/S-Tab  Navigate completion"
+echo "  Tab        Copilot AI suggestion (or coc completion list)"
+echo "  Ctrl+]     Accept next word of Copilot suggestion"
+echo "  Ctrl+E     Dismiss Copilot suggestion"
 echo ""
 echo "  Leader key is comma (,)"
 echo ""
 echo "  Font: Set terminal font to 'MesloLGS NF' for proper icon display"
+echo ""
+echo "  AI Completion Setup:"
+echo "  Run ':Copilot setup' inside Vim to authenticate GitHub Copilot"
+echo "  (Free alternative: switch to Codeium in vimrc, then ':Codeium Auth')"
 echo ""
 
