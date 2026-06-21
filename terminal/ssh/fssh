@@ -138,7 +138,8 @@ if [[ -z "$SESSION" ]]; then
     exit 0
 fi
 
-CMD="ssh -t ${HOST} tmux new-session -As ${SESSION}"
+SESSION_Q=$(printf '%q' "$SESSION")
+CMD="ssh -t $HOST tmux new-session -As $SESSION_Q"
 
 if [[ "$DRY_RUN" == "true" ]]; then
     info "Would run: ${CMD}"
@@ -147,4 +148,4 @@ fi
 
 success "→ ${HOST}  session: ${SESSION}"
 # Do not use exec — trap must fire on exit to clean up terminal state
-ssh -t "$HOST" "tmux new-session -As $(printf '%s' "$SESSION" | sed "s/'/'\\\\''/g; s/^/'/; s/$/'/")"
+ssh -t "$HOST" "tmux new-session -As $SESSION_Q"
