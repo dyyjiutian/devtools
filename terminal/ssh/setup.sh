@@ -102,6 +102,7 @@ fi
 # ── Prepend managed block ──
 info "Writing SSH client config to ${SSH_CONFIG}"
 TMP=$(mktemp)
+trap 'rm -f "${TMP:-}"' EXIT
 printf '%s\n\n' "$MANAGED_BLOCK" > "$TMP"
 if [[ -f "$SSH_CONFIG" ]]; then
     cat "$SSH_CONFIG" >> "$TMP"
