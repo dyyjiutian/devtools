@@ -24,7 +24,6 @@ reset_terminal() {
     printf '\033[?1002l'   # disable mouse drag (button-event) reporting
     printf '\033[?1006l'   # disable SGR extended mouse mode
     stty sane 2>/dev/null || true
-    tput rmcup 2>/dev/null || true
     close_master
 }
 trap reset_terminal EXIT INT TERM
@@ -75,18 +74,17 @@ list_hosts() {
 
 # Uses `ssh -G` to resolve the effective config (handles Include, Match, defaults)
 list_hosts_detail() {
-    local hosts
-    hosts=$(list_hosts)
-    printf '%-22s  %-34s  %-14s  %s\n' "NAME" "HOSTNAME / IP" "USER" "PORT"
-    printf '%-22s  %-34s  %-14s  %s\n' "----------------------" "----------------------------------" "--------------" "----"
-    while IFS= read -r host; do
-        local info hostname user port
-        info=$(ssh -G "$host" 2>/dev/null)
-        hostname=$(awk '/^hostname /{print $2; exit}' <<< "$info")
-        user=$(awk '/^user /{print $2; exit}' <<< "$info")
-        port=$(awk '/^port /{print $2; exit}' <<< "$info")
-        printf '%-22s  %-34s  %-14s  %s\n' "$host" "${hostname:--}" "${user:--}" "${port:-22}"
-    done <<< "$hosts"
+    local hosts; hosts=$(list_hosts)
+    {
+        printf 'NAME\tHOSTNAME / IP\tUSER\tPORT\n'
+        printf '%s\n' "$hosts" | xargs -P 8 -I{} bash -c '
+            info=$(ssh -G "$1" 2>/dev/null)
+            h=$(awk "/^hostname /{print \$2; exit}" <<< "$info")
+            u=$(awk "/^user /{print \$2; exit}" <<< "$info")
+            p=$(awk "/^port /{print \$2; exit}" <<< "$info")
+            printf "%s\t%s\t%s\t%s\n" "$1" "${h:--}" "${u:--}" "${p:-22}"
+        ' _ {} | sort
+    } | column -t -s $'\t'
 }
 
 # ── Flags ─────────────────────────────────────────────────────────────────────
