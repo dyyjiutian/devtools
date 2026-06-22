@@ -144,14 +144,14 @@ get_user_traffic() {
     local email="${user}@vpn"
     local up=0 down=0 val
 
-    val=$("$XRAY_BIN" api statget --server="$STATS_SERVER" \
+    val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
         -name "user>>>${email}>>>traffic>>>uplink" 2>/dev/null \
-        | grep -oP '"value":\s*"\K[0-9]+' || echo "0")
+        | grep -oP '"value":\s*"?\K[0-9]+' || echo "0")
     up="${val:-0}"
 
-    val=$("$XRAY_BIN" api statget --server="$STATS_SERVER" \
+    val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
         -name "user>>>${email}>>>traffic>>>downlink" 2>/dev/null \
-        | grep -oP '"value":\s*"\K[0-9]+' || echo "0")
+        | grep -oP '"value":\s*"?\K[0-9]+' || echo "0")
     down="${val:-0}"
 
     echo "${up} ${down}"
@@ -343,9 +343,9 @@ cmd_reset_stats() {
         stats_api_alive || { warn "Stats API 不可用，无法单独重置；可用 reset-stats all 重启 Xray"; exit 1; }
 
         local email="${target}@vpn"
-        "$XRAY_BIN" api statget --server="$STATS_SERVER" \
+        "$XRAY_BIN" api stats --server="$STATS_SERVER" \
             -name "user>>>${email}>>>traffic>>>uplink" --reset &>/dev/null || true
-        "$XRAY_BIN" api statget --server="$STATS_SERVER" \
+        "$XRAY_BIN" api stats --server="$STATS_SERVER" \
             -name "user>>>${email}>>>traffic>>>downlink" --reset &>/dev/null || true
         success "用户 '${target}' 流量统计已重置"
     fi
@@ -389,11 +389,26 @@ cmd_check_quotas() {
     fi
 }
 
+# ── 命令：sync ─────────────────────────────────────────────────────────────────
+cmd_sync() {
+    load_config
+    info "将 Xray clients 与 ${CONFIG_CACHE} 同步并重载（流量计数会归零）..."
+    reload_xray_clients
+    success "配置已同步，流量统计将按 <user>@vpn 计数"
+}
+
 # ── 命令：install-cron ────────────────────────────────────────────────────────
 cmd_install_cron() {
     local script_path
     script_path=$(realpath "$0")
     local cron_file="/etc/cron.d/vpn-quota"
+    local legacy_cron="/etc/cron.d/vpn2-quota"
+
+    if [[ -f "$legacy_cron" ]]; then
+        rm -f "$legacy_cron"
+        warn "已移除旧版 cron: ${legacy_cron}（路径 tools/vpn2/exit 已废弃）"
+    fi
+
     cat > "$cron_file" <<EOF
 # VPN 配额巡检：每小时执行一次
 0 * * * * root ${script_path} check-quotas >> ${QUOTA_LOG} 2>&1
@@ -423,6 +438,7 @@ VPN 出口节点用户管理
   vless  <name> [relay_ip]   打印指定用户的 VLESS 链接（默认中继 IP: 198.51.100.11）
   stats  [name]              显示流量统计（可选：指定单用户）
   reset-stats [name|all]     重置流量计数（all 会重启 Xray）
+  sync                       同步 Xray clients 并重载（修复配置漂移，计数归零）
   check-quotas               检查并执行配额限制（供 cron 调用）
   install-cron               安装每小时配额巡检 cron 任务
 
@@ -437,6 +453,7 @@ VPN 出口节点用户管理
   sudo ./exit/manage.sh vless alice
   sudo ./exit/manage.sh vless alice 1.2.3.4
   sudo ./exit/manage.sh reset-stats all
+  sudo ./exit/manage.sh sync
   sudo ./exit/manage.sh install-cron
 HELP
 }
@@ -453,6 +470,7 @@ case "$COMMAND" in
     vless)          cmd_vless "$@" ;;
     stats)          cmd_stats "${1:-}" ;;
     reset-stats)    cmd_reset_stats "${1:-all}" ;;
+    sync)           cmd_sync ;;
     check-quotas)   cmd_check_quotas ;;
     install-cron)   cmd_install_cron ;;
     help|--help|-h) cmd_help ;;
