@@ -14,7 +14,7 @@ error()   { echo -e "\033[31m[ERROR]\033[0m $1" >&2; exit 1; }
 CTRL_SOCK=""   # path to ControlMaster socket, set after host is picked
 
 close_master() {
-    # Leave the socket alive — ControlPersist=600 expires it automatically.
+    # Leave the socket alive — ControlPersist=12h expires it automatically.
     # Clearing the variable prevents reset_terminal from attempting a close.
     CTRL_SOCK=""
 }
@@ -132,7 +132,7 @@ pick_host() {
 
 # ── SSH ControlMaster ─────────────────────────────────────────────────────────
 # Uses a host-stable socket path so the master is reused across fssh runs.
-# ControlPersist=600 keeps it alive 10 min after last use; the next run to the
+# ControlPersist=12h keeps it alive 12 h after last use; the next run to the
 # same host within that window skips the handshake entirely.
 establish_master() {
     local host="$1"
@@ -145,9 +145,14 @@ establish_master() {
     fi
 
     info "Connecting to ${host}…"
+    # ServerAlive* lets ssh proactively detect a dead master (laptop sleep,
+    # network switch, VPN drop) and tear it down within ~90 s, so a stale socket
+    # doesn't make the next mssh hang on a long TCP timeout.
     ssh -o ControlMaster=yes \
         -o ControlPath="$CTRL_SOCK" \
-        -o ControlPersist=600 \
+        -o ControlPersist=12h \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
         -fN "$host" || error "Failed to connect to ${host}"
 }
 
