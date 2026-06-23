@@ -15,6 +15,11 @@ CONFIG_MARKER="# === Lightweight Bash Plugins (devtools) ==="
 CONFIG_MARKER_END="# === End Lightweight Bash Plugins ==="
 LINUX_PLUGIN_DIR="$HOME/.bash"
 
+# 本地缓存目录：在线下载失败时回退到 cache/binaries 中的预下载文件
+# 运行 `bash cache/download.sh linux` 可预先下载所有文件
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${SCRIPT_DIR}/../../cache"
+
 info()    { echo -e "\033[34m[INFO]\033[0m $1"; }
 success() { echo -e "\033[32m[OK]\033[0m $1"; }
 warn()    { echo -e "\033[33m[WARN]\033[0m $1"; }
@@ -133,12 +138,55 @@ _install_linux_zoxide() {
         success "zoxide 已安装，跳过"
         return
     fi
-    if [[ "$DRY_RUN" == "false" ]]; then
-        info "安装 zoxide ..."
-        curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+    if [[ "$DRY_RUN" == "true" ]]; then
+        info "[试运行] curl install zoxide（失败时回退本地缓存）"
+        return
+    fi
+
+    info "安装 zoxide ..."
+    # 优先官方脚本在线安装；中国等网络受限环境可能失败，失败时回退本地缓存
+    if curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh; then
         success "zoxide 安装完成"
+        return
+    fi
+
+    warn "zoxide 在线安装失败，尝试使用本地缓存安装 ..."
+    # 缓存也失败时不中断整个脚本，继续安装其余插件
+    _install_linux_zoxide_from_cache || warn "zoxide 安装失败，已跳过，可稍后手动安装"
+}
+
+# 从 cache/binaries 中的预下载二进制包安装 zoxide（离线回退）
+_install_linux_zoxide_from_cache() {
+    local version="0.9.4" arch filename cached tmpdir bindir
+    case "$(uname -m)" in
+        aarch64|arm64) arch="aarch64-unknown-linux-musl" ;;
+        *)             arch="x86_64-unknown-linux-musl" ;;
+    esac
+    filename="zoxide-${version}-${arch}.tar.gz"
+    cached="${CACHE_DIR}/binaries/${filename}"
+
+    if [[ ! -f "$cached" ]]; then
+        error "本地缓存不存在: ${cached}"
+        error "请联网运行 'bash cache/download.sh linux' 预先下载，或手动安装 zoxide"
+        return 1
+    fi
+
+    info "使用本地缓存: binaries/${filename}"
+    bindir="$HOME/.local/bin"
+    mkdir -p "$bindir"
+    tmpdir=$(mktemp -d)
+    if tar -xzf "$cached" -C "$tmpdir" zoxide 2>/dev/null; then
+        mv "$tmpdir/zoxide" "$bindir/zoxide"
+        chmod +x "$bindir/zoxide"
+        rm -rf "$tmpdir"
+        success "zoxide 安装完成 -> $bindir/zoxide"
+        if [[ ":$PATH:" != *":$bindir:"* ]]; then
+            warn "$bindir 不在 PATH 中，请确保已将其加入 PATH 后重新打开终端"
+        fi
     else
-        info "[试运行] curl install zoxide"
+        rm -rf "$tmpdir"
+        error "解压 zoxide 缓存失败: ${cached}"
+        return 1
     fi
 }
 
