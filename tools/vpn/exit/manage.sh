@@ -36,23 +36,20 @@ load_config() {
         error "配置格式错误，缺少 USERS 字段（请重新运行 exit/setup.sh）"
         exit 1
     }
-    # 兼容旧格式：补充缺省值
-    LISTEN_PORT="${LISTEN_PORT:-443}"
-    REALITY_SNI="${REALITY_SNI:-www.microsoft.com}"
 }
 
 write_config() {
     {
-        echo "PRIVATE_KEY=${PRIVATE_KEY}"
-        echo "PUBLIC_KEY=${PUBLIC_KEY}"
-        echo "SHORT_ID=${SHORT_ID}"
+        echo "PRIVATE_KEY=\"${PRIVATE_KEY}\""
+        echo "PUBLIC_KEY=\"${PUBLIC_KEY}\""
+        echo "SHORT_ID=\"${SHORT_ID}\""
         echo "LISTEN_PORT=${LISTEN_PORT}"
-        echo "REALITY_SNI=${REALITY_SNI}"
+        echo "REALITY_SNI=\"${REALITY_SNI}\""
         echo "USERS=\"${USERS}\""
         for u in $USERS; do
             local uuid_var="USER_${u}_UUID"
             local quota_var="USER_${u}_QUOTA_GB"
-            echo "USER_${u}_UUID=${!uuid_var}"
+            echo "USER_${u}_UUID=\"${!uuid_var}\""
             echo "USER_${u}_QUOTA_GB=${!quota_var:-0}"
         done
     } > "$CONFIG_CACHE"

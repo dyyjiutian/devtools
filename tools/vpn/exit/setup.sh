@@ -244,16 +244,16 @@ SHORT_ID=""
 
 write_config() {
     {
-        echo "PRIVATE_KEY=${PRIVATE_KEY}"
-        echo "PUBLIC_KEY=${PUBLIC_KEY}"
-        echo "SHORT_ID=${SHORT_ID}"
+        echo "PRIVATE_KEY=\"${PRIVATE_KEY}\""
+        echo "PUBLIC_KEY=\"${PUBLIC_KEY}\""
+        echo "SHORT_ID=\"${SHORT_ID}\""
         echo "LISTEN_PORT=${LISTEN_PORT}"
-        echo "REALITY_SNI=${REALITY_SNI}"
-        echo "USERS=${USERS}"
+        echo "REALITY_SNI=\"${REALITY_SNI}\""
+        echo "USERS=\"${USERS}\""
         for u in $USERS; do
             local uuid_var="USER_${u}_UUID"
             local quota_var="USER_${u}_QUOTA_GB"
-            echo "USER_${u}_UUID=${!uuid_var}"
+            echo "USER_${u}_UUID=\"${!uuid_var}\""
             echo "USER_${u}_QUOTA_GB=${!quota_var:-0}"
         done
     } > "$CONFIG_CACHE"
@@ -266,16 +266,6 @@ step "生成/加载 Reality 密钥对与用户 UUID"
 if [[ -f "$CONFIG_CACHE" ]] && ! $DRY_RUN; then
     # shellcheck source=/dev/null
     source "$CONFIG_CACHE"
-
-    # 向后兼容：旧格式只有 UUID=，迁移为 user1
-    if [[ -n "${UUID:-}" ]] && [[ -z "${USERS:-}" ]]; then
-        info "检测到旧格式配置，迁移为多用户格式（user1）..."
-        declare "USER_user1_UUID=${UUID}"
-        declare "USER_user1_QUOTA_GB=0"
-        USERS="user1"
-        write_config
-        success "迁移完成"
-    fi
     info "复用已有密钥配置: ${CONFIG_CACHE}"
 else
     if $DRY_RUN; then
