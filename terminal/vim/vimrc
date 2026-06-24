@@ -71,11 +71,14 @@ syntax on
 
 set encoding=utf-8
 set fileencodings=utf-8,gbk,gb2312,gb18030,latin1
+set fileformats=unix,dos
+set history=1000
 set number
 set relativenumber
 set cursorline
 set showcmd
 set showmode
+set autoread
 set wildmenu
 set wildmode=longest:full,full
 set laststatus=2
@@ -83,7 +86,17 @@ set scrolloff=5
 set sidescrolloff=5
 set signcolumn=yes
 
-set clipboard=unnamed,unnamedplus
+" 光标移动顺滑：行首/行尾可跨行，翻页保持当前列
+set whichwrap+=<,>,h,l,[,],b,s
+set nostartofline
+
+" 显示不可见字符：tab 与行尾空格
+set list
+set listchars=tab:»·,trail:·
+
+" set clipboard=unnamed,unnamedplus  " disabled: d/c/y would overwrite system clipboard
+" Use "+y to copy to clipboard, "+p to paste from clipboard
+" 系统剪贴板便捷映射见下方 mapleader 定义之后的 ,y / ,p
 
 " 注意：不要使用 set paste，它会禁用代码补全等自动功能
 " 使用 F2 键临时切换粘贴模式
@@ -104,14 +117,21 @@ set expandtab
 
 " Performance
 set updatetime=300
-set timeoutlen=500
+set timeoutlen=1000
 set hidden
 set nobackup
 set nowritebackup
 set noswapfile
 
+" 持久化撤销：关闭后重开仍可 u 撤销历史
+set undofile
+set undodir=~/.vim/undo
+if !isdirectory(expand('~/.vim/undo'))
+  silent! call mkdir(expand('~/.vim/undo'), 'p', 0700)
+endif
+
 " Mouse
-set mouse=a
+" set mouse=a
 
 " Cursor shape
 let &t_SI = "\e[6 q"   " Insert mode: vertical bar
@@ -175,6 +195,13 @@ nnoremap <Leader><Space> :nohlsearch<CR>
 " Quick save / quit
 nnoremap <Leader>w :w<CR>
 nnoremap <Leader>q :q<CR>
+
+" System clipboard (y/p 仍只用 vim 寄存器；,y/,P 走系统剪贴板)
+vnoremap <Leader>y "+y
+nnoremap <Leader>y "+y
+nnoremap <Leader>Y "+yg_
+vnoremap <Leader>P "+p
+nnoremap <Leader>P "+p
 
 " ============================================================
 " NERDTree Settings
