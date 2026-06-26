@@ -37,14 +37,14 @@ style = 'bold yellow'
 [username]
 style_user = 'bold green'
 style_root = 'bold red'
-format = '[$user]($style) '
+format = '[$user]($style)'
 disabled = false
 show_always = false
 
 # 主机名
 [hostname]
-ssh_only = true
-format = 'on [$hostname](bold yellow) '
+ssh_only = false
+format = '[@$hostname](bold yellow) '
 disabled = false
 
 # Git 分支

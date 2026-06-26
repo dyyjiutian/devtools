@@ -23,6 +23,10 @@ reset_terminal() {
     printf '\033[?1000l'   # disable X10 mouse click reporting
     printf '\033[?1002l'   # disable mouse drag (button-event) reporting
     printf '\033[?1006l'   # disable SGR extended mouse mode
+    printf '\033[?2004l'   # disable bracketed paste
+    printf '\033[>4;0m'    # disable xterm modifyOtherKeys
+    printf '\033[<u'       # pop kitty keyboard protocol flags
+    printf '\033[?25h'     # ensure cursor is visible
     stty sane 2>/dev/null || true
     close_master
 }

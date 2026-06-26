@@ -15,6 +15,8 @@ CONFIG_MARKER="# === Lightweight Bash Plugins (devtools) ==="
 CONFIG_MARKER_END="# === End Lightweight Bash Plugins ==="
 LINUX_PLUGIN_DIR="$HOME/.bash"
 LOCAL_BIN_DIR="$HOME/.local/bin"
+STARSHIP_CONFIG_DIR="$HOME/.config"
+STARSHIP_CONFIG="$STARSHIP_CONFIG_DIR/starship.toml"
 
 # 本地缓存目录：在线下载失败时回退到 cache/binaries 中的预下载文件
 # 运行 `bash cache/download.sh linux` 可预先下载所有文件
@@ -230,6 +232,38 @@ _install_linux_starship() {
     fi
 }
 
+# ---- 初始化 Starship 配置 ----
+configure_starship_config() {
+    step "配置 Starship prompt ..."
+
+    local source_config
+    if [[ "$OS" == "Darwin" ]]; then
+        source_config="${SCRIPT_DIR}/../ghostty/starship-tokyo.toml"
+    else
+        source_config="${SCRIPT_DIR}/../ghostty/starship-tokyo-linux.toml"
+    fi
+
+    if [[ ! -f "$source_config" ]]; then
+        error "未找到 Starship 配置模板: $source_config"
+        return 1
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        info "[试运行] 将复制 $source_config 到 $STARSHIP_CONFIG"
+        return
+    fi
+
+    mkdir -p "$STARSHIP_CONFIG_DIR"
+    if [[ -f "$STARSHIP_CONFIG" ]]; then
+        local backup="${STARSHIP_CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
+        cp "$STARSHIP_CONFIG" "$backup"
+        success "已备份 Starship 配置 -> $backup"
+    fi
+
+    cp "$source_config" "$STARSHIP_CONFIG"
+    success "已写入 Starship 配置 -> $STARSHIP_CONFIG"
+}
+
 # ---- 生成 .bashrc 配置块 ----
 # ble.sh 需要在其他插件前 source（--noattach），并在末尾 ble-attach。
 generate_bashrc_config() {
@@ -353,11 +387,14 @@ main() {
     configure_bashrc
 
     echo ""
+    configure_starship_config
+
+    echo ""
     success "安装完成！"
     echo ""
     echo "  后续操作:"
     echo "  1. 运行 'source ~/.bashrc' 或重新打开终端以应用配置"
-    echo "  2. 运行 'starship preset' 选择提示符样式（可选）"
+    echo "  2. Starship 已默认初始化为 tokyo 样式"
     echo ""
     echo "  关于 zoxide (z 命令):"
     echo "  zoxide 需要先记录你访问过的目录，才能使用 'z' 跳转。"
