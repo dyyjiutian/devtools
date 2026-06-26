@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# mac_ssh_hook.sh — Mac 端 Claude SSH 远程会话结束提示音
+# mac_ssh_notify.sh — Mac 端 agent SSH 远程事件提示音
 #
-# 在 Mac 上启动 claude-listener.sh 监听 19999 端口；SSH 到远程 Linux 使用 Claude Code
-# 时，SessionEnd hook 经 SSH 反向隧道通知 Mac，播放 Funk.aiff 系统提示音。
+# 在 Mac 上启动 agent-listener.sh 监听 19999 端口；SSH 到远程 Linux 使用 Claude Code
+# 等 agent 时，事件 hook 经 SSH 反向隧道通知 Mac，播放共用系统提示音。
 #
 # Usage:
-#   ./mac_ssh_hook.sh install              # 配置开机自启并启动 listener
-#   ./mac_ssh_hook.sh uninstall            # 移除自启并停止 listener
-#   ./mac_ssh_hook.sh start                # 后台启动 listener
-#   ./mac_ssh_hook.sh stop                 # 停止 listener
-#   ./mac_ssh_hook.sh restart              # 重启 listener
-#   ./mac_ssh_hook.sh status               # 查看运行状态
-#   ./mac_ssh_hook.sh test                 # 本地测试播放提示音
-#   ./mac_ssh_hook.sh setup-remote [user@host]  # 在远程 Linux 安装 SessionEnd hook
-#   ./mac_ssh_hook.sh ssh-hint [user@host] # 打印带反向隧道的 SSH 命令
-#   ./mac_ssh_hook.sh help
+#   ./mac_ssh_notify.sh install              # 配置开机自启并启动 listener
+#   ./mac_ssh_notify.sh uninstall            # 移除自启并停止 listener
+#   ./mac_ssh_notify.sh start                # 后台启动 listener
+#   ./mac_ssh_notify.sh stop                 # 停止 listener
+#   ./mac_ssh_notify.sh restart              # 重启 listener
+#   ./mac_ssh_notify.sh status               # 查看运行状态
+#   ./mac_ssh_notify.sh test [source]        # 本地测试播放提示音
+#   ./mac_ssh_notify.sh setup-remote [user@host]  # 在远程 Linux 安装 Claude SessionEnd hook
+#   ./mac_ssh_notify.sh ssh-hint [user@host] # 打印带反向隧道的 SSH 命令
+#   ./mac_ssh_notify.sh help
 #
 # Environment:
-#   CLAUDE_LISTENER_PORT       监听端口（默认 19999）
-#   CLAUDE_LISTENER_SOUND      提示音路径（默认 Funk.aiff）
+#   AGENT_NOTIFY_PORT       监听端口（默认 19999）
+#   AGENT_NOTIFY_SOUND      提示音路径（默认 Funk.aiff）
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LISTENER_SCRIPT="${SCRIPT_DIR}/claude-listener.sh"
+LISTENER_SCRIPT="${SCRIPT_DIR}/agent-listener.sh"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -39,11 +39,11 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
-PORT="${CLAUDE_LISTENER_PORT:-19999}"
-SOUND="${CLAUDE_LISTENER_SOUND:-/System/Library/Sounds/Funk.aiff}"
-PID_FILE="${CLAUDE_LISTENER_PID_FILE:-/tmp/claude-listener.pid}"
-LOG_FILE="${CLAUDE_LISTENER_LOG_FILE:-/tmp/claude-listener.log}"
-LAUNCH_AGENT_LABEL="com.devtools.claude-listener"
+PORT="${AGENT_NOTIFY_PORT:-${CLAUDE_LISTENER_PORT:-19999}}"
+SOUND="${AGENT_NOTIFY_SOUND:-${CLAUDE_LISTENER_SOUND:-/System/Library/Sounds/Funk.aiff}}"
+PID_FILE="${AGENT_NOTIFY_PID_FILE:-${CLAUDE_LISTENER_PID_FILE:-/tmp/agent-notify-listener.pid}}"
+LOG_FILE="${AGENT_NOTIFY_LOG_FILE:-${CLAUDE_LISTENER_LOG_FILE:-/tmp/agent-notify-listener.log}}"
+LAUNCH_AGENT_LABEL="com.devtools.agent-notify-listener"
 LAUNCH_AGENT_PLIST="${HOME}/Library/LaunchAgents/${LAUNCH_AGENT_LABEL}.plist"
 REMOTE_HOOK_NAME="session-end-notify-mac.sh"
 REMOTE_HOOK_PATH="\${HOME}/.claude/hooks/${REMOTE_HOOK_NAME}"
@@ -105,13 +105,13 @@ write_launch_agent() {
     </array>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>CLAUDE_LISTENER_PORT</key>
+        <key>AGENT_NOTIFY_PORT</key>
         <string>${PORT}</string>
-        <key>CLAUDE_LISTENER_SOUND</key>
+        <key>AGENT_NOTIFY_SOUND</key>
         <string>${SOUND}</string>
-        <key>CLAUDE_LISTENER_PID_FILE</key>
+        <key>AGENT_NOTIFY_PID_FILE</key>
         <string>${PID_FILE}</string>
-        <key>CLAUDE_LISTENER_LOG_FILE</key>
+        <key>AGENT_NOTIFY_LOG_FILE</key>
         <string>${LOG_FILE}</string>
     </dict>
     <key>RunAtLoad</key>
@@ -137,11 +137,11 @@ cmd_start() {
     return 0
   fi
 
-  step "启动 claude-listener (127.0.0.1:${PORT})"
-  CLAUDE_LISTENER_PORT="$PORT" \
-  CLAUDE_LISTENER_SOUND="$SOUND" \
-  CLAUDE_LISTENER_PID_FILE="$PID_FILE" \
-  CLAUDE_LISTENER_LOG_FILE="$LOG_FILE" \
+  step "启动 agent-notify-listener (127.0.0.1:${PORT})"
+  AGENT_NOTIFY_PORT="$PORT" \
+  AGENT_NOTIFY_SOUND="$SOUND" \
+  AGENT_NOTIFY_PID_FILE="$PID_FILE" \
+  AGENT_NOTIFY_LOG_FILE="$LOG_FILE" \
     nohup "$LISTENER_SCRIPT" >>"$LOG_FILE" 2>&1 &
 
   sleep 0.5
@@ -154,7 +154,7 @@ cmd_start() {
 }
 
 cmd_stop() {
-  step "停止 claude-listener"
+  step "停止 agent-notify-listener"
 
   if [[ -f "$PID_FILE" ]]; then
     local pid
@@ -172,7 +172,7 @@ cmd_stop() {
     warn "listener 未运行"
   fi
 
-  pkill -f "claude-listener.sh" 2>/dev/null || true
+  pkill -f "agent-listener.sh" 2>/dev/null || true
 }
 
 cmd_restart() {
@@ -183,7 +183,7 @@ cmd_restart() {
 cmd_status() {
   echo ""
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "  Claude SSH Hook / Listener 状态"
+  echo "  Agent SSH Notify / Listener 状态"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
   echo "  端口:     ${PORT}"
@@ -217,14 +217,17 @@ cmd_status() {
 }
 
 cmd_test() {
+  local source="${1:-test}"
+  local event="session_end"
+
   step "测试通知链路"
   if ! port_listening 127.0.0.1 "$PORT"; then
     warn "listener 未运行，先启动..."
     cmd_start
   fi
 
-  if printf 'test\n' | nc -w 2 127.0.0.1 "$PORT" >/dev/null 2>&1; then
-    success "已发送测试通知，应听到 Funk.aiff"
+  if printf '%s:%s\n' "$source" "$event" | nc -w 2 127.0.0.1 "$PORT" >/dev/null 2>&1; then
+    success "已发送测试通知 (${source}:${event})，应听到 Funk.aiff"
   else
     error "无法连接 127.0.0.1:${PORT}"
     exit 1
@@ -250,8 +253,8 @@ cmd_install() {
   sleep 1
   cmd_status
   echo ""
-  info "下一步: 使用 ./mac_ssh_hook.sh ssh-hint user@remote 获取 SSH 命令"
-  info "并在远程执行: ./mac_ssh_hook.sh setup-remote user@remote"
+  info "下一步: 使用 ./mac_ssh_notify.sh ssh-hint user@remote 获取 SSH 命令"
+  info "并在远程执行: ./mac_ssh_notify.sh setup-remote user@remote"
 }
 
 cmd_uninstall() {
@@ -270,16 +273,16 @@ remote_hook_script() {
 
 set -euo pipefail
 
-PORT="${CLAUDE_MAC_NOTIFY_PORT:-19999}"
-HOST="${CLAUDE_MAC_NOTIFY_HOST:-127.0.0.1}"
+PORT="${AGENT_NOTIFY_PORT:-${CLAUDE_MAC_NOTIFY_PORT:-19999}}"
+HOST="${AGENT_NOTIFY_HOST:-${CLAUDE_MAC_NOTIFY_HOST:-127.0.0.1}}"
 
 # 吞掉 stdin（Claude Code 会传入 JSON）
 cat >/dev/null || true
 
 if command -v nc >/dev/null 2>&1; then
-  printf 'session_end\n' | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1 || true
+  printf 'claude:session_end\n' | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1 || true
 elif command -v bash >/dev/null 2>&1; then
-  timeout 2 bash -c "echo session_end >/dev/tcp/${HOST}/${PORT}" >/dev/null 2>&1 || true
+  timeout 2 bash -c "echo claude:session_end >/dev/tcp/${HOST}/${PORT}" >/dev/null 2>&1 || true
 fi
 
 exit 0
@@ -331,7 +334,7 @@ cmd_setup_remote() {
   local target="${1:-}"
 
   if [[ -z "$target" ]]; then
-    error "请指定远程主机，例如: ./mac_ssh_hook.sh setup-remote user@linux-host"
+    error "请指定远程主机，例如: ./mac_ssh_notify.sh setup-remote user@linux-host"
     exit 1
   fi
 
@@ -364,13 +367,13 @@ cmd_ssh_hint() {
   ssh -R ${PORT}:127.0.0.1:${PORT} -o ServerAliveInterval=60 -o ExitOnForwardFailure=yes ${target}
 
 说明:
-  1. 在 Mac 上先运行: ./mac_ssh_hook.sh install
+  1. 在 Mac 上先运行: ./mac_ssh_notify.sh install
   2. 用上述命令 SSH 到远程 Linux
   3. 在远程运行 claude；会话结束时会播放 Mac 上的 Funk.aiff
 
 可选环境变量（远程）:
-  CLAUDE_MAC_NOTIFY_PORT=${PORT}
-  CLAUDE_MAC_NOTIFY_HOST=127.0.0.1
+  AGENT_NOTIFY_PORT=${PORT}
+  AGENT_NOTIFY_HOST=127.0.0.1
 
 EOF
 }
@@ -385,20 +388,20 @@ ${BOLD}用法:${NC}
   $(basename "$0") stop                 停止 listener
   $(basename "$0") restart              重启 listener
   $(basename "$0") status               查看状态
-  $(basename "$0") test                 发送测试通知
+  $(basename "$0") test [source]        发送测试通知（默认 source=test）
   $(basename "$0") play                 直接播放提示音
   $(basename "$0") setup-remote <host>  远程 Linux 安装 SessionEnd hook
   $(basename "$0") ssh-hint [host]      打印 SSH 反向隧道命令
   $(basename "$0") help
 
 ${BOLD}环境变量:${NC}
-  CLAUDE_LISTENER_PORT=${PORT}
-  CLAUDE_LISTENER_SOUND=${SOUND}
+  AGENT_NOTIFY_PORT=${PORT}
+  AGENT_NOTIFY_SOUND=${SOUND}
 
 ${BOLD}快速开始:${NC}
-  ./mac_ssh_hook.sh install
-  ./mac_ssh_hook.sh setup-remote user@your-linux
-  ./mac_ssh_hook.sh ssh-hint user@your-linux
+  ./mac_ssh_notify.sh install
+  ./mac_ssh_notify.sh setup-remote user@your-linux
+  ./mac_ssh_notify.sh ssh-hint user@your-linux
 
 EOF
 }
@@ -416,7 +419,7 @@ main() {
     stop)          cmd_stop ;;
     restart)       cmd_restart ;;
     status)        cmd_status ;;
-    test)          cmd_test ;;
+    test)          cmd_test "$@" ;;
     play)          cmd_play ;;
     setup-remote)  cmd_setup_remote "$@" ;;
     ssh-hint)      cmd_ssh_hint "$@" ;;

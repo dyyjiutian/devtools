@@ -10,12 +10,15 @@ devtools/
 │   ├── macos/setup.sh            # macOS system initialization
 │   └── linux/setup_centos.sh     # CentOS/RHEL system initialization
 ├── terminal/
-│   ├── ghostty/                  # Ghostty terminal + Starship prompt
+│   ├── ghostty/                  # Ghostty terminal
+│   ├── bash/                     # Lightweight Bash plugins + Starship init
 │   ├── iterm2/                   # iTerm2 config and SSH login scripts
 │   ├── nvim/                     # Neovim (Lua + lazy.nvim)
 │   ├── oh-my-zsh/                # Oh My Zsh + powerlevel10k
+│   ├── starship/                 # Shared Starship prompt configs
 │   ├── tmux/                     # tmux configuration
 │   ├── vim/                      # Vim + vim-plug + coc.nvim
+│   ├── zsh/                      # Lightweight Zsh plugins + Starship init
 │   └── yazi/                     # yazi file manager setup
 ├── editors/
 │   └── cursor/                   # Cursor editor backup/restore
@@ -28,7 +31,7 @@ devtools/
 │   ├── setup.sh                  # Git one-shot setup
 │   ├── scripts/                  # git_config.sh, alias.sh
 │   └── config/github.gitconfig   # Git review aliases
-└── agent/                        # AI agent (Claude Code) setup
+└── agent/                        # AI agent setup and notifications
 ```
 
 ## OS Initialization
@@ -56,14 +59,14 @@ Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSourc
 
 ## Terminal
 
-### Ghostty + Starship (`terminal/ghostty/`)
+### Ghostty (`terminal/ghostty/`)
 
-Modern terminal emulator with GPU acceleration (Metal on macOS) and a Rust-based Starship prompt.
+Modern terminal emulator with GPU acceleration (Metal on macOS). Starship prompt configs live in `terminal/starship/` and are reused by shell setup scripts.
 
 ```bash
 ./terminal/ghostty/setup.sh            # Full installation
 ./terminal/ghostty/setup.sh --dry-run  # Preview
-./terminal/ghostty/setup.sh --skip-ghostty  # Starship only
+./terminal/ghostty/setup.sh --skip-ghostty  # Starship config only
 ./terminal/ghostty/setup.sh --skip-starship # Ghostty only
 ```
 
@@ -287,11 +290,11 @@ Configure API key and models:
 ./agent/claude/setup.sh configure --api-key "sk-ant-..." --model "claude-sonnet-4-6"
 ```
 
-Mac SSH remote session end notification (plays system sound when Claude session ends on remote Linux):
+Mac SSH remote session end notification (plays system sound when an agent event fires on remote Linux):
 ```bash
-./agent/claude/mac_ssh_hook.sh install
-./agent/claude/mac_ssh_hook.sh setup-remote user@linux-host
-./agent/claude/mac_ssh_hook.sh ssh-hint user@linux-host
+./agent/notify/mac_ssh_notify.sh install
+./agent/notify/mac_ssh_notify.sh setup-remote user@linux-host
+./agent/notify/mac_ssh_notify.sh ssh-hint user@linux-host
 ```
 
 ## Quick Start on a New Machine

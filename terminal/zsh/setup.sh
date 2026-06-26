@@ -15,6 +15,8 @@ ZSHRC="$HOME/.zshrc"
 CONFIG_MARKER="# === Lightweight Zsh Plugins (devtools) ==="
 CONFIG_MARKER_END="# === End Lightweight Zsh Plugins ==="
 LINUX_PLUGIN_DIR="$HOME/.zsh"
+STARSHIP_CONFIG_DIR="$HOME/.config"
+STARSHIP_CONFIG="$STARSHIP_CONFIG_DIR/starship.toml"
 
 info()    { echo -e "\033[34m[INFO]\033[0m $1"; }
 success() { echo -e "\033[32m[OK]\033[0m $1"; }
@@ -64,6 +66,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 OS="$(uname -s)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---- macOS: 通过 Homebrew 安装 ----
 install_macos() {
@@ -176,6 +179,38 @@ _install_linux_starship() {
     fi
 }
 
+# ---- 初始化 Starship 配置 ----
+configure_starship_config() {
+    step "配置 Starship prompt ..."
+
+    local source_config
+    if [[ "$OS" == "Darwin" ]]; then
+        source_config="${SCRIPT_DIR}/../starship/starship-tokyo.toml"
+    else
+        source_config="${SCRIPT_DIR}/../starship/starship-tokyo-linux.toml"
+    fi
+
+    if [[ ! -f "$source_config" ]]; then
+        error "未找到 Starship 配置模板: $source_config"
+        return 1
+    fi
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        info "[试运行] 将复制 $source_config 到 $STARSHIP_CONFIG"
+        return
+    fi
+
+    mkdir -p "$STARSHIP_CONFIG_DIR"
+    if [[ -f "$STARSHIP_CONFIG" ]]; then
+        local backup="${STARSHIP_CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
+        cp "$STARSHIP_CONFIG" "$backup"
+        success "已备份 Starship 配置 -> $backup"
+    fi
+
+    cp "$source_config" "$STARSHIP_CONFIG"
+    success "已写入 Starship 配置 -> $STARSHIP_CONFIG"
+}
+
 # ---- 生成 .zshrc 配置块 ----
 generate_zshrc_config() {
     echo "$CONFIG_MARKER"
@@ -274,11 +309,14 @@ main() {
     configure_zshrc
 
     echo ""
+    configure_starship_config
+
+    echo ""
     success "安装完成！"
     echo ""
     echo "  后续操作:"
     echo "  1. 运行 'source ~/.zshrc' 或重新打开终端以应用配置"
-    echo "  2. 运行 'starship preset' 选择提示符样式（可选）"
+    echo "  2. Starship 已默认初始化为 tokyo 样式"
     echo ""
     echo "  关于 zoxide (z 命令):"
     echo "  zoxide 需要先记录你访问过的目录，才能使用 'z' 跳转。"

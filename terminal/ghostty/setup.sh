@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Ghostty + Starship 配置安装脚本
-# 用于安装 Ghostty 终端、Starship 提示符并应用自定义配置
+# Ghostty 配置安装脚本
+# 用于安装 Ghostty 终端，并可复用 terminal/starship 下的 Starship 配置
 #
 
 set -euo pipefail
@@ -27,7 +27,7 @@ show_help() {
     cat << 'EOF'
 用法: ./setup.sh [选项]
 
-Ghostty + Starship 配置安装脚本
+Ghostty 配置安装脚本
 
 选项:
     -h, --help          显示此帮助信息并退出
@@ -42,7 +42,7 @@ Ghostty + Starship 配置安装脚本
     1. 安装 Ghostty 终端 (通过 Homebrew Cask)
     2. 安装 Starship 提示符
     3. 安装 Nerd Font (JetBrainsMono Nerd Font)
-    4. 应用自定义 Starship 配置 (starship.toml)
+    4. 应用通用 Starship 配置 (../starship/starship.toml)
     5. 应用自定义 Ghostty 配置 (ghostty.config)
     6. 配置 Shell 集成 (zshrc/bashrc)
     7. 配置 ~/.ssh/config (避免 SSH 终端输出异常)
@@ -241,7 +241,7 @@ configure_starship() {
     fi
 
     # 复制配置
-    local starship_source="${SCRIPT_DIR}/starship.toml"
+    local starship_source="${SCRIPT_DIR}/../starship/starship.toml"
     if [[ ! -f "$starship_source" ]]; then
         log "⚠ 未找到 Starship 配置文件: $starship_source"
         return 1
@@ -392,7 +392,7 @@ configure_ssh_config() {
 
 # 卸载配置
 uninstall() {
-    log "卸载 Ghostty + Starship 配置..."
+    log "卸载 Ghostty 配置..."
 
     # 恢复 Starship 配置
     if [[ -f "$STARSHIP_CONFIG" ]]; then
@@ -498,7 +498,7 @@ uninstall() {
 show_summary() {
     echo
     echo "=========================================="
-    echo "    Ghostty + Starship 配置安装完成"
+    echo "    Ghostty 配置安装完成"
     echo "=========================================="
     echo
     echo "已完成的操作:"
@@ -532,7 +532,7 @@ show_summary() {
 # 主函数
 main() {
     echo
-    log "Ghostty + Starship 配置安装脚本"
+    log "Ghostty 配置安装脚本"
     log "操作系统: $OS_TYPE"
     log "包管理器: $PKG_MANAGER"
     log "运行模式: $([[ "$DRY_RUN" == "true" ]] && echo "试运行" || echo "实际执行")"

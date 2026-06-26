@@ -1,6 +1,6 @@
-# Ghostty + Starship 配置
+# Ghostty 配置
 
-现代化的终端配置方案，结合 Ghostty 终端模拟器和 Starship 提示符。
+现代化的 Ghostty 终端配置方案。Starship 提示符模板已抽到 `terminal/starship/`，本脚本可复用该通用配置。
 
 ## 特性
 
@@ -11,18 +11,11 @@
 - **字体**: 支持 Nerd Font 图标
 - **快捷键**: 丰富的自定义快捷键绑定
 
-### Starship 提示符
-- **轻量级**: 用 Rust 编写，极速渲染
-- **信息丰富**: Git 状态、编程语言版本、执行时间等
-- **可定制**: 完全可配置的外观和行为
-- **跨平台**: 支持所有主流操作系统
-
 ## 文件结构
 
 ```
 terminal/ghostty/
 ├── setup.sh           # 安装脚本
-├── starship.toml      # Starship 配置文件
 ├── ghostty.config     # Ghostty 配置文件
 └── README.md          # 本文件
 ```
@@ -48,7 +41,7 @@ cd terminal/ghostty
 # 跳过字体安装
 ./setup.sh --skip-fonts
 
-# 仅安装 Starship
+# 仅应用 Starship 配置
 ./setup.sh --skip-ghostty
 
 # 仅安装 Ghostty
@@ -60,12 +53,9 @@ cd terminal/ghostty
 
 ## 配置详情
 
-### Starship 配置 (`starship.toml`)
+### Starship 配置
 
-- **主提示符**: `username` → `hostname` → `directory` → `git_branch` → `git_status` → `character`
-- **右提示符**: `kubernetes` → `docker` → `编程语言` → `time`
-- **Git 集成**: 分支名、状态图标（修改、暂存、冲突等）
-- **编程语言**: Python、Node.js、Go、Rust、Java 自动检测
+Starship 配置模板位于 `terminal/starship/starship.toml`。运行本脚本且未指定 `--skip-starship` 时，会复制该模板到 `~/.config/starship.toml`。
 
 #### 自定义
 

@@ -6,10 +6,12 @@
 
 ```
 terminal/
-├── ghostty/          # Ghostty 终端模拟器 + Starship 提示符
+├── bash/             # 轻量级 Bash 插件方案
+├── ghostty/          # Ghostty 终端模拟器
 ├── iterm2/           # iTerm2 配置（macOS）
 ├── nvim/             # Neovim 配置
 ├── oh-my-zsh/        # Oh My Zsh 方案（提示符 + 插件）
+├── starship/         # Starship 提示符配置
 ├── tmux/             # tmux 终端复用器配置
 ├── vim/              # Vim 配置
 ├── yazi/             # Yazi 文件管理器配置
@@ -115,7 +117,7 @@ p10k configure    # 手动重新配置主题
 
 ## Bash 配置实践
 
-Bash 没有专用安装脚本，以下为推荐的手动配置步骤。
+Bash 可通过 `terminal/bash/setup.sh` 自动安装常用工具并写入 `~/.bashrc`，以下为手动配置参考。
 
 ### 推荐工具
 
@@ -193,18 +195,18 @@ source ~/.bashrc
 Zsh 和 Bash 共用同一份 Starship 配置，位于：
 
 ```
-terminal/ghostty/starship.toml      # 主配置（自定义主题）
-terminal/ghostty/starship-tokyo.toml  # Tokyo Night 风格配置
+terminal/starship/starship.toml        # 主配置（自定义主题）
+terminal/starship/starship-tokyo.toml  # Tokyo Night 风格配置
 ```
 
 **部署配置：**
 
 ```bash
 # 主配置
-cp terminal/ghostty/starship.toml ~/.config/starship.toml
+cp terminal/starship/starship.toml ~/.config/starship.toml
 
 # 或 Tokyo Night 风格
-cp terminal/ghostty/starship-tokyo.toml ~/.config/starship.toml
+cp terminal/starship/starship-tokyo.toml ~/.config/starship.toml
 ```
 
 提示符包含：用户名 → 主机名（SSH 时）→ 目录 → Git 分支 / 状态，右侧显示语言版本和命令耗时。
@@ -215,7 +217,9 @@ cp terminal/ghostty/starship-tokyo.toml ~/.config/starship.toml
 
 | 目录 | 说明 | 脚本 |
 |------|------|------|
-| `ghostty/` | Ghostty 终端 + Starship | `./setup.sh` |
+| `bash/` | Bash 插件 + Starship 初始化 | `./setup.sh` |
+| `ghostty/` | Ghostty 终端 | `./setup.sh` |
+| `starship/` | Starship 配置模板 | 手动复制或由 bash/zsh setup 部署 |
 | `nvim/` | Neovim（lazy.nvim + LSP） | `./setup.sh` |
 | `vim/` | Vim（vim-plug + coc.nvim） | `./setup.sh` |
 | `yazi/` | Yazi 文件管理器 | `./setup.sh` |

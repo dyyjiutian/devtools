@@ -238,9 +238,9 @@ configure_starship_config() {
 
     local source_config
     if [[ "$OS" == "Darwin" ]]; then
-        source_config="${SCRIPT_DIR}/../ghostty/starship-tokyo.toml"
+        source_config="${SCRIPT_DIR}/../starship/starship-tokyo.toml"
     else
-        source_config="${SCRIPT_DIR}/../ghostty/starship-tokyo-linux.toml"
+        source_config="${SCRIPT_DIR}/../starship/starship-tokyo-linux.toml"
     fi
 
     if [[ ! -f "$source_config" ]]; then
