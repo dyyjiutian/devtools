@@ -1,0 +1,27 @@
+.TH GIT-RB 1
+.SH NAME
+git-rb \- fetch and rebase onto a remote target branch
+.SH SYNOPSIS
+.B git rb
+.RI [ target-branch ]
+.SH DESCRIPTION
+.B git rb
+fetches
+.BI origin/ target-branch
+and rebases the current branch onto it.
+When
+.I target-branch
+is omitted, the remote default branch from
+.B origin/HEAD
+is used.
+.SH EXAMPLES
+.nf
+git rb
+    Rebase onto the remote default branch.
+
+git rb main
+    Rebase onto origin/main.
+
+git rb release/1.0
+    Rebase onto origin/release/1.0.
+.fi

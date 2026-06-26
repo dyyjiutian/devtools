@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: git bc [target-branch] [--dry-run]
+
+Branch clean: delete local branches already merged into origin/<target-branch>.
+When target-branch is omitted, the remote default branch from origin/HEAD is used.
+
+Protected branch names are never deleted:
+  main, master, develop, dev, and the target branch
+
+Options:
+  -n, --dry-run   Show branches that would be deleted without deleting them
+  -h, --help      Show this help
+
+Examples:
+  git bc --dry-run
+  git bc
+  git bc develop --dry-run
+EOF
+}
+
+target_branch=""
+dry_run=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -n|--dry-run)
+      dry_run=true
+      shift
+      ;;
+    *)
+      if [[ -n "$target_branch" ]]; then
+        echo "git bc: unexpected argument: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      target_branch="$1"
+      shift
+      ;;
+  esac
+done
+
+default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
+target_branch="${target_branch:-${default_branch:-main}}"
+
+echo "Fetching/pruning origin ..."
+git fetch --prune origin
+
+if ! git rev-parse --verify --quiet "origin/$target_branch" >/dev/null; then
+  echo "git bc: origin/$target_branch does not exist" >&2
+  exit 1
+fi
+
+merged="$(git branch --merged "origin/$target_branch" \
+  | sed 's/^[* ]*//' \
+  | awk -v target="$target_branch" '
+      $0 != "" && $0 != "main" && $0 != "master" && $0 != "develop" && $0 != "dev" && $0 != target
+    ')"
+
+if [[ -z "$merged" ]]; then
+  echo "No merged local branches to prune."
+  exit 0
+fi
+
+if [[ "$dry_run" == "true" ]]; then
+  echo "Branches that would be deleted:"
+  echo "$merged"
+  exit 0
+fi
+
+echo "The following local branches will be deleted:"
+echo "$merged"
+printf "Proceed? [y/N] "
+read -r answer
+
+case "$answer" in
+  y|Y|yes|YES)
+    while IFS= read -r branch; do
+      [[ -n "$branch" ]] && git branch -d "$branch"
+    done <<< "$merged"
+    ;;
+  *)
+    echo "Aborted."
+    ;;
+esac

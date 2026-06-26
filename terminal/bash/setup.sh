@@ -14,6 +14,7 @@ BASHRC="$HOME/.bashrc"
 CONFIG_MARKER="# === Lightweight Bash Plugins (devtools) ==="
 CONFIG_MARKER_END="# === End Lightweight Bash Plugins ==="
 LINUX_PLUGIN_DIR="$HOME/.bash"
+LOCAL_BIN_DIR="$HOME/.local/bin"
 
 # 本地缓存目录：在线下载失败时回退到 cache/binaries 中的预下载文件
 # 运行 `bash cache/download.sh linux` 可预先下载所有文件
@@ -101,7 +102,7 @@ install_linux() {
         exit 1
     fi
 
-    mkdir -p "$LINUX_PLUGIN_DIR"
+    mkdir -p "$LINUX_PLUGIN_DIR" "$LOCAL_BIN_DIR"
 
     _install_linux_blesh
     _install_linux_zoxide
@@ -214,10 +215,18 @@ _install_linux_starship() {
     fi
     if [[ "$DRY_RUN" == "false" ]]; then
         info "安装 starship ..."
-        curl -sS https://starship.rs/install.sh | sh -s -- --yes
-        success "starship 安装完成"
+        curl -sS https://starship.rs/install.sh | sh -s -- --yes --bin-dir "$LOCAL_BIN_DIR"
+        if [[ -x "$LOCAL_BIN_DIR/starship" ]]; then
+            success "starship 安装完成 -> $LOCAL_BIN_DIR/starship"
+            if [[ ":$PATH:" != *":$LOCAL_BIN_DIR:"* ]]; then
+                warn "$LOCAL_BIN_DIR 不在当前 PATH 中，重新打开终端或 source ~/.bashrc 后生效"
+            fi
+        else
+            error "starship 安装后未找到可执行文件: $LOCAL_BIN_DIR/starship"
+            return 1
+        fi
     else
-        info "[试运行] curl install starship"
+        info "[试运行] curl install starship -> $LOCAL_BIN_DIR"
     fi
 }
 
@@ -247,6 +256,9 @@ generate_bashrc_config() {
         echo "# ble.sh attach (必须在所有插件加载后)"
         echo '[[ ${BLE_VERSION-} ]] && ble-attach'
     else
+        echo "# 用户级命令目录"
+        echo '[[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"'
+        echo ""
         echo "# ble.sh (自动建议 + 语法高亮，需在其他插件之前 source)"
         echo '[[ $- == *i* && -f ~/.local/share/blesh/ble.sh ]] && \'
         echo '    source ~/.local/share/blesh/ble.sh --noattach'
@@ -282,8 +294,28 @@ configure_bashrc() {
     fi
 
     if grep -q "$CONFIG_MARKER" "$BASHRC" 2>/dev/null; then
-        warn "配置块已存在于 $BASHRC，跳过写入"
-        warn "如需重新生成，请删除 '$CONFIG_MARKER' 到 '$CONFIG_MARKER_END' 之间的内容后重新运行"
+        warn "配置块已存在于 $BASHRC，将替换为最新配置"
+        if [[ "$DRY_RUN" == "false" ]]; then
+            local backup="${BASHRC}.backup.$(date +%Y%m%d_%H%M%S)"
+            local tmp
+            tmp="$(mktemp)"
+            cp "$BASHRC" "$backup"
+            awk -v start="$CONFIG_MARKER" -v end="$CONFIG_MARKER_END" '
+                $0 == start { in_block = 1; next }
+                $0 == end { in_block = 0; next }
+                !in_block { print }
+            ' "$BASHRC" > "$tmp"
+            printf '\n' >> "$tmp"
+            generate_bashrc_config >> "$tmp"
+            mv "$tmp" "$BASHRC"
+            success "已备份 ~/.bashrc -> $backup"
+            success "已更新 $BASHRC 中的配置块"
+        else
+            info "[试运行] 将替换 $BASHRC 中已有配置块为:"
+            echo "---"
+            generate_bashrc_config
+            echo "---"
+        fi
         return 0
     fi
 

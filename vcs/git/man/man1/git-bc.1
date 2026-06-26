@@ -1,0 +1,41 @@
+.TH GIT-BC 1
+.SH NAME
+git-bc \- clean local branches already merged into a target branch
+.SH SYNOPSIS
+.B git bc
+.RI [ target-branch ]
+.RB [ \-n | \-\-dry-run ]
+.SH DESCRIPTION
+.B git bc
+deletes local branches already merged into
+.BI origin/ target-branch .
+When
+.I target-branch
+is omitted, the remote default branch from
+.B origin/HEAD
+is used.
+.PP
+Protected branch names are never deleted:
+.B main,
+.B master,
+.B develop,
+.B dev,
+and the target branch.
+.SH OPTIONS
+.TP
+.B \-n, \-\-dry-run
+Show branches that would be deleted without deleting them.
+.TP
+.B \-h, \-\-help
+Show command help.
+.SH EXAMPLES
+.nf
+git bc --dry-run
+    Preview cleanup against the remote default branch.
+
+git bc
+    Clean branches merged into the remote default branch.
+
+git bc develop --dry-run
+    Preview cleanup against origin/develop.
+.fi

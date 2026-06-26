@@ -1,13 +1,13 @@
 # Git Scripts
 
-本目录提供两个独立的 shell 脚本，用于快速初始化 Git 环境。
+本目录提供 Git 环境初始化脚本。推荐优先使用上一层的 `../setup.sh` 一键完成配置；本目录脚本也可以单独运行。
 
 ## 目录
 
 - [脚本说明](#脚本说明)
 - [alias.sh — 安装 Git 快捷命令](#aliassh--安装-git-快捷命令)
 - [git_config.sh — 初始化 Git 全局配置](#git_configsh--初始化-git-全局配置)
-- [github.gitconfig — Git 别名配置](#githubgitconfig--git-别名配置)
+- [github.gitconfig — Git review 别名配置](#githubgitconfig--git-review-别名配置)
 - [Delta — 增强 diff 显示](#delta--增强-diff-显示)
 - [在新机器上快速上手](#在新机器上快速上手)
 
@@ -17,6 +17,7 @@
 
 | 脚本 | 功能 |
 |------|------|
+| `../setup.sh` | 一键安装 delta、安装 `git rb` / `git bc`、写入 git config、安装 shell aliases、应用 status/pull/fetch 优化 |
 | `alias.sh` | 向 `~/.zshrc` 或 `~/.bashrc` 注入 Git 快捷函数 |
 | `git_config.sh` | 交互式设置 Git 全局配置（`~/.gitconfig`） |
 
@@ -115,9 +116,9 @@ git config --global --list
 
 ---
 
-## github.gitconfig — Git 别名配置
+## github.gitconfig — Git review 别名配置
 
-位于 `../config/github.gitconfig`，提供与 GitHub 工作流相关的 Git 别名。
+位于 `../config/github.gitconfig`，提供跨 GitHub / GitLab / Gerrit 的 `git review` 别名。
 
 ### 用法
 
@@ -134,9 +135,16 @@ git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
 
 | 别名 | 功能 |
 |------|------|
-| `git review` | 推送当前分支到 origin 并使用 `gh` 命令行创建 GitHub PR |
+| `git rb [branch]` | 拉取远端默认分支并 rebase 当前分支；传参时使用指定目标分支 |
+| `git rb --help` | 显示用法和示例 |
+| `git bc [branch] [--dry-run]` | 删除已合入目标远端分支的本地分支，支持试运行 |
+| `git bc --help` | 显示用法、安全规则和示例 |
+| `git review` | 自动识别 origin 平台，向远端主干分支创建 GitHub PR / GitLab MR / Gerrit review |
+| `git review <branch>` | 指定目标分支创建 review |
 
-> **注意**: 此别名仅适用于 GitHub。跨平台的 PR/MR/Gerrit 提交请使用 `alias.sh` 安装的 `gitreview` 命令。
+平台识别规则与 `alias.sh` 安装的 `gitreview` 保持一致：GitHub 使用 `gh pr create --fill --base <主干>`，GitLab 使用 push options 创建 MR，其他 remote 默认按 Gerrit 推送到 `refs/for/<主干>`。
+
+`git rb` / `git bc` 是安装到 `~/.local/bin` 的 Git 子命令，因此支持 `git rb --help` / `git bc --help`。`gitroot` 仍保留为 shell alias，因为 `cd` 必须发生在当前 shell 进程中；Git alias 不能改变父 shell 的当前目录。
 
 ---
 
@@ -183,15 +191,9 @@ brew install git-delta          # macOS（或通过 os/macos/setup.sh 一并安�
 # 1. 克隆 devtools
 git clone <repo-url> ~/devtools
 
-# 2. 安装 git-delta（macOS）
-brew install git-delta
-
-# 3. 初始化 Git 全局配置（含 delta pager 配置）
-bash ~/devtools/vcs/git/scripts/git_config.sh
-
-# 4. 安装 Git 快捷命令
-bash ~/devtools/vcs/git/scripts/alias.sh
-source ~/.zshrc   # 或 source ~/.bashrc
+# 2. 一键配置 Git（delta + git config + aliases + status/pull 优化）
+bash ~/devtools/vcs/git/setup.sh
+source ~/.zshrc   # 或 source ~/.bashrc，按当前 shell 选择
 
 # 验证
 git config --global --list

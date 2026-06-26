@@ -67,7 +67,7 @@ prompt_with_default() {
   # prompt_with_default <var_name> <prompt> <default>
   local var_name="$1" prompt_text="$2" default="$3"
   printf "%s [%s]: " "$prompt_text" "$default"
-  read -r input
+  read -r input || input=""
   printf -v "$var_name" '%s' "${input:-$default}"
 }
 
@@ -113,7 +113,7 @@ git_config pull.rebase          "true"        "rebase instead of merge on pull"
 git_config rebase.autoStash     "true"        "auto-stash dirty working tree before rebase"
 git_config rebase.autoSquash    "true"        "auto-apply fixup!/squash! commits during rebase"
 git_config merge.conflictstyle  "diff3"       "show base version in conflict markers"
-git_config merge.ff             "false"       "always create a merge commit (no fast-forward)"
+git_config merge.ff             "true"        "allow fast-forward merges when possible"
 
 # ── Push ──────────────────────────────────────────────────────────────────────
 
@@ -156,7 +156,17 @@ git_config init.defaultBranch   "main"           "default branch name for new re
 
 header "Credential / Security"
 
-git_config credential.helper    "osxkeychain" "store credentials in macOS Keychain"
+case "$(uname -s)" in
+  Darwin)
+    git_config credential.helper "osxkeychain" "store credentials in macOS Keychain"
+    ;;
+  Linux)
+    git_config credential.helper "cache --timeout=86400" "cache credentials for one day"
+    ;;
+  *)
+    echo "  credential.helper skipped (unsupported OS: $(uname -s))"
+    ;;
+esac
 git_config transfer.fsckObjects "true"        "verify object integrity on receive"
 
 # ── Delta (diff pager) ────────────────────────────────────────────────────────
@@ -172,7 +182,11 @@ if command -v delta &>/dev/null; then
   git_config delta.syntax-theme        "Dracula"        "syntax highlighting theme"
   git_config delta.diff-highlight      "true"           "highlight changed words within a line"
 else
-  echo "  delta not found — skipping (install with: brew install git-delta)"
+  case "$(uname -s)" in
+    Darwin) echo "  delta not found — skipping (install with: brew install git-delta)" ;;
+    Linux)  echo "  delta not found — skipping (install with your package manager or cargo install git-delta)" ;;
+    *)      echo "  delta not found — skipping" ;;
+  esac
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────

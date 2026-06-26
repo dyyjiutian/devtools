@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: git rb [target-branch]
+
+Fetch origin/<target-branch> and rebase the current branch onto it.
+When target-branch is omitted, the remote default branch from origin/HEAD is used.
+
+Examples:
+  git rb
+  git rb main
+  git rb release/1.0
+EOF
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+target_branch="${1:-$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')}"
+if [[ -z "$target_branch" ]]; then
+  echo "git rb: cannot determine default branch. Run: git remote set-head origin -a" >&2
+  exit 1
+fi
+
+echo "Fetching origin/$target_branch ..."
+git fetch origin "$target_branch"
+
+echo "Rebasing onto origin/$target_branch ..."
+git rebase "origin/$target_branch"

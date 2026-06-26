@@ -25,8 +25,9 @@ devtools/
 │   ├── proxy/                    # SNI proxy for GitHub/Docker Hub
 │   └── vpn/                      # Xray VLESS + Reality three-hop proxy
 ├── vcs/git/
+│   ├── setup.sh                  # Git one-shot setup
 │   ├── scripts/                  # git_config.sh, alias.sh
-│   └── config/github.gitconfig   # GitHub-specific git aliases
+│   └── config/github.gitconfig   # Git review aliases
 └── agent/                        # AI agent (Claude Code) setup
 ```
 
@@ -197,6 +198,16 @@ See [`tools/vpn/README.md`](tools/vpn/README.md) for GUI client setup (V2RayXS, 
 
 ## Git Utilities
 
+### One-Shot Setup (`vcs/git/setup.sh`)
+
+Installs git-delta, installs `git rb` / `git bc`, applies global Git defaults, adds shell aliases, and enables status/pull/fetch optimizations.
+
+```bash
+bash vcs/git/setup.sh           # Full setup
+bash vcs/git/setup.sh --dry-run # Preview only
+bash vcs/git/setup.sh --skip-delta
+```
+
 ### Global Configuration (`vcs/git/scripts/git_config.sh`)
 
 Interactive setup for `user.name`, `user.email`, and 15+ recommended global git settings. Also configures [git-delta](https://github.com/dandavison/delta) as the diff pager if it is installed.
@@ -233,19 +244,31 @@ bash vcs/git/scripts/alias.sh --clean # Remove
 
 ### Delta — Enhanced Diff Pager
 
-`setup.sh` installs `git-delta` via Homebrew. After running `git_config.sh`, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
+`vcs/git/setup.sh` installs `git-delta` when a supported package manager is available. After running setup, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
 
 ```bash
 brew install git-delta   # or install via os/macos/setup.sh
 ```
 
-### GitHub gitconfig (`vcs/git/config/github.gitconfig`)
+### Git Review gitconfig (`vcs/git/config/github.gitconfig`)
 
 ```bash
 git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
 ```
 
-Provides `git review` alias (GitHub-only). For multi-platform support use `gitreview` from `alias.sh`.
+Provides `git review`, which detects `origin` and creates a GitHub PR, GitLab MR, or Gerrit review against the remote default branch. You can override the target branch with `git review <branch>`.
+
+The setup also installs portable Git subcommands:
+
+| Command | Description |
+|---------|-------------|
+| `git rb [branch]` | Fetch and rebase onto the remote default branch, or the specified branch |
+| `git rb --help` | Show usage and examples |
+| `git bc [branch] [--dry-run]` | Delete local branches already merged into the target remote branch |
+| `git bc --help` | Show usage, safety rules, and examples |
+| `git review [branch]` | Create a GitHub PR, GitLab MR, or Gerrit review |
+
+`gitroot` remains a shell alias because changing the current directory must happen in the active shell process.
 
 ## AI Agent
 
@@ -282,9 +305,8 @@ git clone <repo-url> ~/devtools
 # or
 ./os/linux/setup_centos.sh   # CentOS/RHEL
 
-# 3. Configure git globals
-bash ~/devtools/vcs/git/scripts/git_config.sh
-bash ~/devtools/vcs/git/scripts/alias.sh
+# 3. Configure git globals, delta, and aliases
+bash ~/devtools/vcs/git/setup.sh
 source ~/.zshrc
 
 # 4. Set up your preferred terminal/editor

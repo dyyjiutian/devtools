@@ -32,7 +32,7 @@ gitrebase() {
     return 1
   fi
   echo "Fetching origin/$default_branch ..."
-  git fetch origin "$default_branch:$default_branch"
+  git fetch origin "$default_branch"
   echo "Rebasing onto origin/$default_branch ..."
   git rebase "origin/$default_branch"
 }
@@ -84,8 +84,11 @@ gitreview() {
     return 1
   fi
 
-  default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
+  default_branch="${1:-}"
+  if [[ -z "$default_branch" ]]; then
+    default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
     | sed 's|refs/remotes/origin/||')
+  fi
   default_branch="${default_branch:-main}"
 
   if echo "$remote_url" | grep -qi "github\.com"; then
@@ -117,6 +120,14 @@ gitalias() {
   echo "  gitrebase  – fetch default branch and rebase current branch onto it"
   echo "  gitprune   – delete local branches merged into default branch"
   echo "  gitreview  – create PR/MR/Gerrit review for current branch (auto-detects platform)"
+  echo "  gitreview <branch> – create review against a specific target branch"
+  echo ""
+  echo "Git config aliases installed by setup.sh:"
+  echo "  git rb [branch]              – fetch and rebase onto origin/<branch>"
+  echo "  git rb --help                – show detailed help"
+  echo "  git bc [branch] [--dry-run]  – delete local branches merged into origin/<branch>"
+  echo "  git bc --help                – show detailed help"
+  echo "  git review [branch]          – create GitHub PR / GitLab MR / Gerrit review"
   echo "  gitalias   – show this help"
 }
 
@@ -210,6 +221,7 @@ Aliases installed:
   gitrebase  fetch the default branch from origin and rebase current branch
   gitprune   delete local branches already merged into the default branch
   gitreview  create a PR/MR/Gerrit review for the current branch (auto-detects platform)
+             optionally pass target branch: gitreview release/1.0
   gitalias   list all git aliases added by this script
 
 Examples:
