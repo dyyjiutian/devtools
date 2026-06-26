@@ -300,7 +300,6 @@ apply_extra_git_config() {
   git_config rerere.enabled                  "true"  "reuse recorded conflict resolutions"
 
   git_config core.untrackedCache             "true"  "speed up git status in large worktrees"
-  git_config feature.manyFiles               "true"  "enable large-repository defaults where supported"
   git_config index.threads                   "true"  "use multiple threads for index operations"
   git_config status.renames                  "true"  "detect renames in git status"
   git_config status.submoduleSummary         "true"  "show concise submodule changes in status"
