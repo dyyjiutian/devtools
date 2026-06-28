@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # VPN 出口节点部署脚本 - 新加坡 ECS (198.51.100.30)
-# 方案：Xray VLESS + Reality，伪装 www.microsoft.com，支持多用户
+# 方案：Xray VLESS + Reality，伪装 www.icloud.com，支持多用户
 # 用法：sudo ./exit/setup.sh [--dry-run] [--port PORT] [--users=NAME[,NAME...]]
 # =============================================================================
 
@@ -19,8 +19,8 @@ step()    { echo -e "\n${BOLD}==> $*${RESET}"; }
 # ── 参数解析 ──────────────────────────────────────────────────────────────────
 DRY_RUN=false
 LISTEN_PORT=443
-REALITY_DEST="www.microsoft.com:443"
-REALITY_SNI="www.microsoft.com"
+REALITY_DEST="www.icloud.com:443"
+REALITY_SNI="www.icloud.com"
 USERS_ARG=""
 
 for arg in "$@"; do

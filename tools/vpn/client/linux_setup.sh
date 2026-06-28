@@ -58,7 +58,7 @@ install 必需参数（从出口节点 cat /root/.vpn_exit_config 获取）:
 install 可选参数:
   --relay-ip=IP        中继节点 IP（默认 198.51.100.10）
   --relay-port=PORT    中继节点端口（默认 443）
-  --sni=DOMAIN         Reality SNI 域名（默认 www.microsoft.com）
+  --sni=DOMAIN         Reality SNI 域名（默认 www.icloud.com）
   --socks-port=PORT    本地 SOCKS5 端口（默认 10808）
   --http-port=PORT     本地 HTTP 端口（默认 10809）
   --dry-run            仅预览，不实际执行
@@ -92,7 +92,7 @@ RELAY_PORT=443
 UUID=""
 PUBLIC_KEY=""
 SHORT_ID=""
-SNI="www.microsoft.com"
+SNI="www.icloud.com"
 FINGERPRINT="chrome"
 SOCKS_PORT=10808
 HTTP_PORT=10809

@@ -10,14 +10,14 @@
   │                            │                          │                      │
   │  Xray VLESS+Reality        │    iptables DNAT 转发    │  Xray VLESS+Reality  │
   ├──────────────────────────►│──────────────────────────►│─────────────────────►│
-  │  (伪装 TLS 流量)            │  (纯 TCP 转发，无感知)     │  (伪装 microsoft.com) │
+  │  (伪装 TLS 流量)            │  (纯 TCP 转发，无感知)     │  (伪装 icloud.com)    │
   │◄──────────────────────────│◄──────────────────────────│◄─────────────────────│
 ```
 
 | 节点 | IP | 作用 | 技术方案 |
 |------|----|------|----------|
 | 中继节点 | 198.51.100.10 | 流量中转，规避国内审查对境外 IP 的封锁 | iptables DNAT（纯转发，无代理软件） |
-| 出口节点 | 198.51.100.30 | 实际出境，访问 claude.ai | Xray VLESS + Reality（伪装 www.microsoft.com） |
+| 出口节点 | 198.51.100.30 | 实际出境，访问 claude.ai | Xray VLESS + Reality（伪装 www.icloud.com） |
 
 ## 为什么需要中继节点？
 
@@ -65,7 +65,7 @@ sudo ./exit/setup.sh --users=3
 - 安装 Xray-core
 - 安装 Cloudflare WARP 并设置为 proxy 模式（SOCKS5 on 40000）
 - 生成 Reality X25519 密钥对、Short ID，以及每用户独立 UUID
-- 写入 VLESS + Reality 服务端配置（伪装 `www.microsoft.com`）
+- 写入 VLESS + Reality 服务端配置（伪装 `www.icloud.com`）
   - `anthropic.com` / `claude.ai` 流量经 WARP 出站（绕过 Cloudflare Bot 防护）
   - 其余流量直连
   - **Stats API** 监听 `127.0.0.1:10085`，用于流量统计与配额控制
@@ -171,7 +171,7 @@ sudo ./relay/setup.sh \
 先把出口节点输出的参数拼成 VLESS 链接（macOS 使用 `fp=chrome`）：
 
 ```
-vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#VPN
+vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.icloud.com&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#VPN
 ```
 
 > 出口节点部署完成后脚本会自动输出完整链接，复制即可。
@@ -300,7 +300,7 @@ export http_proxy=http://127.0.0.1:10809
 在出口节点执行 `cat /root/.vpn_exit_config` 获取参数，然后拼接（注意 `fp=ios`）：
 
 ```
-vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=ios&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#VPN-Claude-iOS
+vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.icloud.com&fp=ios&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#VPN-Claude-iOS
 ```
 
 重新运行 `exit/setup.sh` 也会自动输出 iOS 专用链接。
@@ -319,7 +319,7 @@ vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=
 | UUID | `<UUID>` |
 | Flow | `xtls-rprx-vision` |
 | TLS | 开启，选择 **Reality** |
-| SNI | `www.microsoft.com` |
+| SNI | `www.icloud.com` |
 | Public Key | `<PUBLIC_KEY>` |
 | Short ID | `<SHORT_ID>` |
 | Fingerprint | `ios`（**注意：不是 chrome**） |
@@ -422,7 +422,7 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## 安全说明
 
-- **Reality 协议**：通过 TLS 握手伪装成访问 `www.microsoft.com` 的流量，流量特征无法与正常 HTTPS 区分
+- **Reality 协议**：通过 TLS 握手伪装成访问 `www.icloud.com` 的流量，流量特征无法与正常 HTTPS 区分
 - **中继节点无感知**：杭州 ECS 仅做 TCP 转发，不解密、不存储任何流量内容
 - **建议**：阿里云安全组限制 443 入方向仅允许可信客户端 IP，防止被扫描滥用
 - **UUID 和私钥**：请妥善保管出口节点生成的配置，切勿公开
