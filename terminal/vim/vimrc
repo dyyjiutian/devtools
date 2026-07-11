@@ -23,7 +23,7 @@ Plug 'tpope/vim-fugitive'
 Plug 'airblade/vim-gitgutter'
 
 " Auto-completion (requires Vim 8.1.1719+ or Neovim 0.4.0+)
-if has('nvim') || (v:version >= 801 && has('patch1719'))
+if has('nvim') || has('patch-8.1.1719')
   Plug 'neoclide/coc.nvim', {'branch': 'release'}
 else
   " Fallback: use simpler completion for older Vim
@@ -130,6 +130,12 @@ if !isdirectory(expand('~/.vim/undo'))
   silent! call mkdir(expand('~/.vim/undo'), 'p', 0700)
 endif
 
+" 重新打开文件时，恢复到上次退出时的光标位置
+augroup restore_cursor_position
+  autocmd!
+  autocmd BufReadPost * if &buftype ==# '' && index(['gitcommit', 'gitrebase'], &filetype) < 0 && line("'\"") > 0 && line("'\"") <= line('$') | execute 'normal! g`"' | endif
+augroup END
+
 " Mouse
 " set mouse=c
 
@@ -215,7 +221,7 @@ autocmd BufEnter * if winnr('$') == 1 && exists('b:NERDTree') && b:NERDTree.isTa
 " ============================================================
 " coc.nvim Settings (Auto-completion & LSP)
 " ============================================================
-if has('nvim') || (v:version >= 801 && has('patch1719'))
+if has('nvim') || has('patch-8.1.1719')
 " Tab: Copilot suggestion → coc popup → normal Tab
 " Copilot manages its own Tab map when g:copilot_no_tab_map = v:true
 let g:copilot_no_tab_map = v:true
@@ -316,4 +322,3 @@ autocmd FileType sh,bash,zsh setlocal tabstop=2 shiftwidth=2 softtabstop=2
 
 " YAML / JSON
 autocmd FileType yaml,json setlocal tabstop=2 shiftwidth=2 softtabstop=2
-
