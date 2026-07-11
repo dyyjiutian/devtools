@@ -73,6 +73,8 @@ set encoding=utf-8
 set fileencodings=utf-8,gbk,gb2312,gb18030,latin1
 set fileformats=unix,dos
 set history=1000
+set viminfo='100,<50,s10,h  " 跨会话保存寄存器/marks/命令历史
+set display=truncate       " 长行被截断时末行显示 @@@ 提示
 set number
 set relativenumber
 set cursorline
@@ -118,6 +120,8 @@ set expandtab
 " Performance
 set updatetime=300
 set timeoutlen=1000
+set ttimeout        " 为按键码启用超时
+set ttimeoutlen=100 " Esc 后最多等 100ms，避免退出插入模式卡顿
 set hidden
 set nobackup
 set nowritebackup
