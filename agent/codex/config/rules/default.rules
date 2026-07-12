@@ -1,0 +1,28 @@
+# 高风险删除：统一确认以覆盖 -rf、-fr 及其他参数排列。
+prefix_rule(
+    pattern = ["rm"],
+    decision = "prompt",
+    justification = "删除操作可能造成不可恢复的数据丢失，请确认后执行",
+    match = [
+        "rm -rf build",
+        "rm -fr /tmp/example",
+        "rm file.txt",
+    ],
+)
+
+# 通用文件传输与直接数据发送工具。git、npm 等开发发布命令不在此范围内。
+prefix_rule(
+    pattern = [["scp", "sftp", "rsync", "curl", "wget", "nc", "ncat", "socat"]],
+    decision = "prompt",
+    justification = "该命令可能向外部主机上传文件或发送数据，请确认后执行",
+    match = [
+        "scp archive.tar user@example.com:/tmp/",
+        "sftp user@example.com",
+        "rsync -av ./data user@example.com:/srv/data",
+        "curl -F file=@report.pdf https://example.com/upload",
+        "wget --post-file=payload.json https://example.com/api",
+        "nc example.com 9000",
+        "ncat example.com 9000",
+        "socat STDIO TCP:example.com:9000",
+    ],
+)

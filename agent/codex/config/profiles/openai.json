@@ -1,0 +1,12 @@
+{
+  "description": "OpenAI 官方（ChatGPT 登录或 OPENAI_API_KEY）",
+  "provider": "openai",
+  "model": "gpt-5-codex",
+  "reasoning_effort": "high",
+  "base_url": "",
+  "env_var": "OPENAI_API_KEY",
+  "wire_api": "responses",
+  "builtin": true,
+  "requires_openai_auth": true,
+  "key_hint": "sk-...（留空则使用 codex login 订阅登录）"
+}

@@ -1,0 +1,33 @@
+# Codex CLI 配置示例（~/.codex/config.toml）
+#
+# 本文件为可移植的参考模板。setup.sh 不会整体覆盖你的 config.toml，
+# 而是在下面这对标记之间维护一段「托管块」，标记之外的手动配置会被保留：
+#
+#   # >>> devtools codex managed BEGIN <<<
+#   ...（switch / sync 生成的模型与渠道配置）...
+#   # >>> devtools codex managed END <<<
+#
+# 运行 `./setup.sh switch` 切换渠道后，托管块会被重新生成。
+
+# ─── 通用默认项（可按需修改，位于托管块外则不会被覆盖）─────────────────────
+approval_policy = "on-request"       # 敏感规则命中时请求确认
+sandbox_mode    = "danger-full-access" # 其余文件、网络和命令操作默认允许
+
+# ─── 托管块示例（由 setup.sh switch/sync 生成，请勿手动编辑）────────────────
+# >>> devtools codex managed BEGIN <<<
+model = "gpt-5-codex"
+model_provider = "openai"
+model_reasoning_effort = "high"
+# >>> devtools codex managed END <<<
+
+# ─── 自定义渠道示例（OpenRouter）────────────────────────────────────────────
+# [model_providers.openrouter]
+# name = "OpenRouter"
+# base_url = "https://openrouter.ai/api/v1"
+# env_key = "OPENROUTER_API_KEY"   # 从该环境变量读取 API Key
+# wire_api = "chat"
+
+# ─── MCP 服务器示例 ─────────────────────────────────────────────────────────
+# [mcp_servers.context7]
+# command = "npx"
+# args = ["-y", "@upstash/context7-mcp"]

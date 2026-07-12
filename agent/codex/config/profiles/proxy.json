@@ -1,0 +1,18 @@
+{
+  "description": "自定义代理（LiteLLM / vLLM / 百炼 / 国内中转，OpenAI 兼容端点）",
+  "provider": "proxy",
+  "name": "Custom Proxy",
+  "model": "",
+  "reasoning_effort": "medium",
+  "base_url": "",
+  "env_var": "CODEX_PROXY_API_KEY",
+  "wire_api": "chat",
+  "builtin": false,
+  "key_hint": "代理服务的 API Key",
+  "notes": [
+    "base_url 需指向 OpenAI 兼容端点（以 /v1 结尾）",
+    "wire_api 一般为 chat（Chat Completions）；若代理支持 Responses API 可改为 responses",
+    "百炼: https://dashscope.aliyuncs.com/compatible-mode/v1",
+    "推荐通过 LiteLLM 等网关统一转换协议后再接入"
+  ]
+}
