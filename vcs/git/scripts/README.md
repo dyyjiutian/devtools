@@ -17,7 +17,7 @@
 
 | 脚本 | 功能 |
 |------|------|
-| `../setup.sh` | 一键安装 delta、安装 `git rb` / `git bc`、写入 git config、安装 shell aliases、应用 status/pull/fetch 优化 |
+| `../setup.sh` | 一键安装 delta、安装 `git rb` / `git bc` / `git wc`、写入 git config、安装 shell aliases、应用 status/pull/fetch 优化 |
 | `alias.sh` | 向 `~/.zshrc` 或 `~/.bashrc` 注入 Git 快捷函数 |
 | `git_config.sh` | 交互式设置 Git 全局配置（`~/.gitconfig`） |
 
@@ -137,14 +137,16 @@ git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
 |------|------|
 | `git rb [branch]` | 拉取远端默认分支并 rebase 当前分支；传参时使用指定目标分支 |
 | `git rb --help` | 显示用法和示例 |
-| `git bc [branch] [--dry-run]` | 删除已合入目标远端分支的本地分支，支持试运行 |
+| `git bc [branch] [--dry-run]` | 删除已合入目标远端分支的本地分支（含 merged / rebase），支持试运行；worktree 中的分支请用 `git wc` |
 | `git bc --help` | 显示用法、安全规则和示例 |
+| `git wc [branch] [--dry-run]` | 删除已合入的 linked worktree 及其本地分支（含 merged / rebase），支持试运行 |
+| `git wc --help` | 显示用法、安全规则和示例 |
 | `git review` | 自动识别 origin 平台，向远端主干分支创建 GitHub PR / GitLab MR / Gerrit review |
 | `git review <branch>` | 指定目标分支创建 review |
 
 平台识别规则与 `alias.sh` 安装的 `gitreview` 保持一致：GitHub 使用 `gh pr create --fill --base <主干>`，GitLab 使用 push options 创建 MR，其他 remote 默认按 Gerrit 推送到 `refs/for/<主干>`。
 
-`git rb` / `git bc` 是安装到 `~/.local/bin` 的 Git 子命令，因此支持 `git rb --help` / `git bc --help`。`gitroot` 仍保留为 shell alias，因为 `cd` 必须发生在当前 shell 进程中；Git alias 不能改变父 shell 的当前目录。
+`git rb` / `git bc` / `git wc` 是安装到 `~/.local/bin` 的 Git 子命令，因此支持 `git rb --help` / `git bc --help` / `git wc --help`。`gitroot` 仍保留为 shell alias，因为 `cd` 必须发生在当前 shell 进程中；Git alias 不能改变父 shell 的当前目录。
 
 ---
 

@@ -6,10 +6,16 @@ usage() {
 Usage: git bc [target-branch] [--dry-run]
 
 Branch clean: delete local branches already merged into origin/<target-branch>.
+Detects both regular merges (ancestor) and rebase/squash merges (git cherry).
 When target-branch is omitted, the remote default branch from origin/HEAD is used.
+
+Only plain local branches are deleted. Branches checked out in a worktree are
+skipped — use git wc to clean those.
 
 Protected branch names are never deleted:
   main, master, develop, dev, and the target branch
+
+The current branch is also skipped.
 
 Options:
   -n, --dry-run   Show branches that would be deleted without deleting them
@@ -58,33 +64,94 @@ if ! git rev-parse --verify --quiet "origin/$target_branch" >/dev/null; then
   exit 1
 fi
 
-merged="$(git branch --merged "origin/$target_branch" \
-  | sed 's/^[* ]*//' \
-  | awk -v target="$target_branch" '
-      $0 != "" && $0 != "main" && $0 != "master" && $0 != "develop" && $0 != "dev" && $0 != target
-    ')"
+base="origin/$target_branch"
+current_branch="$(git branch --show-current 2>/dev/null || true)"
 
-if [[ -z "$merged" ]]; then
+is_protected() {
+  case "$1" in
+    main|master|develop|dev|"$target_branch") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Prints "merged" or "rebase" when the branch is safe to delete; otherwise returns 1.
+merge_reason() {
+  local branch="$1"
+
+  if git merge-base --is-ancestor "$branch" "$base" 2>/dev/null; then
+    echo "merged"
+    return 0
+  fi
+
+  # git cherry: "+" = unique patch not in base, "-" = equivalent patch already in base.
+  # Empty output (no commits ahead of merge-base) is also fully landed.
+  if ! git cherry "$base" "$branch" 2>/dev/null | grep -q '^+'; then
+    echo "rebase"
+    return 0
+  fi
+
+  return 1
+}
+
+to_delete=()
+reasons=()
+skipped=()
+
+while IFS=$'\t' read -r branch worktree_path; do
+  [[ -z "$branch" ]] && continue
+
+  if is_protected "$branch"; then
+    continue
+  fi
+
+  if [[ -n "$current_branch" && "$branch" == "$current_branch" ]]; then
+    continue
+  fi
+
+  if [[ -n "${worktree_path:-}" ]]; then
+    skipped+=("$branch → $worktree_path")
+    continue
+  fi
+
+  reason="$(merge_reason "$branch")" || continue
+  to_delete+=("$branch")
+  reasons+=("$reason")
+done < <(git for-each-ref --format='%(refname:short)	%(worktreepath)' refs/heads/)
+
+if [[ ${#skipped[@]} -gt 0 ]]; then
+  echo "Skipped (checked out in a worktree; use git wc):"
+  printf '  %s\n' "${skipped[@]}"
+fi
+
+if [[ ${#to_delete[@]} -eq 0 ]]; then
   echo "No merged local branches to prune."
   exit 0
 fi
 
+echo "The following local branches will be deleted:"
+for i in "${!to_delete[@]}"; do
+  printf '  %s  (%s)\n' "${to_delete[$i]}" "${reasons[$i]}"
+done
+
 if [[ "$dry_run" == "true" ]]; then
-  echo "Branches that would be deleted:"
-  echo "$merged"
   exit 0
 fi
 
-echo "The following local branches will be deleted:"
-echo "$merged"
 printf "Proceed? [y/N] "
 read -r answer
 
 case "$answer" in
   y|Y|yes|YES)
-    while IFS= read -r branch; do
-      [[ -n "$branch" ]] && git branch -d "$branch"
-    done <<< "$merged"
+    for i in "${!to_delete[@]}"; do
+      branch="${to_delete[$i]}"
+      reason="${reasons[$i]}"
+      # Rebase/squash equivalents are not ancestors, so -d would refuse them.
+      if [[ "$reason" == "merged" ]]; then
+        git branch -d "$branch"
+      else
+        git branch -D "$branch"
+      fi
+    done
     ;;
   *)
     echo "Aborted."

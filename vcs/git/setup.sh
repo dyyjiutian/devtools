@@ -25,7 +25,7 @@ show_help() {
 
 一键配置 Git 开发环境:
   - 安装 git-delta 并配置为 diff/log/show pager
-  - 安装 git rb / git bc 子命令到 ~/.local/bin
+  - 安装 git rb / git bc / git wc 子命令到 ~/.local/bin
   - 运行 scripts/git_config.sh 写入推荐 git config
   - 安装 scripts/alias.sh 中的 gitroot/gitrebase/gitprune/gitreview/gitalias
   - 写入 git status / pull / fetch / checkout 等性能与工作流优化配置
@@ -103,7 +103,7 @@ install_git_commands() {
   fi
 
   local cmd src dst
-  for cmd in git-rb git-bc; do
+  for cmd in git-rb git-bc git-wc; do
     src="$GIT_COMMAND_DIR/$cmd"
     dst="$LOCAL_BIN_DIR/$cmd"
     if [[ ! -f "$src" ]]; then
@@ -131,7 +131,7 @@ install_git_manpages() {
   fi
 
   local page src dst
-  for page in git-rb.1 git-bc.1; do
+  for page in git-rb.1 git-bc.1 git-wc.1; do
     src="$GIT_MAN_DIR/$page"
     dst="$LOCAL_MAN_DIR/$page"
     if [[ ! -f "$src" ]]; then

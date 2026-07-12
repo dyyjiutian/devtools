@@ -9,11 +9,19 @@ git-bc \- clean local branches already merged into a target branch
 .B git bc
 deletes local branches already merged into
 .BI origin/ target-branch .
+It detects regular merges (ancestor) and rebase/squash merges
+.RB ( git\ cherry
+patch equivalence).
 When
 .I target-branch
 is omitted, the remote default branch from
 .B origin/HEAD
 is used.
+.PP
+Only plain local branches are deleted. Branches checked out in a worktree are
+skipped; use
+.B git wc
+to clean those.
 .PP
 Protected branch names are never deleted:
 .B main,
@@ -21,6 +29,7 @@ Protected branch names are never deleted:
 .B develop,
 .B dev,
 and the target branch.
+The current branch is also skipped.
 .SH OPTIONS
 .TP
 .B \-n, \-\-dry-run
@@ -39,3 +48,5 @@ git bc
 git bc develop --dry-run
     Preview cleanup against origin/develop.
 .fi
+.SH SEE ALSO
+.BR git-wc (1)

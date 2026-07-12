@@ -127,6 +127,8 @@ gitalias() {
   echo "  git rb --help                – show detailed help"
   echo "  git bc [branch] [--dry-run]  – delete local branches merged into origin/<branch>"
   echo "  git bc --help                – show detailed help"
+  echo "  git wc [branch] [--dry-run]  – remove merged worktrees and delete their branches"
+  echo "  git wc --help                – show detailed help"
   echo "  git review [branch]          – create GitHub PR / GitLab MR / Gerrit review"
   echo "  gitalias   – show this help"
 }

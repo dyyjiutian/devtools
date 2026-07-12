@@ -203,7 +203,7 @@ See [`tools/vpn/README.md`](tools/vpn/README.md) for GUI client setup (V2RayXS, 
 
 ### One-Shot Setup (`vcs/git/setup.sh`)
 
-Installs git-delta, installs `git rb` / `git bc`, applies global Git defaults, adds shell aliases, and enables status/pull/fetch optimizations.
+Installs git-delta, installs `git rb` / `git bc` / `git wc`, applies global Git defaults, adds shell aliases, and enables status/pull/fetch optimizations.
 
 ```bash
 bash vcs/git/setup.sh           # Full setup
@@ -267,8 +267,10 @@ The setup also installs portable Git subcommands:
 |---------|-------------|
 | `git rb [branch]` | Fetch and rebase onto the remote default branch, or the specified branch |
 | `git rb --help` | Show usage and examples |
-| `git bc [branch] [--dry-run]` | Delete local branches already merged into the target remote branch |
+| `git bc [branch] [--dry-run]` | Delete local branches already merged into the target remote branch (merged / rebase); skips worktree branches |
 | `git bc --help` | Show usage, safety rules, and examples |
+| `git wc [branch] [--dry-run]` | Remove linked worktrees whose branches are already merged (merged / rebase), then delete those branches |
+| `git wc --help` | Show usage, safety rules, and examples |
 | `git review [branch]` | Create a GitHub PR, GitLab MR, or Gerrit review |
 
 `gitroot` remains a shell alias because changing the current directory must happen in the active shell process.

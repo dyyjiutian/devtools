@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: git wc [target-branch] [--dry-run]
+
+Worktree clean: remove linked worktrees whose branch is already merged into
+origin/<target-branch>, then delete that local branch.
+Detects both regular merges (ancestor) and rebase/squash merges (git cherry).
+When target-branch is omitted, the remote default branch from origin/HEAD is used.
+
+Also prunes stale worktree registrations (missing on disk).
+
+Never removes:
+  - the main worktree
+  - the worktree you are currently in
+  - worktrees on protected branches: main, master, develop, dev, target
+  - detached-HEAD worktrees
+
+Options:
+  -n, --dry-run   Show worktrees that would be removed without removing them
+  -h, --help      Show this help
+
+Examples:
+  git wc --dry-run
+  git wc
+  git wc develop --dry-run
+EOF
+}
+
+target_branch=""
+dry_run=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -n|--dry-run)
+      dry_run=true
+      shift
+      ;;
+    *)
+      if [[ -n "$target_branch" ]]; then
+        echo "git wc: unexpected argument: $1" >&2
+        usage >&2
+        exit 1
+      fi
+      target_branch="$1"
+      shift
+      ;;
+  esac
+done
+
+default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
+target_branch="${target_branch:-${default_branch:-main}}"
+
+echo "Fetching/pruning origin ..."
+git fetch --prune origin
+
+if ! git rev-parse --verify --quiet "origin/$target_branch" >/dev/null; then
+  echo "git wc: origin/$target_branch does not exist" >&2
+  exit 1
+fi
+
+base="origin/$target_branch"
+current_wt="$(git rev-parse --show-toplevel)"
+main_wt=""
+
+is_protected() {
+  case "$1" in
+    main|master|develop|dev|"$target_branch") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Prints "merged" or "rebase" when the branch is safe to delete; otherwise returns 1.
+merge_reason() {
+  local branch="$1"
+
+  if git merge-base --is-ancestor "$branch" "$base" 2>/dev/null; then
+    echo "merged"
+    return 0
+  fi
+
+  if ! git cherry "$base" "$branch" 2>/dev/null | grep -q '^+'; then
+    echo "rebase"
+    return 0
+  fi
+
+  return 1
+}
+
+# Prune stale worktree admin entries (paths already gone from disk).
+if [[ "$dry_run" == "true" ]]; then
+  prune_out="$(git worktree prune --dry-run 2>&1 || true)"
+  if [[ -n "$prune_out" ]]; then
+    echo "Stale worktree registrations that would be pruned:"
+    echo "$prune_out" | sed 's/^/  /'
+  fi
+else
+  git worktree prune
+fi
+
+to_remove_paths=()
+to_remove_branches=()
+reasons=()
+skipped=()
+
+wt_path=""
+wt_branch=""
+wt_detached=false
+
+flush_worktree() {
+  local reason
+
+  if [[ -z "$wt_path" ]]; then
+    return 0
+  fi
+
+  if [[ -z "$main_wt" ]]; then
+    main_wt="$wt_path"
+  fi
+
+  if [[ "$wt_path" == "$main_wt" ]]; then
+    wt_path=""
+    wt_branch=""
+    wt_detached=false
+    return 0
+  fi
+
+  if [[ "$wt_path" == "$current_wt" ]]; then
+    skipped+=("$wt_path (current worktree)")
+    wt_path=""
+    wt_branch=""
+    wt_detached=false
+    return 0
+  fi
+
+  if [[ "$wt_detached" == "true" || -z "$wt_branch" ]]; then
+    skipped+=("$wt_path (detached HEAD)")
+    wt_path=""
+    wt_branch=""
+    wt_detached=false
+    return 0
+  fi
+
+  if is_protected "$wt_branch"; then
+    skipped+=("$wt_path [$wt_branch] (protected)")
+    wt_path=""
+    wt_branch=""
+    wt_detached=false
+    return 0
+  fi
+
+  if reason="$(merge_reason "$wt_branch")"; then
+    to_remove_paths+=("$wt_path")
+    to_remove_branches+=("$wt_branch")
+    reasons+=("$reason")
+  else
+    skipped+=("$wt_path [$wt_branch] (unmerged)")
+  fi
+
+  wt_path=""
+  wt_branch=""
+  wt_detached=false
+}
+
+while IFS= read -r line; do
+  case "$line" in
+    worktree\ *)
+      flush_worktree
+      wt_path="${line#worktree }"
+      wt_branch=""
+      wt_detached=false
+      ;;
+    branch\ *)
+      wt_branch="${line#branch refs/heads/}"
+      ;;
+    detached)
+      wt_detached=true
+      ;;
+    "")
+      flush_worktree
+      ;;
+  esac
+done < <(git worktree list --porcelain; printf '\n')
+
+flush_worktree
+
+if [[ ${#skipped[@]} -gt 0 ]]; then
+  echo "Skipped:"
+  printf '  %s\n' "${skipped[@]}"
+fi
+
+if [[ ${#to_remove_paths[@]} -eq 0 ]]; then
+  echo "No merged worktrees to prune."
+  exit 0
+fi
+
+echo "The following worktrees (and branches) will be removed:"
+for i in "${!to_remove_paths[@]}"; do
+  printf '  %s  [%s]  (%s)\n' \
+    "${to_remove_paths[$i]}" "${to_remove_branches[$i]}" "${reasons[$i]}"
+done
+
+if [[ "$dry_run" == "true" ]]; then
+  exit 0
+fi
+
+printf "Proceed? [y/N] "
+read -r answer
+
+case "$answer" in
+  y|Y|yes|YES)
+    for i in "${!to_remove_paths[@]}"; do
+      path="${to_remove_paths[$i]}"
+      branch="${to_remove_branches[$i]}"
+      reason="${reasons[$i]}"
+
+      git worktree remove --force "$path"
+      echo "Removed worktree: $path"
+
+      if git show-ref --verify --quiet "refs/heads/$branch"; then
+        if [[ "$reason" == "merged" ]]; then
+          git branch -d "$branch"
+        else
+          git branch -D "$branch"
+        fi
+        echo "Deleted branch: $branch"
+      fi
+    done
+    ;;
+  *)
+    echo "Aborted."
+    ;;
+esac
