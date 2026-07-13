@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: git bc [target-branch] [--dry-run]
+Usage: git bc [target-branch] [--dry-run] [--deep] [--threshold N] [--jobs N]
 
 Branch clean: delete local branches already merged into origin/<target-branch>.
 Detects both regular merges (ancestor) and rebase/squash merges (git cherry).
@@ -17,19 +17,35 @@ Protected branch names are never deleted:
 
 The current branch is also skipped.
 
+Rebase/squash detection (git cherry) must patch-id every target-branch commit
+since a branch diverged. In very large monorepos this can be tens of thousands
+of commits per branch, so by default branches whose target is more than
+--threshold commits ahead of them are SKIPPED for the cherry check (they are
+still reported so you can rerun with --deep). Cheap branches are checked in
+parallel. Use --deep to force the exact check on every branch (slow).
+
 Options:
-  -n, --dry-run   Show branches that would be deleted without deleting them
-  -h, --help      Show this help
+  -n, --dry-run       Show branches that would be deleted without deleting them
+      --deep          Run the exact rebase/squash check on every branch (slow)
+  -t, --threshold N   Max commits target may be ahead before skipping the
+                      cherry check (default 10000; env GIT_BC_THRESHOLD)
+  -j, --jobs N        Parallel git cherry workers (default: min(nproc,8);
+                      env GIT_BC_JOBS)
+  -h, --help          Show this help
 
 Examples:
   git bc --dry-run
   git bc
   git bc develop --dry-run
+  git bc --deep --dry-run
 EOF
 }
 
 target_branch=""
 dry_run=false
+deep=false
+threshold="${GIT_BC_THRESHOLD:-10000}"
+jobs="${GIT_BC_JOBS:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +56,18 @@ while [[ $# -gt 0 ]]; do
     -n|--dry-run)
       dry_run=true
       shift
+      ;;
+    --deep)
+      deep=true
+      shift
+      ;;
+    -t|--threshold)
+      threshold="${2:-}"
+      shift 2
+      ;;
+    -j|--jobs)
+      jobs="${2:-}"
+      shift 2
       ;;
     *)
       if [[ -n "$target_branch" ]]; then
@@ -55,6 +83,11 @@ done
 
 default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
 target_branch="${target_branch:-${default_branch:-main}}"
+
+if [[ -z "$jobs" ]]; then
+  n="$(nproc 2>/dev/null || echo 4)"
+  jobs=$(( n > 8 ? 8 : n ))
+fi
 
 echo "Fetching/pruning origin ..."
 git fetch --prune origin
@@ -74,53 +107,87 @@ is_protected() {
   esac
 }
 
-# Prints "merged" or "rebase" when the branch is safe to delete; otherwise returns 1.
-merge_reason() {
-  local branch="$1"
-
-  if git merge-base --is-ancestor "$branch" "$base" 2>/dev/null; then
-    echo "merged"
-    return 0
-  fi
-
-  # git cherry: "+" = unique patch not in base, "-" = equivalent patch already in base.
-  # Empty output (no commits ahead of merge-base) is also fully landed.
-  if ! git cherry "$base" "$branch" 2>/dev/null | grep -q '^+'; then
-    echo "rebase"
-    return 0
-  fi
-
-  return 1
-}
+# Map branch -> worktree path for branches checked out in any worktree.
+declare -A wt_path=()
+cur_wt=""
+while read -r key val; do
+  case "$key" in
+    worktree) cur_wt="$val" ;;
+    branch)   wt_path["${val#refs/heads/}"]="$cur_wt" ;;
+  esac
+done < <(git worktree list --porcelain 2>/dev/null)
 
 to_delete=()
 reasons=()
-skipped=()
+skipped_wt=()
+skipped_large=()
+cherry_queue=()
 
-while IFS=$'\t' read -r branch worktree_path; do
+echo "Scanning local branches ..."
+while read -r branch; do
   [[ -z "$branch" ]] && continue
+  is_protected "$branch" && continue
+  [[ -n "$current_branch" && "$branch" == "$current_branch" ]] && continue
 
-  if is_protected "$branch"; then
+  if [[ -n "${wt_path[$branch]:-}" ]]; then
+    skipped_wt+=("$branch → ${wt_path[$branch]}")
     continue
   fi
 
-  if [[ -n "$current_branch" && "$branch" == "$current_branch" ]]; then
+  # Regular merge: branch is an ancestor of the target. Cheap, always checked.
+  if git merge-base --is-ancestor "refs/heads/$branch" "$base" 2>/dev/null; then
+    to_delete+=("$branch")
+    reasons+=("merged")
     continue
   fi
 
-  if [[ -n "${worktree_path:-}" ]]; then
-    skipped+=("$branch → $worktree_path")
-    continue
+  # Diverged: needs the expensive rebase/squash (git cherry) check.
+  if [[ "$deep" == true ]]; then
+    cherry_queue+=("$branch")
+  else
+    ahead="$(git rev-list --count "refs/heads/$branch".."$base" 2>/dev/null || echo 0)"
+    if [[ "$ahead" -le "$threshold" ]]; then
+      cherry_queue+=("$branch")
+    else
+      skipped_large+=("$branch (target ahead by $ahead)")
+    fi
   fi
+done < <(git for-each-ref --format='%(refname:short)' refs/heads/)
 
-  reason="$(merge_reason "$branch")" || continue
-  to_delete+=("$branch")
-  reasons+=("$reason")
-done < <(git for-each-ref --format='%(refname:short)	%(worktreepath)' refs/heads/)
+# Parallel rebase/squash detection with live progress.
+if [[ ${#cherry_queue[@]} -gt 0 ]]; then
+  total=${#cherry_queue[@]}
+  echo "Checking $total branch(es) for rebase/squash landing (jobs=$jobs) ..."
+  checked=0
+  while IFS=$'\t' read -r branch verdict; do
+    checked=$((checked + 1))
+    printf '  [%d/%d] %s → %s\n' "$checked" "$total" "$branch" "$verdict"
+    if [[ "$verdict" == "landed" ]]; then
+      to_delete+=("$branch")
+      reasons+=("rebase")
+    fi
+  done < <(
+    printf '%s\n' "${cherry_queue[@]}" \
+      | GIT_BC_BASE="$base" xargs -P "$jobs" -I{} bash -c '
+          b="$1"
+          # git cherry: "+" = unique patch not in base. No "+" => fully landed.
+          if git cherry "$GIT_BC_BASE" "refs/heads/$b" 2>/dev/null | grep -q "^+"; then
+            printf "%s\t%s\n" "$b" "ahead"
+          else
+            printf "%s\t%s\n" "$b" "landed"
+          fi
+        ' _ {}
+  )
+fi
 
-if [[ ${#skipped[@]} -gt 0 ]]; then
+if [[ ${#skipped_wt[@]} -gt 0 ]]; then
   echo "Skipped (checked out in a worktree; use git wc):"
-  printf '  %s\n' "${skipped[@]}"
+  printf '  %s\n' "${skipped_wt[@]}"
+fi
+
+if [[ ${#skipped_large[@]} -gt 0 ]]; then
+  echo "Skipped rebase/squash check (history too large; rerun with --deep to force):"
+  printf '  %s\n' "${skipped_large[@]}"
 fi
 
 if [[ ${#to_delete[@]} -eq 0 ]]; then
