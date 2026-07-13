@@ -35,6 +35,9 @@ go.work.sum
 .claude
 .DS_Store
 
+# Git worktrees
+.worktrees/
+
 # Bazel
 /bazel-*
 /.loopat/host/
