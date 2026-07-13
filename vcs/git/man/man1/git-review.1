@@ -1,0 +1,64 @@
+.TH GIT-REVIEW 1
+.SH NAME
+git-review \- open a code review for the current branch, auto-detecting the platform
+.SH SYNOPSIS
+.B git review
+.RI [ target-branch ]
+.SH DESCRIPTION
+.B git review
+opens a code review for the current branch, auto-detecting the platform from the
+.B origin
+remote URL.
+When
+.I target-branch
+is omitted, the remote default branch from
+.B origin/HEAD
+is used (falling back to
+.BR main ).
+.PP
+Platform detection happens in priority order:
+.TP
+.B GitHub
+URL contains
+.BR github.com :
+push the branch and run
+.B gh pr create --fill --base <target>
+.RB ( gh
+CLI required).
+.TP
+.B Alibaba GitLab
+URL contains
+.BR alibaba :
+push Gerrit-style to
+.BR refs/for/<target>/<current-branch> .
+Matched before generic GitLab.
+.TP
+.B GitLab
+URL contains
+.BR gitlab :
+push with server-side merge-request options
+.RB ( merge_request.create ,
+.BR merge_request.target ).
+.TP
+.B Gerrit
+otherwise: push to
+.BR refs/for/<target> .
+.SH OPTIONS
+.TP
+.B \-h, \-\-help
+Show command help.
+.SH EXAMPLES
+.nf
+git review
+    Open a review against the remote default branch.
+
+git review main
+    Open a review targeting main.
+
+git review release/1.0
+    Open a review targeting release/1.0.
+.fi
+.SH SEE ALSO
+.BR git-rb (1),
+.BR git-bc (1),
+.BR git-wc (1)

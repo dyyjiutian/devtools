@@ -3,8 +3,8 @@
 # Interactively sets user identity and applies recommended git settings.
 #
 # Usage:
-#   ./git_config.sh            Apply all recommended git configurations
-#   ./git_config.sh --dry-run  Show what would be set without changing anything
+#   ./config.sh            Apply all recommended git configurations
+#   ./config.sh --dry-run  Show what would be set without changing anything
 
 set -euo pipefail
 
@@ -31,6 +31,8 @@ Configuration applied:
   Log/UI       color.ui, log.abbrevCommit, log.date
   Branch       branch.sort, init.defaultBranch
   Security     credential.helper, transfer.fsckObjects
+  Performance  pull.ff, rerere.enabled, status.renames, fetch.parallel,
+               protocol.version, checkout.workers, maintenance.auto
 
 Examples:
   $(basename "$0")             # interactive setup
@@ -188,6 +190,30 @@ else
     *)      echo "  delta not found — skipping" ;;
   esac
 fi
+
+# ── Status / Pull / Fetch / Checkout performance ───────────────────────────────
+
+header "Performance / Workflow"
+
+git_config pull.ff                          "only"   "avoid implicit merge commits on pull"
+git_config rebase.updateRefs                "true"   "move local branches that point into rebased range"
+git_config branch.autoSetupRebase           "always" "new tracking branches pull with rebase"
+git_config rerere.enabled                   "true"   "reuse recorded conflict resolutions"
+
+git_config core.untrackedCache              "true"   "speed up git status in large worktrees"
+git_config index.threads                    "true"   "use multiple threads for index operations"
+git_config status.renames                   "true"   "detect renames in git status"
+git_config status.submoduleSummary          "true"   "show concise submodule changes in status"
+
+git_config fetch.parallel                   "8"      "fetch multiple remotes/submodules in parallel"
+git_config submodule.fetchJobs              "8"      "fetch submodules in parallel"
+git_config fetch.writeCommitGraph           "true"   "write commit-graph after fetch"
+git_config protocol.version                 "2"      "use Git protocol v2"
+
+git_config checkout.workers                 "0"      "auto-size parallel checkout workers"
+git_config checkout.thresholdForParallelism "100"    "only parallelize larger checkouts"
+git_config maintenance.auto                 "true"   "allow incremental repository maintenance"
+git_config gc.writeCommitGraph             "true"   "write commit graph during gc"
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 

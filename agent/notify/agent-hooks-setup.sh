@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-notify.sh — Mac 端 agent 事件提示音统一管理
+# agent-hooks-setup.sh — Mac 端 agent 事件提示音统一管理
 #
 # Mac 上启动 agent-listener.sh 监听 127.0.0.1:19999，收到 "source:event" 通知后
 # 按来源（claude / codex）播放对应系统提示音。
@@ -9,21 +9,21 @@
 #   - 远端 Linux 的 Claude / Codex：经 SSH 反向隧道 (-R) 回传到 Mac 的 19999
 #
 # Usage:
-#   ./agent-notify.sh install                    # 仅在本机安装 LaunchAgent 并启动 listener
-#   ./agent-notify.sh uninstall                  # 移除 LaunchAgent 并停止 listener
-#   ./agent-notify.sh test [claude|codex|src]    # 发送一条测试通知
-#   ./agent-notify.sh hook add    <claude|codex|cursor|all> [target]  # 安装 agent 通知 hook
-#   ./agent-notify.sh hook remove <claude|codex|cursor|all> [target]  # 移除 agent 通知 hook
-#   ./agent-notify.sh hook list [target]      # 查看 hook 安装情况
-#   ./agent-notify.sh help
+#   ./agent-hooks-setup.sh install                    # 仅在本机安装 LaunchAgent 并启动 listener
+#   ./agent-hooks-setup.sh uninstall                  # 移除 LaunchAgent 并停止 listener
+#   ./agent-hooks-setup.sh test [claude|codex|src]    # 发送一条测试通知
+#   ./agent-hooks-setup.sh hook add    <claude|codex|cursor|all> [target]  # 安装 agent 通知 hook
+#   ./agent-hooks-setup.sh hook remove <claude|codex|cursor|all> [target]  # 移除 agent 通知 hook
+#   ./agent-hooks-setup.sh hook list [target]      # 查看 hook 安装情况
+#   ./agent-hooks-setup.sh -h                       # 查看帮助与支持的环境变量
 #
 # target 省略或写 local/127.0.0.1 表示本机；写 user@host 表示远端（经 SSH 安装）。
 #
 # Environment:
-#   AGENT_NOTIFY_PORT          监听/通知端口（默认 19999）
-#   AGENT_NOTIFY_SOUND         默认提示音
-#   AGENT_NOTIFY_SOUND_CLAUDE  Claude 提示音（默认 Funk.aiff）
-#   AGENT_NOTIFY_SOUND_CODEX   Codex 提示音（默认 Glass.aiff）
+#   CLIAGENT_HOOK_PORT          监听/通知端口（默认 19999）
+#   CLIAGENT_HOOK_SOUND         默认提示音
+#   CLIAGENT_HOOK_SOUND_CLAUDE  Claude 提示音（默认 Funk.aiff）
+#   CLIAGENT_HOOK_SOUND_CODEX   Codex 提示音（默认 Glass.aiff）
 
 set -euo pipefail
 
@@ -32,8 +32,8 @@ LISTENER_SCRIPT="${SCRIPT_DIR}/agent-listener.sh"
 
 # 与代码库解耦的稳定安装目录；本机 listener 副本与本机 hook 脚本都放这里，
 # 远端安装时会在远端 $HOME 下使用同样的相对布局。
-AGENT_NOTIFY_HOME="${AGENT_NOTIFY_HOME:-${HOME}/.agent-notify}"
-INSTALLED_LISTENER="${AGENT_NOTIFY_HOME}/agent-listener.sh"
+CLIAGENT_HOOK_HOME="${CLIAGENT_HOOK_HOME:-${HOME}/.cliagent-hook}"
+INSTALLED_LISTENER="${CLIAGENT_HOOK_HOME}/agent-listener.sh"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -49,11 +49,11 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
-PORT="${AGENT_NOTIFY_PORT:-${CLAUDE_LISTENER_PORT:-19999}}"
-SOUND="${AGENT_NOTIFY_SOUND:-${CLAUDE_LISTENER_SOUND:-/System/Library/Sounds/Funk.aiff}}"
-PID_FILE="${AGENT_NOTIFY_PID_FILE:-${CLAUDE_LISTENER_PID_FILE:-/tmp/agent-notify-listener.pid}}"
-LOG_FILE="${AGENT_NOTIFY_LOG_FILE:-${CLAUDE_LISTENER_LOG_FILE:-/tmp/agent-notify-listener.log}}"
-LAUNCH_AGENT_LABEL="com.devtools.agent-notify-listener"
+PORT="${CLIAGENT_HOOK_PORT:-${CLAUDE_LISTENER_PORT:-19999}}"
+SOUND="${CLIAGENT_HOOK_SOUND:-${CLAUDE_LISTENER_SOUND:-/System/Library/Sounds/Funk.aiff}}"
+PID_FILE="${CLIAGENT_HOOK_PID_FILE:-${CLAUDE_LISTENER_PID_FILE:-/tmp/cliagent-hook-listener.pid}}"
+LOG_FILE="${CLIAGENT_HOOK_LOG_FILE:-${CLAUDE_LISTENER_LOG_FILE:-/tmp/cliagent-hook-listener.log}}"
+LAUNCH_AGENT_LABEL="com.cliagent.hook.listener"
 LAUNCH_AGENT_PLIST="${HOME}/Library/LaunchAgents/${LAUNCH_AGENT_LABEL}.plist"
 
 # ────────────────────────────── 通用工具 ──────────────────────────────
@@ -117,7 +117,7 @@ launchctl_unload_agent() {
 }
 
 install_listener_copy() {
-  mkdir -p "$AGENT_NOTIFY_HOME"
+  mkdir -p "$CLIAGENT_HOOK_HOME"
   cp "$LISTENER_SCRIPT" "$INSTALLED_LISTENER"
   chmod +x "$INSTALLED_LISTENER"
   info "已复制 listener 到稳定位置: $INSTALLED_LISTENER"
@@ -139,13 +139,13 @@ write_launch_agent() {
     </array>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>AGENT_NOTIFY_PORT</key>
+        <key>CLIAGENT_HOOK_PORT</key>
         <string>${PORT}</string>
-        <key>AGENT_NOTIFY_SOUND</key>
+        <key>CLIAGENT_HOOK_SOUND</key>
         <string>${SOUND}</string>
-        <key>AGENT_NOTIFY_PID_FILE</key>
+        <key>CLIAGENT_HOOK_PID_FILE</key>
         <string>${PID_FILE}</string>
-        <key>AGENT_NOTIFY_LOG_FILE</key>
+        <key>CLIAGENT_HOOK_LOG_FILE</key>
         <string>${LOG_FILE}</string>
     </dict>
     <key>RunAtLoad</key>
@@ -173,11 +173,11 @@ cmd_start() {
     return 0
   fi
 
-  step "启动 agent-notify-listener (127.0.0.1:${PORT})"
-  AGENT_NOTIFY_PORT="$PORT" \
-  AGENT_NOTIFY_SOUND="$SOUND" \
-  AGENT_NOTIFY_PID_FILE="$PID_FILE" \
-  AGENT_NOTIFY_LOG_FILE="$LOG_FILE" \
+  step "启动 cliagent-hook-listener (127.0.0.1:${PORT})"
+  CLIAGENT_HOOK_PORT="$PORT" \
+  CLIAGENT_HOOK_SOUND="$SOUND" \
+  CLIAGENT_HOOK_PID_FILE="$PID_FILE" \
+  CLIAGENT_HOOK_LOG_FILE="$LOG_FILE" \
     nohup "$LISTENER_SCRIPT" >>"$LOG_FILE" 2>&1 &
 
   sleep 0.5
@@ -190,7 +190,7 @@ cmd_start() {
 }
 
 cmd_stop() {
-  step "停止 agent-notify-listener"
+  step "停止 cliagent-hook-listener"
 
   if [[ -f "$PID_FILE" ]]; then
     local pid
@@ -263,8 +263,8 @@ cmd_install() {
   cmd_status
   echo ""
   info "接下来给本机或远端的 agent 安装 hook，例如："
-  info "  ./agent-notify.sh hook add all              # 本机 Claude + Codex"
-  info "  ./agent-notify.sh hook add all user@remote  # 远端 Claude + Codex"
+  info "  ./agent-hooks-setup.sh hook add all              # 本机 Claude + Codex"
+  info "  ./agent-hooks-setup.sh hook add all user@remote  # 远端 Claude + Codex"
 }
 
 cmd_uninstall() {
@@ -273,10 +273,10 @@ cmd_uninstall() {
   rm -f "$LAUNCH_AGENT_PLIST"
   cmd_stop
   rm -f "$INSTALLED_LISTENER"
-  rmdir "$AGENT_NOTIFY_HOME" 2>/dev/null || true
+  rmdir "$CLIAGENT_HOOK_HOME" 2>/dev/null || true
   success "已卸载自启动并停止 listener"
   echo ""
-  info "如需移除已安装的 agent hook: ./agent-notify.sh hook remove all [user@host]"
+  info "如需移除已安装的 agent hook: ./agent-hooks-setup.sh hook remove all [user@host]"
 }
 
 # ────────────────────────────── test ──────────────────────────────
@@ -310,8 +310,8 @@ claude_hook_content() {
 set -euo pipefail
 command -v python3 >/dev/null 2>&1 || exit 0
 
-PORT="${AGENT_NOTIFY_PORT:-19999}"
-HOST="${AGENT_NOTIFY_HOST:-127.0.0.1}"
+PORT="${CLIAGENT_HOOK_PORT:-19999}"
+HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
 EVENT="${1:-stop}"
 
 MSG="$(EVENT="$EVENT" python3 -c '
@@ -377,8 +377,8 @@ codex_hook_content() {
 set -euo pipefail
 command -v python3 >/dev/null 2>&1 || exit 0
 
-PORT="${AGENT_NOTIFY_PORT:-19999}"
-HOST="${AGENT_NOTIFY_HOST:-127.0.0.1}"
+PORT="${CLIAGENT_HOOK_PORT:-19999}"
+HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
 
 MSG="$(python3 -c '
 import sys, os, json, socket
@@ -415,8 +415,8 @@ cursor_hook_content() {
 set -euo pipefail
 command -v python3 >/dev/null 2>&1 || exit 0
 
-PORT="${AGENT_NOTIFY_PORT:-19999}"
-HOST="${AGENT_NOTIFY_HOST:-127.0.0.1}"
+PORT="${CLIAGENT_HOOK_PORT:-19999}"
+HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
 
 MSG="$(python3 -c '
 import sys, os, json, socket, glob
@@ -465,7 +465,7 @@ from pathlib import Path
 
 action = sys.argv[1] if len(sys.argv) > 1 else "add"
 path = Path.home() / ".cursor" / "hooks.json"
-cmd = str(Path.home() / ".agent-notify" / "hooks" / "agent-notify-cursor.sh")
+cmd = str(Path.home() / ".cliagent-hook" / "hooks" / "cliagent-hook-cursor.sh")
 
 data = {}
 if path.exists():
@@ -512,7 +512,7 @@ from pathlib import Path
 
 action = sys.argv[1] if len(sys.argv) > 1 else "add"
 settings_path = Path.home() / ".claude" / "settings.json"
-base = str(Path.home() / ".agent-notify" / "hooks" / "agent-notify-claude.sh")
+base = str(Path.home() / ".cliagent-hook" / "hooks" / "cliagent-hook-claude.sh")
 
 # 事件 -> 传给 hook 的参数（Stop=一轮结束，Notification=需要输入）
 event_args = {"Stop": "stop", "Notification": "notification"}
@@ -563,9 +563,9 @@ from pathlib import Path
 
 action = sys.argv[1] if len(sys.argv) > 1 else "add"
 cfg = Path.home() / ".codex" / "config.toml"
-script = str(Path.home() / ".agent-notify" / "hooks" / "agent-notify-codex.sh")
-BEGIN = "# >>> devtools agent-notify BEGIN <<<"
-END = "# >>> devtools agent-notify END <<<"
+script = str(Path.home() / ".cliagent-hook" / "hooks" / "cliagent-hook-codex.sh")
+BEGIN = "# >>> cliagent-hook BEGIN <<<"
+END = "# >>> cliagent-hook END <<<"
 
 text = cfg.read_text(encoding="utf-8") if cfg.exists() else ""
 lines = text.splitlines()
@@ -621,12 +621,12 @@ apply_claude_hook() {
   if [[ "$action" == "add" ]]; then
     exec_on_target "$target" <<REMOTE
 set -euo pipefail
-HOOKS_DIR="\${HOME}/.agent-notify/hooks"
+HOOKS_DIR="\${HOME}/.cliagent-hook/hooks"
 mkdir -p "\$HOOKS_DIR"
-cat > "\$HOOKS_DIR/agent-notify-claude.sh" <<'HOOK'
+cat > "\$HOOKS_DIR/cliagent-hook-claude.sh" <<'HOOK'
 $(claude_hook_content)
 HOOK
-chmod +x "\$HOOKS_DIR/agent-notify-claude.sh"
+chmod +x "\$HOOKS_DIR/cliagent-hook-claude.sh"
 python3 - add <<'PY'
 $(claude_settings_py)
 PY
@@ -637,7 +637,7 @@ set -euo pipefail
 python3 - remove <<'PY'
 $(claude_settings_py)
 PY
-rm -f "\${HOME}/.agent-notify/hooks/agent-notify-claude.sh"
+rm -f "\${HOME}/.cliagent-hook/hooks/cliagent-hook-claude.sh"
 REMOTE
   fi
   success "Claude hook ${action} 完成 (${where})"
@@ -651,12 +651,12 @@ apply_codex_hook() {
   if [[ "$action" == "add" ]]; then
     exec_on_target "$target" <<REMOTE
 set -euo pipefail
-HOOKS_DIR="\${HOME}/.agent-notify/hooks"
+HOOKS_DIR="\${HOME}/.cliagent-hook/hooks"
 mkdir -p "\$HOOKS_DIR"
-cat > "\$HOOKS_DIR/agent-notify-codex.sh" <<'HOOK'
+cat > "\$HOOKS_DIR/cliagent-hook-codex.sh" <<'HOOK'
 $(codex_hook_content)
 HOOK
-chmod +x "\$HOOKS_DIR/agent-notify-codex.sh"
+chmod +x "\$HOOKS_DIR/cliagent-hook-codex.sh"
 python3 - add <<'PY'
 $(codex_config_py)
 PY
@@ -667,7 +667,7 @@ set -euo pipefail
 python3 - remove <<'PY'
 $(codex_config_py)
 PY
-rm -f "\${HOME}/.agent-notify/hooks/agent-notify-codex.sh"
+rm -f "\${HOME}/.cliagent-hook/hooks/cliagent-hook-codex.sh"
 REMOTE
   fi
   success "Codex notify ${action} 完成 (${where})"
@@ -681,12 +681,12 @@ apply_cursor_hook() {
   if [[ "$action" == "add" ]]; then
     exec_on_target "$target" <<REMOTE
 set -euo pipefail
-HOOKS_DIR="\${HOME}/.agent-notify/hooks"
+HOOKS_DIR="\${HOME}/.cliagent-hook/hooks"
 mkdir -p "\$HOOKS_DIR"
-cat > "\$HOOKS_DIR/agent-notify-cursor.sh" <<'HOOK'
+cat > "\$HOOKS_DIR/cliagent-hook-cursor.sh" <<'HOOK'
 $(cursor_hook_content)
 HOOK
-chmod +x "\$HOOKS_DIR/agent-notify-cursor.sh"
+chmod +x "\$HOOKS_DIR/cliagent-hook-cursor.sh"
 python3 - add <<'PY'
 $(cursor_hooks_json_py)
 PY
@@ -697,7 +697,7 @@ set -euo pipefail
 python3 - remove <<'PY'
 $(cursor_hooks_json_py)
 PY
-rm -f "\${HOME}/.agent-notify/hooks/agent-notify-cursor.sh"
+rm -f "\${HOME}/.cliagent-hook/hooks/cliagent-hook-cursor.sh"
 REMOTE
   fi
   success "Cursor hook ${action} 完成 (${where})"
@@ -710,28 +710,28 @@ list_hooks() {
 
   exec_on_target "$target" <<'REMOTE'
 set -euo pipefail
-HOOKS_DIR="${HOME}/.agent-notify/hooks"
+HOOKS_DIR="${HOME}/.cliagent-hook/hooks"
 echo "hooks 目录: $HOOKS_DIR"
-[[ -f "$HOOKS_DIR/agent-notify-claude.sh" ]] && echo "  [x] agent-notify-claude.sh" || echo "  [ ] agent-notify-claude.sh"
-[[ -f "$HOOKS_DIR/agent-notify-codex.sh" ]]  && echo "  [x] agent-notify-codex.sh"  || echo "  [ ] agent-notify-codex.sh"
-[[ -f "$HOOKS_DIR/agent-notify-cursor.sh" ]] && echo "  [x] agent-notify-cursor.sh" || echo "  [ ] agent-notify-cursor.sh"
+[[ -f "$HOOKS_DIR/cliagent-hook-claude.sh" ]] && echo "  [x] cliagent-hook-claude.sh" || echo "  [ ] cliagent-hook-claude.sh"
+[[ -f "$HOOKS_DIR/cliagent-hook-codex.sh" ]]  && echo "  [x] cliagent-hook-codex.sh"  || echo "  [ ] cliagent-hook-codex.sh"
+[[ -f "$HOOKS_DIR/cliagent-hook-cursor.sh" ]] && echo "  [x] cliagent-hook-cursor.sh" || echo "  [ ] cliagent-hook-cursor.sh"
 
 CLAUDE_SETTINGS="${HOME}/.claude/settings.json"
-if [[ -f "$CLAUDE_SETTINGS" ]] && grep -q "agent-notify-claude.sh" "$CLAUDE_SETTINGS" 2>/dev/null; then
+if [[ -f "$CLAUDE_SETTINGS" ]] && grep -q "cliagent-hook-claude.sh" "$CLAUDE_SETTINGS" 2>/dev/null; then
   echo "  [x] Claude settings.json 已挂 Stop/Notification hook"
 else
   echo "  [ ] Claude settings.json 未挂 hook"
 fi
 
 CODEX_CFG="${HOME}/.codex/config.toml"
-if [[ -f "$CODEX_CFG" ]] && grep -q "agent-notify-codex.sh" "$CODEX_CFG" 2>/dev/null; then
+if [[ -f "$CODEX_CFG" ]] && grep -q "cliagent-hook-codex.sh" "$CODEX_CFG" 2>/dev/null; then
   echo "  [x] Codex config.toml 已设置 notify"
 else
   echo "  [ ] Codex config.toml 未设置 notify"
 fi
 
 CURSOR_HOOKS="${HOME}/.cursor/hooks.json"
-if [[ -f "$CURSOR_HOOKS" ]] && grep -q "agent-notify-cursor.sh" "$CURSOR_HOOKS" 2>/dev/null; then
+if [[ -f "$CURSOR_HOOKS" ]] && grep -q "cliagent-hook-cursor.sh" "$CURSOR_HOOKS" 2>/dev/null; then
   echo "  [x] Cursor hooks.json 已挂 stop hook"
 else
   echo "  [ ] Cursor hooks.json 未挂 hook"
@@ -885,26 +885,38 @@ ${BOLD}用法:${NC}
   $(basename "$0") hook add    <claude|codex|cursor|all> [target]  安装 agent 通知 hook
   $(basename "$0") hook remove <claude|codex|cursor|all> [target]  移除 agent 通知 hook
   $(basename "$0") hook list [target]                              查看 hook 安装情况
-  $(basename "$0") help                                            显示本帮助
 
   target 省略或 local/127.0.0.1 = 本机；user@host = 远端（经 SSH 安装）
+  -h, --help                                                       显示本帮助（含环境变量）
 
 ${BOLD}提示音:${NC}
   声音    = ${SOUND}（claude / codex 共用）
   区分    = 系统通知横幅标题（Claude Code / Codex）
   端口    = ${PORT}
 
+${BOLD}环境变量（可自定义端口等，install 时会写入 LaunchAgent）:${NC}
+  CLIAGENT_HOOK_PORT       监听/通知端口（默认 19999）
+  CLIAGENT_HOOK_HOST       监听/通知地址（默认 127.0.0.1）
+  CLIAGENT_HOOK_SOUND      默认提示音（默认 /System/Library/Sounds/Funk.aiff）
+  CLIAGENT_HOOK_HOME       listener 副本与 hook 脚本安装目录（默认 ~/.cliagent-hook）
+  CLIAGENT_HOOK_PID_FILE   listener PID 文件（默认 /tmp/cliagent-hook-listener.pid）
+  CLIAGENT_HOOK_LOG_FILE   listener 日志文件（默认 /tmp/cliagent-hook-listener.log）
+
+  示例：自定义监听端口为 28888
+    CLIAGENT_HOOK_PORT=28888 ./$(basename "$0") install
+    CLIAGENT_HOOK_PORT=28888 ./$(basename "$0") hook add all user@your-linux
+
 ${BOLD}SSH 登录示例（远端 agent 通知必须带反向隧道 -R）:${NC}
 $(print_ssh_hint user@your-linux)
 ${BOLD}快速开始:${NC}
   # 本机场景
-  1. ./agent-notify.sh install
-  2. ./agent-notify.sh hook add all         # 给本机 Claude + Codex 装 hook
+  1. ./agent-hooks-setup.sh install
+  2. ./agent-hooks-setup.sh hook add all         # 给本机 Claude + Codex 装 hook
   3. 正常使用 claude / codex，完成时会听到提示音
 
   # 远端 Linux 场景
-  1. ./agent-notify.sh install
-  2. ./agent-notify.sh hook add all user@your-linux
+  1. ./agent-hooks-setup.sh install
+  2. ./agent-hooks-setup.sh hook add all user@your-linux
   3. 用上面的 SSH 命令登录远端，再运行 claude / codex
 
 EOF
@@ -913,17 +925,21 @@ EOF
 # ────────────────────────────── 入口 ──────────────────────────────
 
 main() {
-  require_macos
-
-  local cmd="${1:-help}"
+  local cmd="${1:-}"
   shift || true
+
+  # help / 无参数不依赖 macOS，方便随处查看用法与环境变量
+  case "$cmd" in
+    ""|-h|--help) usage; return 0 ;;
+  esac
+
+  require_macos
 
   case "$cmd" in
     install)        cmd_install ;;
     uninstall)      cmd_uninstall ;;
     test)           cmd_test "$@" ;;
     hook)           cmd_hook "$@" ;;
-    help|-h|--help) usage ;;
     *)
       error "未知命令: $cmd"
       usage

@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: git review [target-branch]
+
+Open a code review for the current branch, auto-detecting the platform from the
+origin remote URL. When target-branch is omitted, the remote default branch from
+origin/HEAD is used (falling back to main).
+
+Platform detection (in priority order):
+  GitHub          URL contains github.com   -> git push -u origin HEAD && gh pr create --fill --base <target>
+  Alibaba GitLab  URL contains alibaba      -> git push origin HEAD:refs/for/<target>/<current-branch>
+  GitLab          URL contains gitlab       -> git push -u origin HEAD -o merge_request.create ...
+  Gerrit          otherwise                 -> git push origin HEAD:refs/for/<target>
+
+GitHub requires the gh CLI (https://cli.github.com). Alibaba GitLab uses the
+Gerrit-style refs/for/<target>/<branch> push and is matched before generic GitLab.
+
+Examples:
+  git review
+  git review main
+  git review release/1.0
+EOF
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
+remote_url="$(git remote get-url origin 2>/dev/null || true)"
+if [[ -z "$remote_url" ]]; then
+  echo "git review: no 'origin' remote found" >&2
+  exit 1
+fi
+
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
+  echo "git review: could not determine current branch" >&2
+  exit 1
+fi
+
+default_branch="${1:-}"
+if [[ -z "$default_branch" ]]; then
+  default_branch="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')"
+fi
+default_branch="${default_branch:-main}"
+
+if echo "$remote_url" | grep -qi 'github\.com'; then
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "git review: 'gh' CLI not found (install: brew install gh)" >&2
+    exit 1
+  fi
+  echo "Creating GitHub PR: $branch -> $default_branch"
+  git push -u origin HEAD
+  gh pr create --fill --base "$default_branch"
+elif echo "$remote_url" | grep -qi 'alibaba'; then
+  echo "Pushing Alibaba GitLab review: $branch -> refs/for/$default_branch/$branch"
+  git push origin "HEAD:refs/for/$default_branch/$branch"
+elif echo "$remote_url" | grep -qi 'gitlab'; then
+  echo "Creating GitLab MR: $branch -> $default_branch"
+  git push -u origin HEAD \
+    -o merge_request.create \
+    -o "merge_request.target=$default_branch" \
+    -o merge_request.remove_source_branch
+else
+  echo "Pushing Gerrit review: $branch -> refs/for/$default_branch"
+  git push origin "HEAD:refs/for/$default_branch"
+fi

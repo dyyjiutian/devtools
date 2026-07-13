@@ -192,7 +192,7 @@ install_terminal() {
 }
 
 install_git_config() {
-  run_script "$REPO_ROOT/vcs/git/scripts/git_config.sh"
+  run_script "$REPO_ROOT/vcs/git/scripts/config.sh"
 }
 
 # ─── 交互式菜单 ──────────────────────────────────────────────────────────────

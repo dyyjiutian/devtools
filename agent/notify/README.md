@@ -11,32 +11,32 @@
 
 | 脚本 | 平台 | 说明 |
 |------|------|------|
-| `agent-notify.sh` | macOS | 管理 listener、LaunchAgent，以及本机/远端的 Claude / Codex / Cursor hook |
+| `agent-hooks-setup.sh` | macOS | 管理 listener、LaunchAgent，以及本机/远端的 Claude / Codex / Cursor hook |
 | `agent-listener.sh` | macOS | python3 socket server：解析通知、播放提示音、弹系统通知 |
 
 > listener 与 hook 均依赖 `python3`（macOS 自带）与 `nc`。
 
-安装后 `agent-listener.sh` 会被复制到与代码库解耦的稳定位置 `~/.agent-notify/agent-listener.sh`，即使代码库被移动/删除，开机自启仍可用。本机与远端安装的 hook 脚本也统一放在各自 `~/.agent-notify/hooks/` 下。
+安装后 `agent-listener.sh` 会被复制到与代码库解耦的稳定位置 `~/.cliagent-hook/agent-listener.sh`，即使代码库被移动/删除，开机自启仍可用。本机与远端安装的 hook 脚本也统一放在各自 `~/.cliagent-hook/hooks/` 下。
 
 ## 快速开始
 
 ```bash
 cd agent/notify
-chmod +x agent-notify.sh agent-listener.sh
+chmod +x agent-hooks-setup.sh agent-listener.sh
 ```
 
 **本机场景（本机跑 claude / codex）**
 
 ```bash
-./agent-notify.sh install        # 装 LaunchAgent 并启动 listener
-./agent-notify.sh hook add all   # 给本机 Claude + Codex 装 hook
+./agent-hooks-setup.sh install        # 装 LaunchAgent 并启动 listener
+./agent-hooks-setup.sh hook add all   # 给本机 Claude + Codex 装 hook
 ```
 
 **远端 Linux 场景（SSH 到远端跑 claude / codex）**
 
 ```bash
-./agent-notify.sh install
-./agent-notify.sh hook add all user@your-linux
+./agent-hooks-setup.sh install
+./agent-hooks-setup.sh hook add all user@your-linux
 ssh -R 19999:127.0.0.1:19999 -o ExitOnForwardFailure=yes user@your-linux
 ```
 
@@ -46,13 +46,13 @@ ssh -R 19999:127.0.0.1:19999 -o ExitOnForwardFailure=yes user@your-linux
 
 | 命令 | 说明 |
 |------|------|
-| `./agent-notify.sh install` | 仅在本机安装 LaunchAgent 开机自启并启动 listener |
-| `./agent-notify.sh uninstall` | 移除 LaunchAgent 并停止 listener |
-| `./agent-notify.sh test [claude\|codex\|src]` | 发送一条测试通知（默认 `source=manual`） |
-| `./agent-notify.sh hook add <claude\|codex\|cursor\|all> [target]` | 安装 agent 通知 hook |
-| `./agent-notify.sh hook remove <claude\|codex\|cursor\|all> [target]` | 移除 agent 通知 hook |
-| `./agent-notify.sh hook list [target]` | 查看 hook 安装情况 |
-| `./agent-notify.sh help` | 显示帮助（含 SSH 反向隧道示例） |
+| `./agent-hooks-setup.sh install` | 仅在本机安装 LaunchAgent 开机自启并启动 listener |
+| `./agent-hooks-setup.sh uninstall` | 移除 LaunchAgent 并停止 listener |
+| `./agent-hooks-setup.sh test [claude\|codex\|src]` | 发送一条测试通知（默认 `source=manual`） |
+| `./agent-hooks-setup.sh hook add <claude\|codex\|cursor\|all> [target]` | 安装 agent 通知 hook |
+| `./agent-hooks-setup.sh hook remove <claude\|codex\|cursor\|all> [target]` | 移除 agent 通知 hook |
+| `./agent-hooks-setup.sh hook list [target]` | 查看 hook 安装情况 |
+| `./agent-hooks-setup.sh help` | 显示帮助（含 SSH 反向隧道示例） |
 
 `target` 省略或写 `local` / `127.0.0.1` 表示本机；写 `user@host` 表示远端（经 SSH 安装）。
 
@@ -63,9 +63,9 @@ ssh -R 19999:127.0.0.1:19999 -o ExitOnForwardFailure=yes user@your-linux
 - **Codex**：在目标 `~/.codex/config.toml` 用托管块维护 `notify`，触发时发送 `codex:<type>`（如 `codex:agent_turn_complete`）。
 
   ```toml
-  # >>> devtools agent-notify BEGIN <<<
-  notify = ["/Users/you/.agent-notify/hooks/agent-notify-codex.sh"]
-  # >>> devtools agent-notify END <<<
+  # >>> cliagent-hook BEGIN <<<
+  notify = ["/Users/you/.cliagent-hook/hooks/cliagent-hook-codex.sh"]
+  # >>> cliagent-hook END <<<
   ```
 
   为避免 TOML 重复键，`add` 时会移除托管块外已有的顶层 `notify`，其余配置保留。
@@ -103,7 +103,7 @@ listener 映射为系统通知（三行：title / subtitle / body）：
 
 ## 提示音与通知
 
-- **声音**：所有来源共用同一个 `AGENT_NOTIFY_SOUND`（默认 `Funk.aiff`）。
+- **声音**：所有来源共用同一个 `CLIAGENT_HOOK_SOUND`（默认 `Funk.aiff`）。
 - **区分**：横幅 title 区分应用（`Claude Code` / `Codex` / `Cursor Agent`），subtitle 显示 `项目名 · 会话标题`，body 显示 `Local/Remote · 主机名`。
 - 通知横幅使用 `osascript` 弹出，**首次可能需要在「系统设置 → 通知」中允许**其显示，否则只有声音、没有横幅。
 
@@ -113,19 +113,19 @@ listener 映射为系统通知（三行：title / subtitle / body）：
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `AGENT_NOTIFY_PORT` | `19999` | 监听端口 |
-| `AGENT_NOTIFY_HOST` | `127.0.0.1` | 绑定地址 |
-| `AGENT_NOTIFY_SOUND` | `/System/Library/Sounds/Funk.aiff` | 提示音文件 |
-| `AGENT_NOTIFY_HOME` | `~/.agent-notify` | listener 副本与 hook 脚本安装目录 |
-| `AGENT_NOTIFY_PID_FILE` | `/tmp/agent-notify-listener.pid` | PID 文件 |
-| `AGENT_NOTIFY_LOG_FILE` | `/tmp/agent-notify-listener.log` | 日志路径 |
+| `CLIAGENT_HOOK_PORT` | `19999` | 监听端口 |
+| `CLIAGENT_HOOK_HOST` | `127.0.0.1` | 绑定地址 |
+| `CLIAGENT_HOOK_SOUND` | `/System/Library/Sounds/Funk.aiff` | 提示音文件 |
+| `CLIAGENT_HOOK_HOME` | `~/.cliagent-hook` | listener 副本与 hook 脚本安装目录 |
+| `CLIAGENT_HOOK_PID_FILE` | `/tmp/cliagent-hook-listener.pid` | PID 文件 |
+| `CLIAGENT_HOOK_LOG_FILE` | `/tmp/cliagent-hook-listener.log` | 日志路径 |
 
 **hook（本机 / 远端）**
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `AGENT_NOTIFY_PORT` | `19999` | 通知端口，远端应对应 SSH `-R` 端口 |
-| `AGENT_NOTIFY_HOST` | `127.0.0.1` | 通知地址，经反向隧道时为 localhost |
+| `CLIAGENT_HOOK_PORT` | `19999` | 通知端口，远端应对应 SSH `-R` 端口 |
+| `CLIAGENT_HOOK_HOST` | `127.0.0.1` | 通知地址，经反向隧道时为 localhost |
 
 ## SSH 配置（远端场景）
 

@@ -29,8 +29,9 @@ devtools/
 │   └── vpn/                      # Xray VLESS + Reality three-hop proxy
 ├── vcs/git/
 │   ├── setup.sh                  # Git one-shot setup
-│   ├── scripts/                  # git_config.sh, alias.sh
-│   └── config/github.gitconfig   # Git review aliases
+│   ├── bin/                      # Portable git subcommands: git-rb/bc/wc/review
+│   ├── man/man1/                 # man pages for the subcommands
+│   └── scripts/                  # sub-command.sh, config.sh, alias.sh
 └── agent/                        # AI agent setup and notifications
 ```
 
@@ -201,9 +202,11 @@ See [`tools/vpn/README.md`](tools/vpn/README.md) for GUI client setup (V2RayXS, 
 
 ## Git Utilities
 
+See [`vcs/git/README.md`](vcs/git/README.md) for full documentation.
+
 ### One-Shot Setup (`vcs/git/setup.sh`)
 
-Installs git-delta, installs `git rb` / `git bc` / `git wc`, applies global Git defaults, adds shell aliases, and enables status/pull/fetch optimizations.
+Installs git-delta, installs the `git rb` / `git bc` / `git wc` / `git review` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
 
 ```bash
 bash vcs/git/setup.sh           # Full setup
@@ -211,18 +214,47 @@ bash vcs/git/setup.sh --dry-run # Preview only
 bash vcs/git/setup.sh --skip-delta
 ```
 
-### Global Configuration (`vcs/git/scripts/git_config.sh`)
+### Global Configuration (`vcs/git/scripts/config.sh`)
 
-Interactive setup for `user.name`, `user.email`, and 15+ recommended global git settings. Also configures [git-delta](https://github.com/dandavison/delta) as the diff pager if it is installed.
+Interactive setup for `user.name`, `user.email`, 15+ recommended global git settings, and status/pull/fetch/checkout performance tweaks. Also configures [git-delta](https://github.com/dandavison/delta) as the diff pager if it is installed.
 
 ```bash
-bash vcs/git/scripts/git_config.sh           # Interactive setup
-bash vcs/git/scripts/git_config.sh --dry-run # Preview only
+bash vcs/git/scripts/config.sh           # Interactive setup
+bash vcs/git/scripts/config.sh --dry-run # Preview only
 ```
 
-### Shell Aliases (`vcs/git/scripts/alias.sh`)
+### Git Subcommand Installer (`vcs/git/scripts/sub-command.sh`)
 
-Injects git helper functions into `~/.zshrc` or `~/.bashrc`.
+Installs `git rb` / `git bc` / `git wc` / `git review` and their man pages to `~/.local/bin`. Runnable on its own with `--dry-run` / `--help`.
+
+```bash
+bash vcs/git/scripts/sub-command.sh           # Install
+bash vcs/git/scripts/sub-command.sh --dry-run # Preview only
+```
+
+### Portable Git Subcommands (`vcs/git/bin/`)
+
+Installed to `~/.local/bin` by setup, so they keep working even if this repo is removed. All support `--help` and auto-detect the default branch via `origin/HEAD`.
+
+| Command | Description |
+|---------|-------------|
+| `git rb [branch]` | Fetch and rebase onto the remote default branch, or the specified branch |
+| `git bc [branch] [--dry-run]` | Delete local branches already merged into the target remote branch (merged / rebase); skips worktree branches |
+| `git wc [branch] [--dry-run]` | Remove linked worktrees whose branches are already merged (merged / rebase), then delete those branches |
+| `git review [branch]` | Open a review for the current branch, auto-detecting the platform |
+
+`git review` detects the platform from the `origin` remote URL and targets the repository's default branch (override with `git review <branch>`), matched in priority order:
+
+| Platform | Detection | Action |
+|----------|-----------|--------|
+| GitHub | URL contains `github.com` | `git push -u origin HEAD` + `gh pr create --fill --base <default>` |
+| Alibaba GitLab | URL contains `alibaba` | `git push origin HEAD:refs/for/<default>/<branch>` |
+| GitLab | URL contains `gitlab` | `git push -o merge_request.create` (no extra CLI needed) |
+| Gerrit | Otherwise | `git push origin HEAD:refs/for/<default>` |
+
+### Shell Alias (`vcs/git/scripts/alias.sh`)
+
+Injects only `gitroot` into `~/.zshrc` or `~/.bashrc`. The rebase / clean / review workflows are git subcommands (above) rather than aliases; `gitroot` stays an alias because `cd` must run in the active shell process.
 
 ```bash
 bash vcs/git/scripts/alias.sh         # Install
@@ -232,18 +264,6 @@ bash vcs/git/scripts/alias.sh --clean # Remove
 | Command | Description |
 |---------|-------------|
 | `gitroot` | cd to repository root |
-| `gitrebase` | Fetch and rebase onto the default remote branch |
-| `gitprune` | Delete local branches already merged into default branch |
-| `gitreview` | Create PR / MR / Gerrit review for the current branch (auto-detects platform) |
-| `gitalias` | List all aliases |
-
-`gitreview` detects the platform from the `origin` remote URL and targets the repository's default branch:
-
-| Platform | Detection | Action |
-|----------|-----------|--------|
-| GitHub | URL contains `github.com` | `gh pr create --fill --base <default>` |
-| GitLab | URL contains `gitlab` | `git push -o merge_request.create` (no extra CLI needed) |
-| Gerrit | Otherwise | `git push origin HEAD:refs/for/<default>` |
 
 ### Delta — Enhanced Diff Pager
 
@@ -252,28 +272,6 @@ bash vcs/git/scripts/alias.sh --clean # Remove
 ```bash
 brew install git-delta   # or install via os/macos/setup.sh
 ```
-
-### Git Review gitconfig (`vcs/git/config/github.gitconfig`)
-
-```bash
-git config --global include.path ~/devtools/vcs/git/config/github.gitconfig
-```
-
-Provides `git review`, which detects `origin` and creates a GitHub PR, GitLab MR, or Gerrit review against the remote default branch. You can override the target branch with `git review <branch>`.
-
-The setup also installs portable Git subcommands:
-
-| Command | Description |
-|---------|-------------|
-| `git rb [branch]` | Fetch and rebase onto the remote default branch, or the specified branch |
-| `git rb --help` | Show usage and examples |
-| `git bc [branch] [--dry-run]` | Delete local branches already merged into the target remote branch (merged / rebase); skips worktree branches |
-| `git bc --help` | Show usage, safety rules, and examples |
-| `git wc [branch] [--dry-run]` | Remove linked worktrees whose branches are already merged (merged / rebase), then delete those branches |
-| `git wc --help` | Show usage, safety rules, and examples |
-| `git review [branch]` | Create a GitHub PR, GitLab MR, or Gerrit review |
-
-`gitroot` remains a shell alias because changing the current directory must happen in the active shell process.
 
 ## AI Agent
 

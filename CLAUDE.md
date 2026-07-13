@@ -22,11 +22,13 @@ editors/
 └── cursor/                 # Cursor editor backup/restore scripts
 
 vcs/git/
-├── scripts/
-│   ├── git_config.sh       # Interactive git global configurator
-│   └── alias.sh            # Shell aliases for git workflows
-└── config/
-    └── github.gitconfig    # GitHub-specific settings
+├── setup.sh                # Git one-shot setup
+├── bin/                    # Portable git subcommands: git-rb/bc/wc/review
+├── man/man1/               # man pages for the subcommands
+└── scripts/                # Each maps to one setup.sh step
+    ├── sub-command.sh      # Installs the git subcommands + man pages
+    ├── config.sh           # Interactive git global configurator + perf tweaks
+    └── alias.sh            # Shell alias installer (gitroot only)
 ```
 
 ## OS Initialization Scripts
@@ -76,19 +78,33 @@ Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSourc
 
 ## Git Utilities
 
-**Global Configuration** (`vcs/git/scripts/git_config.sh`):
+**Global Configuration** (`vcs/git/scripts/config.sh`):
 ```bash
-./git_config.sh          # Interactive setup for user.name, user.email, and recommended settings
-./git_config.sh --dry-run # Preview without applying
+./config.sh          # Interactive setup for user.name, user.email, and recommended settings
+./config.sh --dry-run # Preview without applying
 ```
-Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential.helper, and 15+ other recommended configs.
+Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential.helper, plus status/pull/fetch/checkout performance tweaks, and 15+ other recommended configs.
 
-**Shell Aliases** (`vcs/git/scripts/alias.sh`):
+**Git Subcommand Installer** (`vcs/git/scripts/sub-command.sh`):
 ```bash
-./alias.sh         # Install git aliases to ~/.zshrc or ~/.bashrc
-./alias.sh --clean # Remove git aliases
+./sub-command.sh          # Install git rb/bc/wc/review + man pages to ~/.local/bin
+./sub-command.sh --dry-run
 ```
-Provides: `gitroot` (cd to repo root), `gitrebase` (fetch and rebase onto default branch), `gitprune` (delete merged branches), `gitalias` (list aliases).
+
+**Portable Git Subcommands** (`vcs/git/bin/`, installed to `~/.local/bin` by `setup.sh`):
+- `git rb [branch]` - fetch and rebase onto the remote default (or given) branch
+- `git bc [branch] [--dry-run]` - delete local branches merged into the target branch
+- `git wc [branch] [--dry-run]` - remove merged linked worktrees and their branches
+- `git review [branch]` - open a review, auto-detecting the platform from origin (GitHub PR / Alibaba GitLab `refs/for/<target>/<branch>` / GitLab MR / Gerrit)
+
+These are self-contained scripts (not gitconfig aliases), so they survive removal of this repo. All support `--help` and auto-detect the default branch via `origin/HEAD`.
+
+**Shell Alias** (`vcs/git/scripts/alias.sh`):
+```bash
+./alias.sh         # Install gitroot to ~/.zshrc or ~/.bashrc
+./alias.sh --clean # Remove it
+```
+Provides only `gitroot` (cd to repo root); it stays an alias because `cd` must run in the active shell.
 
 ## Common Patterns
 

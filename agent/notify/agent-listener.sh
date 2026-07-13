@@ -2,18 +2,18 @@
 # agent-listener.sh — Mac 端通知监听器（python3 socket server）
 #
 # 监听本地端口，收到单行 JSON 通知后播放提示音并弹系统通知横幅。
-# 通常由 agent-notify.sh 或 launchd 启动，勿直接手动运行（除非调试）。
+# 通常由 agent-hooks-setup.sh 或 launchd 启动，勿直接手动运行（除非调试）。
 #
 # 协议（单行 JSON）：{"source","event","origin","cwd","message"}
 # 通知映射：title=应用名，subtitle=项目名 · 会话标题(message)，body=Local/Remote · 主机名。
 
 set -euo pipefail
 
-PORT="${AGENT_NOTIFY_PORT:-19999}"
-BIND_HOST="${AGENT_NOTIFY_HOST:-127.0.0.1}"
-SOUND="${AGENT_NOTIFY_SOUND:-/System/Library/Sounds/Funk.aiff}"
-PID_FILE="${AGENT_NOTIFY_PID_FILE:-/tmp/agent-notify-listener.pid}"
-LOG_FILE="${AGENT_NOTIFY_LOG_FILE:-/tmp/agent-notify-listener.log}"
+PORT="${CLIAGENT_HOOK_PORT:-19999}"
+BIND_HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
+SOUND="${CLIAGENT_HOOK_SOUND:-/System/Library/Sounds/Funk.aiff}"
+PID_FILE="${CLIAGENT_HOOK_PID_FILE:-/tmp/cliagent-hook-listener.pid}"
+LOG_FILE="${CLIAGENT_HOOK_LOG_FILE:-/tmp/cliagent-hook-listener.log}"
 LOCAL_HOST="$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo localhost)"
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "requires macOS" >&2; exit 1; }
@@ -22,19 +22,19 @@ command -v python3 >/dev/null 2>&1 || { echo "python3 not found" >&2; exit 1; }
 mkdir -p "$(dirname "$LOG_FILE")"
 echo $$ >"$PID_FILE"
 
-export AGENT_NOTIFY_PORT="$PORT" AGENT_NOTIFY_HOST="$BIND_HOST" AGENT_NOTIFY_SOUND="$SOUND" \
-  AGENT_NOTIFY_PID_FILE="$PID_FILE" AGENT_NOTIFY_LOG_FILE="$LOG_FILE" AGENT_NOTIFY_LOCAL_HOST="$LOCAL_HOST"
+export CLIAGENT_HOOK_PORT="$PORT" CLIAGENT_HOOK_HOST="$BIND_HOST" CLIAGENT_HOOK_SOUND="$SOUND" \
+  CLIAGENT_HOOK_PID_FILE="$PID_FILE" CLIAGENT_HOOK_LOG_FILE="$LOG_FILE" CLIAGENT_HOOK_LOCAL_HOST="$LOCAL_HOST"
 
 # 用 $0 作为占位 argv，让 ps/pkill 仍能通过 "agent-listener.sh" 匹配到进程
 exec python3 - "$0" <<'PY'
 import os, socket, subprocess, json, signal, sys, datetime
 
-PORT = int(os.environ.get("AGENT_NOTIFY_PORT", "19999"))
-HOST = os.environ.get("AGENT_NOTIFY_HOST", "127.0.0.1")
-SOUND = os.environ.get("AGENT_NOTIFY_SOUND", "/System/Library/Sounds/Funk.aiff")
-LOG_FILE = os.environ.get("AGENT_NOTIFY_LOG_FILE", "/tmp/agent-notify-listener.log")
-PID_FILE = os.environ.get("AGENT_NOTIFY_PID_FILE", "/tmp/agent-notify-listener.pid")
-LOCAL_HOST = os.environ.get("AGENT_NOTIFY_LOCAL_HOST", "")
+PORT = int(os.environ.get("CLIAGENT_HOOK_PORT", "19999"))
+HOST = os.environ.get("CLIAGENT_HOOK_HOST", "127.0.0.1")
+SOUND = os.environ.get("CLIAGENT_HOOK_SOUND", "/System/Library/Sounds/Funk.aiff")
+LOG_FILE = os.environ.get("CLIAGENT_HOOK_LOG_FILE", "/tmp/cliagent-hook-listener.log")
+PID_FILE = os.environ.get("CLIAGENT_HOOK_PID_FILE", "/tmp/cliagent-hook-listener.pid")
+LOCAL_HOST = os.environ.get("CLIAGENT_HOOK_LOCAL_HOST", "")
 TITLES = {"claude": "Claude Code", "codex": "Codex", "cursor": "Cursor Agent"}
 
 
