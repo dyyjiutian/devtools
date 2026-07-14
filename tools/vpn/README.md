@@ -240,7 +240,7 @@ sudo ./client/linux_setup.sh install \
 
 `proxy test` 会检查：
 - 常用站点连通性（不依赖当前 shell 是否已 `source` 过代理变量）：
-  - 经代理（SOCKS）：`google.com` / `github.com` / `docker.io` / `claude.ai`（403 也视为代理已通）
+  - 经代理（SOCKS）：`google.com` / `github.com` / `raw.githubusercontent.com` / `docker.io` / `claude.ai`（403 也视为代理已通）
   - 经代理（HTTP）：`api4.ipify.org`
   - 直连（验证国内站点走的是直连，不进隧道）：`www.baidu.com`
 - 基准测速（仅供粗略参考，实际速度随中继/出口节点负载波动）：

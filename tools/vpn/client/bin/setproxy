@@ -10,8 +10,8 @@
 #   setproxy on       开启终端代理（写入 proxy.env 并挂载到 shell rc）
 #   setproxy off      关闭终端代理
 #   setproxy status   查看代理状态 + 端口监听 + xray 日志查看方式
-#   setproxy test     测试代理端口 + 常用站点连通性（google/github/docker.io/
-#                     claude.ai/百度）+ 海外/国内基准测速
+#   setproxy test     测试代理端口 + 常用站点连通性（google/github/
+#                     githubusercontent/docker.io/claude.ai/百度）+ 海外/国内基准测速
 #
 # 当前 shell 立即生效:
 #   source setproxy on
@@ -38,8 +38,8 @@ usage() {
           ~/.bashrc / ~/.zshrc / ~/.profile；新开终端自动生效）
   off     关闭终端代理环境变量
   status  查看当前代理状态、端口监听情况，以及 xray 日志查看方式
-  test    测试代理端口 + 常用站点连通性（google/github/docker.io/claude.ai/
-          百度）+ 海外/国内基准测速，可用于临时排障
+  test    测试代理端口 + 常用站点连通性（google/github/githubusercontent/
+          docker.io/claude.ai/百度）+ 海外/国内基准测速，可用于临时排障
 
 当前 shell 立即生效:
   source setproxy on
@@ -320,6 +320,7 @@ do_test() {
     check_site "ipify.org       (HTTP代理) :" "$http_proxy_arg"   "https://api4.ipify.org"  false || ok=false
     check_site "google.com      (SOCKS代理):" "$socks_proxy_arg"  "https://www.google.com/" false || ok=false
     check_site "github.com      (SOCKS代理):" "$socks_proxy_arg"  "https://github.com/"     false || ok=false
+    check_site "githubusercontent.com(SOCKS):" "$socks_proxy_arg" "https://raw.githubusercontent.com/" false || ok=false
     check_site "docker.io       (SOCKS代理):" "$socks_proxy_arg"  "https://docker.io/"      false || ok=false
     check_site "claude.ai       (SOCKS代理):" "$socks_proxy_arg"  "https://claude.ai/"      true  || ok=false
     check_site "www.baidu.com   (直连)     :" ""                  "https://www.baidu.com/"  false || ok=false
