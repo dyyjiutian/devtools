@@ -235,8 +235,17 @@ sudo ./client/linux_setup.sh install \
 ./client/linux_setup.sh proxy on        # 新开终端自动生效
 ./client/linux_setup.sh proxy off       # 关闭
 ./client/linux_setup.sh proxy status    # 查看代理状态 + 端口监听 + xray 日志查看方式
-./client/linux_setup.sh proxy test      # 测试代理端口 + 实际连通性是否正常
+./client/linux_setup.sh proxy test      # 测试常用站点连通性 + 海外/国内基准测速
 ```
+
+`proxy test` 会检查：
+- 常用站点连通性（不依赖当前 shell 是否已 `source` 过代理变量）：
+  - 经代理（SOCKS）：`google.com` / `github.com` / `docker.io` / `claude.ai`（403 也视为代理已通）
+  - 经代理（HTTP）：`api4.ipify.org`
+  - 直连（验证国内站点走的是直连，不进隧道）：`www.baidu.com`
+- 基准测速（仅供粗略参考，实际速度随中继/出口节点负载波动）：
+  - 海外：经代理下载 OVH 提供的 1MB 测试文件
+  - 国内：直连下载阿里云镜像文件
 
 让**当前**终端立即生效：
 
@@ -271,7 +280,7 @@ export http_proxy=http://127.0.0.1:10809
 setproxy on
 setproxy off
 setproxy status   # 查看代理状态 + 端口监听 + xray 日志查看方式
-setproxy test     # 测试代理端口 + 实际连通性是否正常
+setproxy test     # 测试常用站点连通性 + 海外/国内基准测速
 ```
 
 `setproxy` 与 `linux_setup.sh proxy` 管理的是同一份配置文件
@@ -417,7 +426,7 @@ sudo ./relay/setup.sh --clean
 
 ```bash
 ./client/linux_setup.sh status        # 一站式状态查看
-./client/linux_setup.sh proxy test    # 临时测试代理端口 + 连通性
+./client/linux_setup.sh proxy test    # 常用站点连通性 + 海外/国内基准测速
 sudo ./client/linux_setup.sh clean    # 停止并卸载
 systemctl status xray-client          # 原生 systemd 命令
 journalctl -u xray-client -n 50 --no-pager  # 最近日志

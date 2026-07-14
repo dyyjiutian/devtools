@@ -80,7 +80,8 @@ proxy 子命令:
   proxy on      开启终端代理环境变量，写入 ~/.config/vpn/proxy.env
   proxy off     关闭终端代理环境变量
   proxy status  查看当前代理状态、端口监听情况，以及 xray 日志查看方式
-  proxy test    临时启用/禁用之外，测试代理端口 + 实际连通性是否正常
+  proxy test    测试代理端口 + 常用站点连通性（google/github/docker.io/claude.ai/
+                百度）+ 海外/国内基准测速
 
 proxy 子命令对应环境变量（可选）：
   VPN_SOCKS_HOST / VPN_SOCKS_PORT / VPN_HTTP_HOST / VPN_HTTP_PORT
@@ -729,7 +730,7 @@ ${BOLD}━━━ 终端代理（可选）━━━${RESET}
   $0 proxy on      # 写入 ~/.config/vpn/proxy.env 并自动加载到 ~/.bashrc / ~/.zshrc
   $0 proxy off     # 关闭终端代理
   $0 proxy status  # 查看当前状态 + xray 日志查看方式
-  $0 proxy test    # 测试代理端口 + 实际连通性是否正常
+  $0 proxy test    # 测试常用站点连通性 + 海外/国内基准测速
 
 ${BOLD}━━━ 全局 setproxy 命令（可选）━━━${RESET}
   ./install-setproxy.sh          # 安装 setproxy 到 ~/.local/bin
@@ -881,6 +882,47 @@ xray_log_hint() {
     echo "  实时日志 : journalctl -u xray-client -f"
 }
 
+# 站点连通性检查：proxy_arg 为空则直连（用于验证国内直连站点）
+# tolerate_403：某些站点（如 claude.ai）走 Cloudflare，403 也视为代理已通
+check_site() {
+    local label="$1" proxy_arg="$2" url="$3" tolerate_403="${4:-false}" code
+    if [[ -n "$proxy_arg" ]]; then
+        code=$(curl -x "$proxy_arg" -sSL --connect-timeout 8 --max-time 15 \
+            -o /dev/null -w "%{http_code}" "$url" 2>/dev/null) || code="000"
+    else
+        code=$(curl -sSL --connect-timeout 8 --max-time 15 \
+            -o /dev/null -w "%{http_code}" "$url" 2>/dev/null) || code="000"
+    fi
+    if [[ "$code" =~ ^2 ]] || { [[ "$tolerate_403" == "true" ]] && [[ "$code" == "403" ]]; }; then
+        echo -e "  ${label} ${GREEN}HTTP ${code}${RESET}"
+        return 0
+    fi
+    echo -e "  ${label} ${RED}HTTP ${code}${RESET}"
+    return 1
+}
+
+# 基准测速：下载固定大小的测试文件，估算吞吐率（仅供粗略参考，会随网络波动）
+speed_test() {
+    local label="$1" proxy_arg="$2" url="$3"
+    local stats code time_total size speed_bps kbps mbps
+    if [[ -n "$proxy_arg" ]]; then
+        stats=$(curl -x "$proxy_arg" -sSL --connect-timeout 10 --max-time 30 \
+            -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" "$url" 2>/dev/null) || stats="000 0 0 0"
+    else
+        stats=$(curl -sSL --connect-timeout 10 --max-time 30 \
+            -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" "$url" 2>/dev/null) || stats="000 0 0 0"
+    fi
+    read -r code time_total size speed_bps <<< "$stats"
+    if [[ "$code" =~ ^2 ]]; then
+        kbps=$(awk -v b="$speed_bps" 'BEGIN{printf "%.0f", b/1024}')
+        mbps=$(awk -v b="$speed_bps" 'BEGIN{printf "%.2f", b*8/1000000}')
+        echo -e "  ${label} ${GREEN}${kbps} KB/s（约 ${mbps} Mbps，${size} bytes，耗时 ${time_total}s）${RESET}"
+        return 0
+    fi
+    echo -e "  ${label} ${RED}下载失败 (HTTP ${code})${RESET}"
+    return 1
+}
+
 proxy_on() {
     if ! port_listening "$HTTP_PORT"; then
         warn "HTTP 代理端口 ${HTTP_HOST}:${HTTP_PORT} 未监听，请先 install 或 systemctl start xray-client"
@@ -1009,26 +1051,23 @@ proxy_test() {
         ok=false
     fi
 
-    echo ""
-    echo -e "${BOLD}━━━ 2. 连通性测试（直接经过代理端口，不依赖当前 shell 变量）━━━${RESET}"
-    local ipify_code claude_code
-    ipify_code=$(curl -x "http://${HTTP_HOST}:${HTTP_PORT}" -sSL --connect-timeout 10 \
-        -o /dev/null -w "%{http_code}" https://api4.ipify.org 2>/dev/null) || ipify_code="000"
-    if [[ "$ipify_code" =~ ^2 ]]; then
-        echo -e "  ipify.org  (HTTP代理) : ${GREEN}HTTP ${ipify_code}${RESET}"
-    else
-        echo -e "  ipify.org  (HTTP代理) : ${RED}HTTP ${ipify_code}${RESET}"
-        ok=false
-    fi
+    local http_proxy_arg="http://${HTTP_HOST}:${HTTP_PORT}"
+    local socks_proxy_arg="socks5h://${SOCKS_HOST}:${SOCKS_PORT}"
 
-    claude_code=$(curl -x "socks5h://${SOCKS_HOST}:${SOCKS_PORT}" -sSL --connect-timeout 10 \
-        -o /dev/null -w "%{http_code}" https://claude.ai/ 2>/dev/null) || claude_code="000"
-    if [[ "$claude_code" =~ ^2 ]] || [[ "$claude_code" == "403" ]]; then
-        echo -e "  claude.ai  (SOCKS代理): ${GREEN}HTTP ${claude_code}${RESET}（403 也可能表示代理已通，属 Cloudflare 策略）"
-    else
-        echo -e "  claude.ai  (SOCKS代理): ${RED}HTTP ${claude_code}${RESET}"
-        ok=false
-    fi
+    echo ""
+    echo -e "${BOLD}━━━ 2. 常用站点连通性（海外经代理 / 国内直连，不依赖当前 shell 变量）━━━${RESET}"
+    check_site "ipify.org       (HTTP代理) :" "$http_proxy_arg"   "https://api4.ipify.org"  false || ok=false
+    check_site "google.com      (SOCKS代理):" "$socks_proxy_arg"  "https://www.google.com/" false || ok=false
+    check_site "github.com      (SOCKS代理):" "$socks_proxy_arg"  "https://github.com/"     false || ok=false
+    check_site "docker.io       (SOCKS代理):" "$socks_proxy_arg"  "https://docker.io/"      false || ok=false
+    check_site "claude.ai       (SOCKS代理):" "$socks_proxy_arg"  "https://claude.ai/"      true  || ok=false
+    check_site "www.baidu.com   (直连)     :" ""                  "https://www.baidu.com/"  false || ok=false
+    echo -e "  ${YELLOW}提示：claude.ai 出现 403 也可能是代理已通，属 Cloudflare 策略${RESET}"
+
+    echo ""
+    echo -e "${BOLD}━━━ 3. 基准测速（海外经代理 / 国内直连，仅供粗略参考）━━━${RESET}"
+    speed_test "海外(经代理) OVH 1MB 测试文件:" "$socks_proxy_arg" "https://proof.ovh.net/files/1Mb.dat" || ok=false
+    speed_test "国内(直连)   阿里云镜像     :" "" "https://mirrors.aliyun.com/centos/7/isos/x86_64/CentOS-7-x86_64-Everything-2009.torrent" || ok=false
 
     echo ""
     if $ok; then
