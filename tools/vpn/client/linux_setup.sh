@@ -7,17 +7,23 @@
 #   install   安装并配置 Xray 客户端（默认；可省略子命令直接传 --uuid=...）
 #   status    查看运行 / 配置 / 连通性状态
 #   clean     停止并卸载 Xray 客户端
-#   proxy     管理当前用户的终端代理环境变量（on | off | status）
+#   proxy     管理当前用户的终端代理环境变量（on | off | status | test）
 #
 # 用法示例：
 #   sudo ./linux_setup.sh install \
 #        --relay-ip=198.51.100.10 \
 #        --uuid=<UUID> --public-key=<PUB_KEY> --short-id=<SHORT_ID>
+#   sudo ./linux_setup.sh install --vless="vless://<uuid>@<host>:<port>?...&pbk=...&sid=...#tag"
+#   （--vless 与 --uuid/--public-key/--short-id 二者只可选其一，不能同时使用）
 #   sudo ./linux_setup.sh status
 #   sudo ./linux_setup.sh clean
 #   ./linux_setup.sh proxy on
 #   ./linux_setup.sh proxy off
 #   ./linux_setup.sh proxy status
+#   ./linux_setup.sh proxy test
+#
+# 提示：也可执行 ./install-setproxy.sh 安装独立的 setproxy 命令到
+#      ~/.local/bin，之后任意目录下可直接执行 setproxy on/off/status/test。
 # =============================================================================
 
 set -euo pipefail
@@ -40,9 +46,10 @@ usage() {
     cat <<'HELP'
 用法:
   sudo ./linux_setup.sh install --uuid=<UUID> --public-key=<KEY> --short-id=<SID> [OPTIONS]
+  sudo ./linux_setup.sh install --vless="vless://<uuid>@<host>:<port>?...#tag"
   sudo ./linux_setup.sh status
   sudo ./linux_setup.sh clean
-  ./linux_setup.sh proxy on | off | status
+  ./linux_setup.sh proxy on | off | status | test
 
 子命令:
   install   安装并配置 Xray 客户端（默认；可省略，等价于 install）
@@ -50,10 +57,14 @@ usage() {
   clean     停止并卸载 Xray 客户端及配置
   proxy     管理终端环境变量代理（写入 ~/.config/vpn/proxy.env，自动加载到 ~/.bashrc / ~/.zshrc）
 
-install 必需参数（从出口节点 cat /root/.vpn_exit_config 获取）:
-  --uuid=UUID          VLESS 用户 UUID
-  --public-key=KEY     Reality 公钥
-  --short-id=SID       Reality Short ID
+install 必需参数（两种方式二选一，不能同时使用）:
+  方式一：--vless=<LINK>  直接传入完整 VLESS 链接（出口节点部署输出会打印该链接）
+       sudo ./linux_setup.sh install --vless="vless://<UUID>@<HOST>:<PORT>?encryption=none&flow=xtls-rprx-vision&security=reality&sni=<SNI>&fp=chrome&pbk=<PUBKEY>&sid=<SID>&type=tcp&headerType=none#标签"
+     注意：需用引号包裹整个 --vless= 参数，否则 shell 会把 & 当作后台执行符处理。
+     可解析：uuid / 中继 host:port / pbk / sid / sni / fp / flow / spx。
+  方式二：手动指定三个必需参数
+       --uuid=UUID --public-key=KEY --short-id=SID
+  若同时提供 --vless 与 --uuid/--public-key/--short-id 中任意一个，脚本会报错退出。
 
 install 可选参数:
   --relay-ip=IP        中继节点 IP（默认 198.51.100.10）
@@ -64,6 +75,12 @@ install 可选参数:
   --dry-run            仅预览，不实际执行
   --no-mirror          仅从 GitHub 下载，禁用国内镜像
   --force              跳过中继 TCP 连通性预检
+
+proxy 子命令:
+  proxy on      开启终端代理环境变量，写入 ~/.config/vpn/proxy.env
+  proxy off     关闭终端代理环境变量
+  proxy status  查看当前代理状态、端口监听情况，以及 xray 日志查看方式
+  proxy test    临时启用/禁用之外，测试代理端口 + 实际连通性是否正常
 
 proxy 子命令对应环境变量（可选）：
   VPN_SOCKS_HOST / VPN_SOCKS_PORT / VPN_HTTP_HOST / VPN_HTTP_PORT
@@ -94,6 +111,8 @@ PUBLIC_KEY=""
 SHORT_ID=""
 SNI="www.icloud.com"
 FINGERPRINT="chrome"
+FLOW="xtls-rprx-vision"
+SPIDER_X="/"
 SOCKS_PORT=10808
 HTTP_PORT=10809
 PROXY_ACTION=""
@@ -114,8 +133,116 @@ HTTP_HOST="${VPN_HTTP_HOST:-127.0.0.1}"
 [[ -n "${VPN_SOCKS_PORT:-}" ]] && SOCKS_PORT="$VPN_SOCKS_PORT"
 [[ -n "${VPN_HTTP_PORT:-}"  ]] && HTTP_PORT="$VPN_HTTP_PORT"
 
+# ── VLESS 链接解析（install 的另一种参数输入方式）───────────────────────────
+url_decode() {
+    local data="${1//+/ }"
+    printf '%b' "${data//%/\\x}"
+}
+
+parse_vless_link() {
+    local link="$1"
+    local body fragment query hostport host port uuid_part
+    local enc_v="" sec_v=""
+
+    body="${link#vless://}"
+
+    fragment=""
+    if [[ "$body" == *'#'* ]]; then
+        fragment="${body#*#}"
+        body="${body%%#*}"
+    fi
+
+    if [[ "$body" != *'@'* ]]; then
+        error "无效的 VLESS 链接：缺少 <uuid>@<host> 部分"
+        exit 1
+    fi
+    uuid_part="${body%%@*}"
+    body="${body#*@}"
+
+    query=""
+    if [[ "$body" == *'?'* ]]; then
+        query="${body#*\?}"
+        hostport="${body%%\?*}"
+    else
+        hostport="$body"
+    fi
+
+    host="${hostport%%:*}"
+    port="${hostport#*:}"
+    if [[ -z "$host" || -z "$port" || "$host" == "$hostport" ]]; then
+        error "无效的 VLESS 链接：缺少 <host>:<port> 部分"
+        exit 1
+    fi
+
+    UUID="$uuid_part"
+    RELAY_IP="$host"
+    RELAY_PORT="$port"
+
+    local pair key key_lc value type_v="" header_v=""
+    IFS='&' read -ra __vless_pairs <<< "$query"
+    for pair in "${__vless_pairs[@]}"; do
+        [[ -z "$pair" ]] && continue
+        key="${pair%%=*}"
+        key_lc="$(echo "$key" | tr '[:upper:]' '[:lower:]')"
+        value="$(url_decode "${pair#*=}")"
+        case "$key_lc" in
+            pbk)        PUBLIC_KEY="$value" ;;
+            sid)        SHORT_ID="$value" ;;
+            sni)        SNI="$value" ;;
+            fp)         FINGERPRINT="$value" ;;
+            flow)       FLOW="$value" ;;
+            spx)        SPIDER_X="$value" ;;
+            encryption) enc_v="$value" ;;
+            security)   sec_v="$value" ;;
+            type)       type_v="$value" ;;
+            headertype) header_v="$value" ;;
+        esac
+    done
+
+    if [[ -n "$sec_v" && "$sec_v" != "reality" ]]; then
+        warn "VLESS 链接 security=${sec_v}，本脚本仅支持 reality，可能无法正常工作"
+    fi
+    if [[ -n "$enc_v" && "$enc_v" != "none" ]]; then
+        warn "VLESS 链接 encryption=${enc_v}，预期为 none"
+    fi
+    if [[ -n "$type_v" && "$type_v" != "tcp" ]]; then
+        warn "VLESS 链接 type=${type_v}，本脚本客户端配置仅支持 tcp，可能无法正常工作"
+    fi
+    if [[ -n "$header_v" && "$header_v" != "none" ]]; then
+        warn "VLESS 链接 headerType=${header_v}，本脚本客户端配置仅支持 none，可能无法正常工作"
+    fi
+
+    info "已从 VLESS 链接解析参数${fragment:+ [$(url_decode "$fragment")]}:"
+    info "  中继节点  : ${RELAY_IP}:${RELAY_PORT}"
+    info "  UUID      : ${UUID}"
+    info "  SNI       : ${SNI}"
+    info "  PublicKey : ${PUBLIC_KEY}"
+    info "  ShortId   : ${SHORT_ID}"
+}
+
+# 第一遍扫描：只提取 --vless= 与三个手动身份参数，用于互斥校验 + 先解析链接
+# （链接负责给出 UUID/中继地址/公钥等基础值，第二遍扫描时其它显式参数可再覆盖）
+VLESS_LINK=""
+MANUAL_PARAM_SET=false
 for arg in "$@"; do
     case $arg in
+        --vless=*)       VLESS_LINK="${arg#*=}" ;;
+        --uuid=*|--public-key=*|--short-id=*) MANUAL_PARAM_SET=true ;;
+    esac
+done
+
+if [[ -n "$VLESS_LINK" ]]; then
+    if $MANUAL_PARAM_SET; then
+        error "--vless 与 --uuid/--public-key/--short-id 不能同时使用，请二选一"
+        exit 1
+    fi
+    parse_vless_link "$VLESS_LINK"
+fi
+
+# 第二遍扫描：处理其余参数；若未使用 --vless，则 --uuid/--public-key/--short-id 在此生效
+for arg in "$@"; do
+    case $arg in
+        --vless=*)       ;; # 已在上面处理
         --relay-ip=*)    RELAY_IP="${arg#*=}" ;;
         --relay-port=*)  RELAY_PORT="${arg#*=}" ;;
         --uuid=*)        UUID="${arg#*=}" ;;
@@ -128,7 +255,7 @@ for arg in "$@"; do
         --no-mirror)     USE_MIRROR=false ;;
         --force)         FORCE_SETUP=true ;;
         --emit)          PROXY_EMIT=true ;;
-        on|off|status)   PROXY_ACTION="$arg" ;;
+        on|off|status|test) PROXY_ACTION="$arg" ;;
         --help|-h)       usage; exit 0 ;;
         *) warn "未知参数: $arg" ;;
     esac
@@ -396,7 +523,7 @@ write_client_config() {
             "users": [
               {
                 "id": "${UUID}",
-                "flow": "xtls-rprx-vision",
+                "flow": "${FLOW}",
                 "encryption": "none"
               }
             ]
@@ -412,7 +539,7 @@ write_client_config() {
           "serverName": "${SNI}",
           "publicKey": "${PUBLIC_KEY}",
           "shortId": "${SHORT_ID}",
-          "spiderX": "/"
+          "spiderX": "${SPIDER_X}"
         }
       }
     },
@@ -482,13 +609,17 @@ do_install() {
     fi
 
     if [[ -z "$UUID" || -z "$PUBLIC_KEY" || -z "$SHORT_ID" ]]; then
-        error "缺少必需参数！请从出口节点部署输出中获取并填写:"
-        error "  --uuid=<UUID> --public-key=<PUBLIC_KEY> --short-id=<SHORT_ID>"
+        error "缺少必需参数！请从出口节点部署输出中获取并填写，二选一:"
         echo ""
-        echo "示例:"
+        echo "方式一：--vless= 直接传入完整 VLESS 链接（务必用引号包裹）:"
+        echo "  sudo $0 install --vless=\"vless://<UUID>@<HOST>:<PORT>?...&pbk=...&sid=...#标签\""
+        echo ""
+        echo "方式二：手动指定三个必需参数:"
         echo "  sudo $0 install --uuid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \\"
         echo "                  --public-key=<base64_public_key> \\"
         echo "                  --short-id=<8_hex_chars>"
+        echo ""
+        echo "两者不能同时使用。"
         exit 1
     fi
 
@@ -597,7 +728,12 @@ ${BOLD}━━━ 代理端口 ━━━${RESET}
 ${BOLD}━━━ 终端代理（可选）━━━${RESET}
   $0 proxy on      # 写入 ~/.config/vpn/proxy.env 并自动加载到 ~/.bashrc / ~/.zshrc
   $0 proxy off     # 关闭终端代理
-  $0 proxy status  # 查看当前状态
+  $0 proxy status  # 查看当前状态 + xray 日志查看方式
+  $0 proxy test    # 测试代理端口 + 实际连通性是否正常
+
+${BOLD}━━━ 全局 setproxy 命令（可选）━━━${RESET}
+  ./install-setproxy.sh          # 安装 setproxy 到 ~/.local/bin
+  setproxy on | off | status | test  # 之后任意目录可直接使用
 
 ${BOLD}━━━ 浏览器配置 ━━━${RESET}
   SwitchyOmega → SOCKS5 → 127.0.0.1:${SOCKS_PORT}
@@ -738,6 +874,13 @@ clear_current_shell() {
     fi
 }
 
+xray_log_hint() {
+    echo -e "${BOLD}━━━ 查看 Xray 是否正常工作 ━━━${RESET}"
+    echo "  服务状态 : systemctl status xray-client"
+    echo "  最近日志 : journalctl -u xray-client -n 50 --no-pager"
+    echo "  实时日志 : journalctl -u xray-client -f"
+}
+
 proxy_on() {
     if ! port_listening "$HTTP_PORT"; then
         warn "HTTP 代理端口 ${HTTP_HOST}:${HTTP_PORT} 未监听，请先 install 或 systemctl start xray-client"
@@ -833,6 +976,68 @@ proxy_status() {
             echo "  ${rc}: 已安装"
         fi
     done
+
+    echo ""
+    xray_log_hint
+}
+
+proxy_test() {
+    local ok=true
+
+    echo -e "${BOLD}━━━ 1. 配置与端口 ━━━${RESET}"
+    if [[ -f "$PROXY_ENV" ]]; then
+        echo -e "  proxy.env: ${GREEN}存在${RESET} (${PROXY_ENV})"
+    else
+        echo -e "  proxy.env: ${YELLOW}不存在${RESET}（尚未 proxy on，以下仍按固定端口测试）"
+    fi
+    if [[ -n "${http_proxy:-}${all_proxy:-}" ]]; then
+        echo -e "  当前 shell 环境变量: ${GREEN}已设置${RESET}"
+    else
+        echo -e "  当前 shell 环境变量: ${YELLOW}未设置${RESET}（不影响本次测试，测试直接使用固定端口）"
+    fi
+
+    if port_listening "$HTTP_PORT"; then
+        echo -e "  HTTP  端口 ${HTTP_PORT}: ${GREEN}监听中${RESET}"
+    else
+        echo -e "  HTTP  端口 ${HTTP_PORT}: ${RED}未监听${RESET}"
+        ok=false
+    fi
+    if port_listening "$SOCKS_PORT"; then
+        echo -e "  SOCKS 端口 ${SOCKS_PORT}: ${GREEN}监听中${RESET}"
+    else
+        echo -e "  SOCKS 端口 ${SOCKS_PORT}: ${RED}未监听${RESET}"
+        ok=false
+    fi
+
+    echo ""
+    echo -e "${BOLD}━━━ 2. 连通性测试（直接经过代理端口，不依赖当前 shell 变量）━━━${RESET}"
+    local ipify_code claude_code
+    ipify_code=$(curl -x "http://${HTTP_HOST}:${HTTP_PORT}" -fsSL --connect-timeout 10 \
+        -o /dev/null -w "%{http_code}" https://api4.ipify.org 2>/dev/null) || ipify_code="000"
+    if [[ "$ipify_code" =~ ^2 ]]; then
+        echo -e "  ipify.org  (HTTP代理) : ${GREEN}HTTP ${ipify_code}${RESET}"
+    else
+        echo -e "  ipify.org  (HTTP代理) : ${RED}HTTP ${ipify_code}${RESET}"
+        ok=false
+    fi
+
+    claude_code=$(curl -x "socks5h://${SOCKS_HOST}:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+        -o /dev/null -w "%{http_code}" https://claude.ai/ 2>/dev/null) || claude_code="000"
+    if [[ "$claude_code" =~ ^2 ]] || [[ "$claude_code" == "403" ]]; then
+        echo -e "  claude.ai  (SOCKS代理): ${GREEN}HTTP ${claude_code}${RESET}（403 也可能表示代理已通，属 Cloudflare 策略）"
+    else
+        echo -e "  claude.ai  (SOCKS代理): ${RED}HTTP ${claude_code}${RESET}"
+        ok=false
+    fi
+
+    echo ""
+    if $ok; then
+        success "代理测试通过：端口监听正常，且可经代理访问外网"
+    else
+        error "代理测试未完全通过，请检查 Xray 客户端是否正常运行"
+        echo ""
+        xray_log_hint
+    fi
 }
 
 do_proxy() {
@@ -840,7 +1045,8 @@ do_proxy() {
         on)     proxy_on ;;
         off)    proxy_off ;;
         status) proxy_status ;;
-        "") error "请指定动作: $0 proxy on | off | status"; exit 1 ;;
+        test)   proxy_test ;;
+        "") error "请指定动作: $0 proxy on | off | status | test"; exit 1 ;;
         *)  error "未知 proxy 动作: $PROXY_ACTION"; exit 1 ;;
     esac
 }
