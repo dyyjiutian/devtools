@@ -80,8 +80,8 @@ proxy 子命令:
   proxy on      开启终端代理环境变量，写入 ~/.config/vpn/proxy.env
   proxy off     关闭终端代理环境变量
   proxy status  查看当前代理状态、端口监听情况，以及 xray 日志查看方式
-  proxy test    测试代理端口 + 常用站点连通性（google/github/docker.io/claude.ai/
-                百度）+ 海外/国内基准测速
+  proxy test    测试代理端口 + 常用站点连通性（google/github/githubusercontent/
+                docker.io/claude.ai/百度）+ 海外/国内基准测速
 
 proxy 子命令对应环境变量（可选）：
   VPN_SOCKS_HOST / VPN_SOCKS_PORT / VPN_HTTP_HOST / VPN_HTTP_PORT
@@ -1065,6 +1065,7 @@ proxy_test() {
     check_site "ipify.org       (HTTP代理) :" "$http_proxy_arg"   "https://api4.ipify.org"  false || ok=false
     check_site "google.com      (SOCKS代理):" "$socks_proxy_arg"  "https://www.google.com/" false || ok=false
     check_site "github.com      (SOCKS代理):" "$socks_proxy_arg"  "https://github.com/"     false || ok=false
+    check_site "githubusercontent.com(SOCKS):" "$socks_proxy_arg" "https://raw.githubusercontent.com/" false || ok=false
     check_site "docker.io       (SOCKS代理):" "$socks_proxy_arg"  "https://docker.io/"      false || ok=false
     check_site "claude.ai       (SOCKS代理):" "$socks_proxy_arg"  "https://claude.ai/"      true  || ok=false
     check_site "www.baidu.com   (直连)     :" ""                  "https://www.baidu.com/"  false || ok=false
