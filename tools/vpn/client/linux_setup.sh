@@ -705,7 +705,7 @@ do_install() {
         info "测试通过代理访问 api4.ipify.org..."
         local HTTP_CODE
         HTTP_CODE=$(curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" \
-            -fsSL --connect-timeout 15 \
+            -sSL --connect-timeout 15 \
             -o /dev/null -w "%{http_code}" \
             https://api4.ipify.org 2>/dev/null) || HTTP_CODE="000"
 
@@ -801,10 +801,10 @@ do_status() {
 
     echo ""
     echo -e "${BOLD}━━━ 连通性测试（通过代理访问）━━━${RESET}"
-    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -sSL --connect-timeout 10 \
         -o /dev/null -w "  ipify.org HTTP: %{http_code}\n" https://api4.ipify.org 2>/dev/null \
         || echo "  ipify.org 连接失败"
-    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -sSL --connect-timeout 10 \
         -o /dev/null -w "  claude.ai HTTP: %{http_code}\n" https://claude.ai/ 2>/dev/null \
         || echo "  claude.ai 连接失败（403 也可能表示代理已通）"
 }
@@ -1012,7 +1012,7 @@ proxy_test() {
     echo ""
     echo -e "${BOLD}━━━ 2. 连通性测试（直接经过代理端口，不依赖当前 shell 变量）━━━${RESET}"
     local ipify_code claude_code
-    ipify_code=$(curl -x "http://${HTTP_HOST}:${HTTP_PORT}" -fsSL --connect-timeout 10 \
+    ipify_code=$(curl -x "http://${HTTP_HOST}:${HTTP_PORT}" -sSL --connect-timeout 10 \
         -o /dev/null -w "%{http_code}" https://api4.ipify.org 2>/dev/null) || ipify_code="000"
     if [[ "$ipify_code" =~ ^2 ]]; then
         echo -e "  ipify.org  (HTTP代理) : ${GREEN}HTTP ${ipify_code}${RESET}"
@@ -1021,7 +1021,7 @@ proxy_test() {
         ok=false
     fi
 
-    claude_code=$(curl -x "socks5h://${SOCKS_HOST}:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+    claude_code=$(curl -x "socks5h://${SOCKS_HOST}:${SOCKS_PORT}" -sSL --connect-timeout 10 \
         -o /dev/null -w "%{http_code}" https://claude.ai/ 2>/dev/null) || claude_code="000"
     if [[ "$claude_code" =~ ^2 ]] || [[ "$claude_code" == "403" ]]; then
         echo -e "  claude.ai  (SOCKS代理): ${GREEN}HTTP ${claude_code}${RESET}（403 也可能表示代理已通，属 Cloudflare 策略）"

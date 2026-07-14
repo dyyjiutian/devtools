@@ -523,7 +523,7 @@ do_install() {
         info "测试通过代理访问 api4.ipify.org..."
         local HTTP_CODE
         HTTP_CODE=$(curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" \
-            -fsSL --connect-timeout 15 \
+            -sSL --connect-timeout 15 \
             -o /dev/null -w "%{http_code}" \
             https://api4.ipify.org 2>/dev/null) || HTTP_CODE="000"
 
@@ -629,10 +629,10 @@ do_status() {
 
     echo ""
     echo -e "${BOLD}━━━ 连通性测试（通过代理访问）━━━${RESET}"
-    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -sSL --connect-timeout 10 \
         -o /dev/null -w "  ipify.org HTTP: %{http_code}\n" https://api4.ipify.org 2>/dev/null \
         || echo "  ipify.org 连接失败"
-    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -fsSL --connect-timeout 10 \
+    curl -x "socks5h://127.0.0.1:${SOCKS_PORT}" -sSL --connect-timeout 10 \
         -o /dev/null -w "  claude.ai HTTP: %{http_code}\n" https://claude.ai/ 2>/dev/null \
         || echo "  claude.ai 连接失败（403 也可能表示代理已通）"
 }
