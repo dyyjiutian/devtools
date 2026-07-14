@@ -1034,7 +1034,7 @@ proxy_test() {
     if [[ -f "$PROXY_ENV" ]]; then
         echo -e "  proxy.env: ${GREEN}存在${RESET} (${PROXY_ENV})"
     else
-        echo -e "  proxy.env: ${YELLOW}不存在${RESET}（终端代理未开启/已 off）"
+        echo -e "  proxy.env: ${YELLOW}不存在${RESET}（尚未 proxy on，以下仍按固定端口测试）"
     fi
     echo -e "  ${YELLOW}注意：以下测试直连 Xray 本地端口，与 on/off 无关——${RESET}"
     echo -e "  ${YELLOW}on/off 只切换 shell 环境变量，不会启停 Xray 客户端服务本身${RESET}"
