@@ -34,9 +34,11 @@ vpn/
 ├── relay/
 │   └── setup.sh           # 杭州中继节点：配置 iptables DNAT 转发
 └── client/
-    ├── linux_setup.sh     # Linux 客户端一体化脚本：install / status / clean / proxy
-    ├── macos_setup.sh     # macOS 客户端一体化脚本：install / status / clean / proxy
-    └── pac.js             # PAC 智能分流规则（供 V2RayXS / V2rayU 等 GUI 客户端）
+    ├── linux_setup.sh       # Linux 客户端一体化脚本：install / status / clean / proxy
+    ├── macos_setup.sh       # macOS 客户端一体化脚本：install / status / clean / proxy
+    ├── install-setproxy.sh  # 安装独立的 setproxy 命令到 ~/.local/bin
+    ├── bin/setproxy         # 自包含的 setproxy 命令：on / off / status / test
+    └── pac.js               # PAC 智能分流规则（供 V2RayXS / V2rayU 等 GUI 客户端）
 ```
 
 ## 部署顺序
@@ -197,15 +199,23 @@ vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=
 
 ## 方案 B：Linux（systemd + 终端代理）
 
-在国内 Linux 机器上：
+在国内 Linux 机器上，两种方式二选一（不能同时使用）：
 
 ```bash
+# 方式一：--vless= 直接传入出口节点输出的完整 VLESS 链接（务必用引号包裹，避免 shell 把 & 当作后台执行符）
+sudo ./client/linux_setup.sh install \
+  --vless="vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.icloud.com&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#标签"
+
+# 方式二：手动指定三个必需参数
 sudo ./client/linux_setup.sh install \
   --relay-ip=198.51.100.10 \
   --uuid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \
   --public-key=<base64_public_key> \
   --short-id=<十六进制_short_id>
 ```
+
+若同时传入 `--vless` 与 `--uuid` / `--public-key` / `--short-id` 中任意一个，脚本会报错退出。
+`--vless` 会自动解析 UUID、中继 `host:port`、`pbk`、`sid`、`sni`、`fp`、`flow`、`spx`；`--relay-ip=` / `--relay-port=` 等其他可选参数仍可与 `--vless` 一起使用（例如中继节点做了端口转发，只需 `--vless="..." --relay-port=8443`）。
 
 脚本会自动：
 - 安装 Xray-core（官方脚本失败时回退到 ghfast.top / jsdelivr / mirror.ghproxy.com 镜像）
@@ -224,7 +234,8 @@ sudo ./client/linux_setup.sh install \
 ```bash
 ./client/linux_setup.sh proxy on        # 新开终端自动生效
 ./client/linux_setup.sh proxy off       # 关闭
-./client/linux_setup.sh proxy status    # 查看代理 + 端口监听
+./client/linux_setup.sh proxy status    # 查看代理状态 + 端口监听 + xray 日志查看方式
+./client/linux_setup.sh proxy test      # 测试代理端口 + 实际连通性是否正常
 ```
 
 让**当前**终端立即生效：
@@ -244,6 +255,27 @@ export http_proxy=http://127.0.0.1:10809
 ```
 
 浏览器可为单个浏览器配置 SOCKS（见下文 SwitchyOmega）；桌面环境的全局 HTTP 代理可单独配置。
+
+#### 更方便的用法：全局 `setproxy` 命令（可选）
+
+不想每次都敲完整路径 `./client/linux_setup.sh proxy ...`？可以安装一个自包含的
+`setproxy` 命令到 `~/.local/bin`，之后在**任意目录**下都能直接使用，且删除本
+仓库后依然可用（原理与 `vcs/git/bin` 下的 `git rb` 等子命令一致）：
+
+```bash
+./client/install-setproxy.sh          # 安装到 ~/.local/bin（自动加入 PATH）
+./client/install-setproxy.sh --dry-run    # 仅预览
+./client/install-setproxy.sh --uninstall  # 卸载
+
+# 新开终端后即可直接使用（临时启用/禁用只需 on / off）：
+setproxy on
+setproxy off
+setproxy status   # 查看代理状态 + 端口监听 + xray 日志查看方式
+setproxy test     # 测试代理端口 + 实际连通性是否正常
+```
+
+`setproxy` 与 `linux_setup.sh proxy` 管理的是同一份配置文件
+（`~/.config/vpn/proxy.env`），两者可互操作、随意混用。
 
 ---
 
@@ -385,14 +417,17 @@ sudo ./relay/setup.sh --clean
 
 ```bash
 ./client/linux_setup.sh status        # 一站式状态查看
+./client/linux_setup.sh proxy test    # 临时测试代理端口 + 连通性
 sudo ./client/linux_setup.sh clean    # 停止并卸载
 systemctl status xray-client          # 原生 systemd 命令
+journalctl -u xray-client -n 50 --no-pager  # 最近日志
 journalctl -u xray-client -f          # 实时日志
 systemctl restart xray-client         # 重启
 ```
 
 配置文件：`/usr/local/etc/xray/client.json`。
-终端代理配置文件：`~/.config/vpn/proxy.env`。
+终端代理配置文件：`~/.config/vpn/proxy.env`（`linux_setup.sh proxy` 与全局
+`setproxy` 命令共享该文件）。
 
 ### 客户端（macOS · 命令行方案）
 
