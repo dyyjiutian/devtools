@@ -973,6 +973,10 @@ proxy_off() {
         info "当前已打开的终端请执行:"
         echo "  unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY no_proxy NO_PROXY"
     fi
+    echo ""
+    warn "注意：这只是关闭终端环境变量，Xray 客户端服务本身仍在后台运行"
+    warn "（本机 ${HTTP_PORT}/${SOCKS_PORT} 端口仍监听，proxy test 直连测试仍会显示可用）"
+    info "如需彻底停止代理，请执行: sudo systemctl stop xray-client"
 }
 
 proxy_status() {
@@ -1030,8 +1034,10 @@ proxy_test() {
     if [[ -f "$PROXY_ENV" ]]; then
         echo -e "  proxy.env: ${GREEN}存在${RESET} (${PROXY_ENV})"
     else
-        echo -e "  proxy.env: ${YELLOW}不存在${RESET}（尚未 proxy on，以下仍按固定端口测试）"
+        echo -e "  proxy.env: ${YELLOW}不存在${RESET}（终端代理未开启/已 off）"
     fi
+    echo -e "  ${YELLOW}注意：以下测试直连 Xray 本地端口，与 on/off 无关——${RESET}"
+    echo -e "  ${YELLOW}on/off 只切换 shell 环境变量，不会启停 Xray 客户端服务本身${RESET}"
     if [[ -n "${http_proxy:-}${all_proxy:-}" ]]; then
         echo -e "  当前 shell 环境变量: ${GREEN}已设置${RESET}"
     else
