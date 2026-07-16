@@ -26,6 +26,7 @@ cache/
 | `ohmyzsh-install.sh` | https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | macOS |
 | `docker-ce.repo` | https://download.docker.com/linux/centos/docker-ce.repo | Linux |
 | `nodesource-setup-20.x` | https://rpm.nodesource.com/setup_20.x | Linux |
+| `install-release.sh` | https://github.com/XTLS/Xray-install/raw/main/install-release.sh | VPN Linux 客户端 |
 
 ## binaries/ — 二进制包
 
@@ -39,6 +40,9 @@ cache/
 | `fzf-0.72.0-linux_arm64.tar.gz` | https://github.com/junegunn/fzf/releases/download/v0.46.1/fzf-0.72.0-linux_arm64.tar.gz | Linux arm64 |
 | `zoxide-0.9.4-x86_64-unknown-linux-musl.tar.gz` | https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.4/zoxide-0.9.4-x86_64-unknown-linux-musl.tar.gz | Linux x86_64 |
 | `zoxide-0.9.4-aarch64-unknown-linux-musl.tar.gz` | https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.4/zoxide-0.9.4-aarch64-unknown-linux-musl.tar.gz | Linux arm64 |
+| `Xray-linux-64-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip | VPN Linux 客户端 x86_64 |
+| `Xray-linux-arm64-v8a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip | VPN Linux 客户端 arm64 |
+| `Xray-linux-arm32-v7a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm32-v7a.zip | VPN Linux 客户端 arm32 |
 
 > **tmux**：通过系统包管理器（dnf/yum）安装，无法离线缓存。离线环境需提前配置内网 yum 源。
 

@@ -28,6 +28,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${SCRIPT_DIR}/../../../cache"
+XRAY_VERSION="26.3.27"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; BOLD='\033[1m'; RESET='\033[0m'
 
@@ -381,48 +385,84 @@ validate_xray_config() {
 }
 
 # ── install: Xray 安装 ────────────────────────────────────────────────────────
-install_xray_from_mirror() {
-    local machine tmpdir zip
+xray_machine() {
     case "$(uname -m)" in
-        x86_64|amd64)  machine=64 ;;
-        aarch64|arm64) machine=arm64-v8a ;;
-        armv7l)        machine=arm32-v7a ;;
-        *) error "不支持的 CPU 架构: $(uname -m)"; return 1 ;;
+        x86_64|amd64)  echo 64 ;;
+        aarch64|arm64) echo arm64-v8a ;;
+        armv7l)        echo arm32-v7a ;;
+        *) return 1 ;;
     esac
+}
 
-    if ! command -v unzip &>/dev/null; then
-        if [[ -f /etc/os-release ]]; then
-            # shellcheck source=/dev/null
-            source /etc/os-release
-            case "$ID" in
-                centos|rhel|almalinux|rocky|alinux|anolis) yum install -y unzip ;;
-                ubuntu|debian) apt-get update -qq && apt-get install -y unzip ;;
-            esac
+# 返回 cache/binaries 中已缓存的 Xray zip 路径（版本化文件名优先）
+xray_cached_zip() {
+    local machine="$1" f
+    for f in \
+        "${CACHE_DIR}/binaries/Xray-linux-${machine}-v${XRAY_VERSION}.zip" \
+        "${CACHE_DIR}/binaries/Xray-linux-${machine}.zip"
+    do
+        if [[ -f "$f" ]]; then
+            echo "$f"
+            return 0
         fi
-    fi
-    command -v unzip &>/dev/null || { error "需要 unzip 命令"; return 1; }
+    done
+    return 1
+}
 
-    tmpdir=$(mktemp -d)
-    zip="${tmpdir}/xray.zip"
-    local urls
-    if $USE_MIRROR; then
-        urls=(
-            "https://ghfast.top/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip"
-            "https://mirror.ghproxy.com/https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip"
-            "https://cdn.jsdelivr.net/gh/XTLS/Xray-core@latest-release/Xray-linux-${machine}.zip"
-            "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip"
-        )
-    else
-        urls=("https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-${machine}.zip")
+ensure_unzip() {
+    if command -v unzip &>/dev/null; then
+        return 0
     fi
+    if [[ -f /etc/os-release ]]; then
+        # shellcheck source=/dev/null
+        source /etc/os-release
+        case "$ID" in
+            centos|rhel|almalinux|rocky|alinux|anolis) yum install -y unzip ;;
+            ubuntu|debian) apt-get update -qq && apt-get install -y unzip ;;
+        esac
+    fi
+    command -v unzip &>/dev/null
+}
 
-    info "从镜像下载 Xray 二进制（linux-${machine}）..."
-    download_file_with_mirrors "$zip" "${urls[@]}" || { rm -rf "$tmpdir"; return 1; }
+install_xray_from_zip() {
+    local zip="$1" tmpdir="$2"
     unzip -o -q "$zip" xray -d "$tmpdir"
     install -m 755 "${tmpdir}/xray" /usr/local/bin/xray
     mkdir -p /usr/local/share/xray /usr/local/etc/xray /var/log/xray
-    rm -rf "$tmpdir"
     success "Xray 二进制已安装: /usr/local/bin/xray"
+}
+
+install_xray_from_mirror() {
+    local machine tmpdir zip cached
+    machine=$(xray_machine) || { error "不支持的 CPU 架构: $(uname -m)"; return 1; }
+
+    ensure_unzip || { error "需要 unzip 命令"; return 1; }
+
+    tmpdir=$(mktemp -d)
+    zip="${tmpdir}/xray.zip"
+
+    if cached=$(xray_cached_zip "$machine"); then
+        info "使用本地缓存: ${cached#"${CACHE_DIR}/"}"
+        cp "$cached" "$zip"
+    else
+        local urls
+        if $USE_MIRROR; then
+            urls=(
+                "https://ghfast.top/https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-${machine}.zip"
+                "https://mirror.ghproxy.com/https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-${machine}.zip"
+                "https://cdn.jsdelivr.net/gh/XTLS/Xray-core@v${XRAY_VERSION}/Xray-linux-${machine}.zip"
+                "https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-${machine}.zip"
+            )
+        else
+            urls=("https://github.com/XTLS/Xray-core/releases/download/v${XRAY_VERSION}/Xray-linux-${machine}.zip")
+        fi
+
+        info "从镜像下载 Xray 二进制 v${XRAY_VERSION}（linux-${machine}）..."
+        download_file_with_mirrors "$zip" "${urls[@]}" || { rm -rf "$tmpdir"; return 1; }
+    fi
+
+    install_xray_from_zip "$zip" "$tmpdir"
+    rm -rf "$tmpdir"
 }
 
 install_xray() {
@@ -437,7 +477,14 @@ install_xray() {
         fi
     fi
 
-    local script_urls install_script
+    local machine
+    if machine=$(xray_machine) && xray_cached_zip "$machine" &>/dev/null; then
+        info "检测到本地 Xray 二进制缓存，跳过在线安装"
+        install_xray_from_mirror && return
+    fi
+
+    local script_urls install_script script_cache
+    script_cache="${CACHE_DIR}/scripts/install-release.sh"
     if $USE_MIRROR; then
         script_urls=(
             "https://cdn.jsdelivr.net/gh/XTLS/Xray-install@main/install-release.sh"
@@ -449,9 +496,20 @@ install_xray() {
     fi
 
     install_script=$(mktemp)
-    info "下载 Xray 安装脚本..."
-    if download_file_with_mirrors "$install_script" "${script_urls[@]}" \
-        && bash "$install_script" install; then
+    if [[ -f "$script_cache" ]]; then
+        info "使用本地缓存: scripts/install-release.sh"
+        cp "$script_cache" "$install_script"
+    else
+        info "下载 Xray 安装脚本..."
+        if ! download_file_with_mirrors "$install_script" "${script_urls[@]}"; then
+            rm -f "$install_script"
+            warn "安装脚本下载失败，尝试镜像直装..."
+            install_xray_from_mirror || { error "Xray 安装失败，请检查网络或手动安装"; exit 1; }
+            return
+        fi
+    fi
+
+    if bash "$install_script" install; then
         rm -f "$install_script"
         return
     fi

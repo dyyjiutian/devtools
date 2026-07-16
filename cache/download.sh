@@ -64,6 +64,9 @@ download_linux() {
   download \
     "https://rpm.nodesource.com/setup_20.x" \
     "${SCRIPTS_DIR}/nodesource-setup-20.x"
+  download \
+    "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" \
+    "${SCRIPTS_DIR}/install-release.sh"
 
   # 二进制包版本
   local yazi_version="0.3.3"
@@ -71,6 +74,7 @@ download_linux() {
   local fzf_version="0.72.0"
   local zoxide_version="0.9.4"
   local nerd_fonts_version="3.3.0"
+  local xray_version="26.3.27"
 
   # yazi (x86_64 / arm64) — musl 静态编译版，兼容 CentOS/RHEL 8（glibc 2.28）
   for arch in x86_64 aarch64; do
@@ -98,6 +102,13 @@ download_linux() {
     download \
       "https://github.com/ajeetdsouza/zoxide/releases/download/v${zoxide_version}/zoxide-${zoxide_version}-${arch}.tar.gz" \
       "${BINARIES_DIR}/zoxide-${zoxide_version}-${arch}.tar.gz"
+  done
+
+  # Xray-core（tools/vpn/client/linux_setup.sh）
+  for arch in 64 arm64-v8a arm32-v7a; do
+    download \
+      "https://github.com/XTLS/Xray-core/releases/download/v${xray_version}/Xray-linux-${arch}.zip" \
+      "${BINARIES_DIR}/Xray-linux-${arch}-v${xray_version}.zip"
   done
 
   # Nerd Fonts Symbols Only — 架构无关，yazi/终端图标字体
