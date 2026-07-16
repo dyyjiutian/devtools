@@ -28,7 +28,7 @@
 - Consumes: `speed_test label proxy_arg url [range_header]`
 - Produces: 国内 TUNA Range 请求和原有测速输出格式。
 
-- [ ] **Step 1: 写入失败回归断言**
+- [x] **Step 1: 写入失败回归断言**
 
 在 fake curl 日志检查中加入：
 
@@ -43,13 +43,13 @@ if grep -q 'mirrors.aliyun.com/centos' "${CURL_LOG}"; then
 fi
 ```
 
-- [ ] **Step 2: 运行测试确认按预期失败**
+- [x] **Step 2: 运行测试确认按预期失败**
 
 Run: `bash tools/vpn/client/setproxy_test.sh`
 
 Expected: FAIL，提示未使用 TUNA 10 MB Range。
 
-- [ ] **Step 3: 实现最小修改**
+- [x] **Step 3: 实现最小修改**
 
 将 `speed_test` 调整为接受可选 Range：
 
@@ -72,7 +72,7 @@ speed_test "国内(直连)   清华 TUNA 10MB :" "" \
     "Range: bytes=0-9999999" || ok=false
 ```
 
-- [ ] **Step 4: 运行完整测试和语法检查**
+- [x] **Step 4: 运行完整测试和语法检查**
 
 Run:
 
@@ -84,7 +84,7 @@ git diff --check
 
 Expected: 回归测试 `7/7` 通过，语法及 diff 检查退出码为 0。
 
-- [ ] **Step 5: 安装并实际验证**
+- [x] **Step 5: 安装并实际验证**
 
 Run:
 
@@ -96,7 +96,7 @@ cmp -s tools/vpn/client/bin/setproxy "$HOME/.local/bin/setproxy"
 
 Expected: 国内项显示 `清华 TUNA 10MB` 且下载大小为 `10000000 bytes`。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add tools/vpn/client/bin/setproxy tools/vpn/client/setproxy_test.sh

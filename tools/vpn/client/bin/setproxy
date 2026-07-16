@@ -379,11 +379,13 @@ check_site() {
 }
 
 speed_test() {
-    local label="$1" proxy_arg="$2" url="$3"
+    local label="$1" proxy_arg="$2" url="$3" range_header="${4:-}"
     local stats code time_total size speed_bps kbps mbps
-    stats="$(curl_request "$proxy_arg" -sSL --connect-timeout 10 --max-time 30 \
-        -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" \
-        "$url" 2>/dev/null)" || stats="000 0 0 0"
+    local curl_args=(-sSL --connect-timeout 10 --max-time 30 \
+        -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}")
+    [[ -n "$range_header" ]] && curl_args+=(-H "$range_header")
+    stats="$(curl_request "$proxy_arg" "${curl_args[@]}" "$url" 2>/dev/null)" \
+        || stats="000 0 0 0"
     read -r code time_total size speed_bps <<< "$stats"
     if [[ "$code" =~ ^2 ]]; then
         kbps="$(awk -v b="$speed_bps" 'BEGIN{printf "%.0f", b/1024}')"
@@ -532,7 +534,9 @@ do_test() {
     echo ""
     echo -e "${BOLD}━━━ 3. 基准测速（海外经代理 / 国内强制直连）━━━${RESET}"
     speed_test "海外(经代理) Cloudflare 10MB:" "$socks_proxy_arg" "https://speed.cloudflare.com/__down?bytes=10000000" || ok=false
-    speed_test "国内(直连)   阿里云镜像     :" "" "https://mirrors.aliyun.com/centos/7/isos/x86_64/CentOS-7-x86_64-Everything-2009.torrent" || ok=false
+    speed_test "国内(直连)   清华 TUNA 10MB :" "" \
+        "https://mirrors.tuna.tsinghua.edu.cn/archlinux/iso/latest/archlinux-x86_64.iso" \
+        "Range: bytes=0-9999999" || ok=false
 
     echo ""
     if $ok; then

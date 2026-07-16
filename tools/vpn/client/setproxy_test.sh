@@ -136,14 +136,19 @@ env -i \
     VPN_SOCKS_PORT=1081 \
     "${SETPROXY}" test >/dev/null 2>&1
 baidu_call="$(grep 'www.baidu.com' "${CURL_LOG}" || true)"
-aliyun_call="$(grep 'mirrors.aliyun.com' "${CURL_LOG}" || true)"
+tuna_call="$(grep 'mirrors.tuna.tsinghua.edu.cn/archlinux/iso/latest/archlinux-x86_64.iso' "${CURL_LOG}" || true)"
 cloudflare_call="$(grep 'speed.cloudflare.com/__down?bytes=10000000' "${CURL_LOG}" || true)"
 [[ "${baidu_call}" == *'<--proxy><><--noproxy><*>'* ]] \
     || fail "Baidu direct test did not explicitly bypass proxies"
-[[ "${aliyun_call}" == *'<--proxy><><--noproxy><*>'* ]] \
-    || fail "domestic speed test did not explicitly bypass proxies"
+[[ "${tuna_call}" == *'<--proxy><><--noproxy><*>'* ]] \
+    || fail "domestic TUNA speed test did not explicitly bypass proxies"
+[[ "${tuna_call}" == *'<-H><Range: bytes=0-9999999>'* ]] \
+    || fail "domestic TUNA speed test did not request a fixed 10 MB range"
 [[ "${cloudflare_call}" == *'<-x><socks5h://127.0.0.1:1081>'* ]] \
     || fail "overseas speed test did not use Cloudflare 10 MB through SOCKS"
+if grep -q 'mirrors.aliyun.com/centos' "${CURL_LOG}"; then
+    fail "domestic speed test still uses the small Aliyun torrent"
+fi
 if grep -q 'proof.ovh.net' "${CURL_LOG}"; then
     fail "overseas speed test still uses OVH"
 fi
