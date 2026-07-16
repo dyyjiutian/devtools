@@ -15,10 +15,15 @@ assert_contains() {
   [[ "$haystack" == *"$expected"* ]] || fail "expected '$expected' in output: $haystack"
 }
 
-printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP_DIR/dnf"
+printf '#!/bin/bash\nexit 0\n' > "$TMP_DIR/dnf"
 chmod +x "$TMP_DIR/dnf"
+printf '#!/bin/bash\nprintf "Linux\\n"\n' > "$TMP_DIR/uname"
+printf '#!/bin/bash\nexit 0\n' > "$TMP_DIR/head"
+printf '#!/bin/bash\nexit 0\n' > "$TMP_DIR/grep"
+printf '#!/bin/bash\nprintf "%%s\\n" "${1%%/*}"\n' > "$TMP_DIR/dirname"
+chmod +x "$TMP_DIR/uname" "$TMP_DIR/head" "$TMP_DIR/grep" "$TMP_DIR/dirname"
 
-output=$(PATH="$TMP_DIR:/usr/bin:/bin" SETUP_NO_MAIN=1 bash -c '
+output=$(PATH="$TMP_DIR" SETUP_NO_MAIN=1 /bin/bash -c '
   setup="$1"
   set -- --dry-run
   source "$setup"
