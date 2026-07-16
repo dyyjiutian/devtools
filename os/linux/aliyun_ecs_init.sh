@@ -130,7 +130,8 @@ prompt_line() {
 
 validate_username() {
   local name="$1"
-  [[ "$name" =~ ^[a-z_][a-z0-9_-]*$ ]]
+  # 允许点号（如 dev.user）；禁止以数字/点/连字符开头，最长 32
+  [[ ${#name} -le 32 ]] && [[ "$name" =~ ^[a-z_][a-z0-9._-]*$ ]]
 }
 
 ensure_target_user() {
@@ -139,7 +140,7 @@ ensure_target_user() {
 
   if [[ -n "$TARGET_USER" ]]; then
     if ! validate_username "$TARGET_USER"; then
-      error "非法用户名: ${TARGET_USER}（需符合 Linux 用户名规则）"
+      error "非法用户名: ${TARGET_USER}（需以小写字母或下划线开头，可含数字/点/下划线/连字符）"
       exit 1
     fi
     return 0
@@ -165,7 +166,7 @@ ensure_target_user() {
       continue
     fi
     if ! validate_username "$TARGET_USER"; then
-      warn "非法用户名（需符合 Linux 用户名规则，如 alice）"
+      warn "非法用户名（需以小写字母或下划线开头，可含数字/点/下划线/连字符，如 alice、dev.user）"
       if [[ ! -t 0 ]]; then
         error "非法用户名: ${TARGET_USER}"
         exit 1
