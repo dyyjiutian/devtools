@@ -28,8 +28,8 @@
 - Consumes: `bin/setproxy` and `install-setproxy.sh`.
 - Produces: assertions for macOS port detection, clean emit output, Git SSH export, direct curl bypass, and complete uninstall.
 
-- [ ] Write a Bash test harness using a temporary HOME and fake `uname`, `lsof`, `curl`, and `nc`.
-- [ ] Verify the current implementation fails because it lacks Git SSH export, pure `off --emit`, direct proxy bypass, config persistence, and complete uninstall.
+- [x] Write a Bash test harness using a temporary HOME and fake `uname`, `lsof`, `curl`, and `nc`.
+- [x] Verify the current implementation fails because it lacks Git SSH export, pure `off --emit`, direct proxy bypass, config persistence, and complete uninstall.
 
 ### Task 2: Implement proxy resolution and Git SSH export
 
@@ -40,13 +40,13 @@
 - Consumes: host/port CLI options, VPN environment overrides, persisted config, listening ports.
 - Produces: `proxy.env`, `setproxy.conf`, clean on/off emit output, optional `GIT_SSH_COMMAND`.
 
-- [ ] Add argument parsing and validation.
-- [ ] Add persisted config and macOS/Linux port autodetection.
-- [ ] Add `GIT_SSH_COMMAND` and `--no-git-ssh`.
-- [ ] Make emit output shell-code-only.
-- [ ] Force direct test requests to bypass proxies.
-- [ ] Improve macOS status hints.
-- [ ] Run the focused regression harness.
+- [x] Add argument parsing and validation.
+- [x] Add persisted config and macOS/Linux port autodetection.
+- [x] Add `GIT_SSH_COMMAND` and `--no-git-ssh`.
+- [x] Make emit output shell-code-only.
+- [x] Force direct test requests to bypass proxies.
+- [x] Improve macOS status hints.
+- [x] Run the focused regression harness.
 
 ### Task 3: Complete installer lifecycle
 
@@ -57,10 +57,10 @@
 - Consumes: HOME and detected shell rc.
 - Produces: managed PATH installation and complete managed cleanup.
 
-- [ ] Replace the one-line PATH marker with a managed block while recognizing the legacy marker.
-- [ ] Warn about existing shell function conflicts.
-- [ ] Remove binary, managed rc blocks, proxy environment, and saved config on uninstall.
-- [ ] Run the focused regression harness.
+- [x] Replace the one-line PATH marker with a managed block while recognizing the legacy marker.
+- [x] Warn about existing shell function conflicts.
+- [x] Remove binary, managed rc blocks, proxy environment, and saved config on uninstall.
+- [x] Run the focused regression harness.
 
 ### Task 4: Install locally and retire inline functions
 
@@ -73,7 +73,7 @@
 - Consumes: tested repository scripts.
 - Produces: PATH-resolved standalone command and commented legacy inline functions.
 
-- [ ] Back up `.zshrc` and record the SSH config digest.
-- [ ] Comment the old inline proxy function/state block.
-- [ ] Install the command and enable it with V2RayXS ports.
-- [ ] Verify new-shell exports, on/off emit, Git SSH ProxyCommand expansion, syntax, and unchanged SSH config.
+- [x] Back up `.zshrc` and record the SSH config digest.
+- [x] Comment the old inline proxy function/state block.
+- [x] Install the command and enable it with V2RayXS ports.
+- [x] Verify new-shell exports, on/off emit, Git SSH ProxyCommand expansion, syntax, and unchanged SSH config.
