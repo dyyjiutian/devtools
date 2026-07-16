@@ -23,6 +23,7 @@ show_help() {
 用法: ./setup.sh [选项]
 
 一键配置 Git 开发环境（各步骤也可单独运行对应的 scripts/*.sh）:
+  - 安装 GitHub CLI (gh)，用于 GitHub PR / issue / review 操作
   - 安装 git-delta 并配置为 diff/log/show pager
   - scripts/sub-command.sh：安装 git rb / bc / wc / review 子命令到 ~/.local/bin
   - scripts/config.sh：写入推荐的 git 全局配置与性能/工作流优化
@@ -288,4 +289,6 @@ main() {
   echo "  若刚安装 gitroot alias 或子命令 PATH，请重新打开终端，或 source 当前 shell rc 文件。"
 }
 
-main
+if [[ "${SETUP_NO_MAIN:-false}" != "true" && "${SETUP_NO_MAIN:-false}" != "1" ]]; then
+  main
+fi
