@@ -40,6 +40,8 @@ cache/
 | `fzf-0.72.0-linux_arm64.tar.gz` | https://github.com/junegunn/fzf/releases/download/v0.46.1/fzf-0.72.0-linux_arm64.tar.gz | Linux arm64 |
 | `zoxide-0.9.4-x86_64-unknown-linux-musl.tar.gz` | https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.4/zoxide-0.9.4-x86_64-unknown-linux-musl.tar.gz | Linux x86_64 |
 | `zoxide-0.9.4-aarch64-unknown-linux-musl.tar.gz` | https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.4/zoxide-0.9.4-aarch64-unknown-linux-musl.tar.gz | Linux arm64 |
+| `starship-x86_64-unknown-linux-musl.tar.gz` | https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-unknown-linux-musl.tar.gz | Linux x86_64 |
+| `starship-aarch64-unknown-linux-musl.tar.gz` | https://github.com/starship/starship/releases/download/v1.25.1/starship-aarch64-unknown-linux-musl.tar.gz | Linux arm64 |
 | `Xray-linux-64-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip | VPN Linux 客户端 x86_64 |
 | `Xray-linux-arm64-v8a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip | VPN Linux 客户端 arm64 |
 | `Xray-linux-arm32-v7a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm32-v7a.zip | VPN Linux 客户端 arm32 |

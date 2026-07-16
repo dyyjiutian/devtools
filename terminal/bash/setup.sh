@@ -21,7 +21,7 @@ STARSHIP_CONFIG="$STARSHIP_CONFIG_DIR/starship.toml"
 # 本地缓存目录：在线下载失败时回退到 cache/binaries 中的预下载文件
 # 运行 `bash cache/download.sh linux` 可预先下载所有文件
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE_DIR="${SCRIPT_DIR}/../../cache"
+CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 
 info()    { echo -e "\033[34m[INFO]\033[0m $1"; }
 success() { echo -e "\033[32m[OK]\033[0m $1"; }
@@ -210,12 +210,61 @@ _install_linux_fzf() {
     fi
 }
 
+_starship_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "x86_64-unknown-linux-musl" ;;
+        aarch64|arm64) echo "aarch64-unknown-linux-musl" ;;
+        *)
+            error "Starship 不支持当前架构: $(uname -m)"
+            return 1
+            ;;
+    esac
+}
+
+_install_linux_starship_from_cache() {
+    local arch filename cached tmpdir
+    arch="$(_starship_arch)" || return 1
+    filename="starship-${arch}.tar.gz"
+    cached="${CACHE_DIR}/binaries/${filename}"
+
+    if [[ ! -f "$cached" ]]; then
+        return 2
+    fi
+
+    info "使用本地缓存: binaries/${filename}"
+    tmpdir=$(mktemp -d)
+    if ! tar -xzf "$cached" -C "$tmpdir" starship 2>/dev/null || [[ ! -x "$tmpdir/starship" ]]; then
+        rm -rf "$tmpdir"
+        error "解压 Starship 缓存失败或文件不可执行: ${cached}"
+        return 1
+    fi
+
+    mv "$tmpdir/starship" "$LOCAL_BIN_DIR/starship"
+    chmod +x "$LOCAL_BIN_DIR/starship"
+    rm -rf "$tmpdir"
+    success "starship 安装完成 -> $LOCAL_BIN_DIR/starship"
+    if [[ ":$PATH:" != *":$LOCAL_BIN_DIR:"* ]]; then
+        warn "$LOCAL_BIN_DIR 不在当前 PATH 中，重新打开终端或 source ~/.bashrc 后生效"
+    fi
+}
+
 _install_linux_starship() {
     if command -v starship &>/dev/null; then
         success "starship 已安装，跳过"
         return
     fi
     if [[ "$DRY_RUN" == "false" ]]; then
+        local cache_status
+        if _install_linux_starship_from_cache; then
+            return
+        else
+            cache_status=$?
+        fi
+        if [[ "$cache_status" -eq 1 ]]; then
+            return 1
+        fi
+
+        warn "Starship 本地缓存不存在，尝试在线安装 ..."
         info "安装 starship ..."
         curl -sS https://starship.rs/install.sh | sh -s -- --yes --bin-dir "$LOCAL_BIN_DIR"
         if [[ -x "$LOCAL_BIN_DIR/starship" ]]; then

@@ -73,6 +73,7 @@ download_linux() {
   local lazygit_version="0.44.1"
   local fzf_version="0.72.0"
   local zoxide_version="0.9.4"
+  local starship_version="1.25.1"
   local nerd_fonts_version="3.3.0"
   local xray_version="26.3.27"
 
@@ -102,6 +103,13 @@ download_linux() {
     download \
       "https://github.com/ajeetdsouza/zoxide/releases/download/v${zoxide_version}/zoxide-${zoxide_version}-${arch}.tar.gz" \
       "${BINARIES_DIR}/zoxide-${zoxide_version}-${arch}.tar.gz"
+  done
+
+  # Starship (x86_64 / arm64) — musl 静态编译版，适合兼容性较差的 ECS 系统
+  for arch in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+    download \
+      "https://github.com/starship/starship/releases/download/v${starship_version}/starship-${arch}.tar.gz" \
+      "${BINARIES_DIR}/starship-${arch}.tar.gz"
   done
 
   # Xray-core（tools/vpn/client/linux_setup.sh）

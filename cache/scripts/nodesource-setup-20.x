@@ -31,9 +31,14 @@ command_exists() {
   command -v "$1" &> /dev/null
 }
 
-# Check if we are on an RPM-based system
-if ! [ -f /etc/redhat-release ] && ! grep -q "Amazon Linux" /etc/system-release 2>/dev/null; then
+# Check if we are on an RPM-based system. Alibaba Cloud Linux identifies as
+# `alinux` and may not provide /etc/redhat-release, so detect RPM tooling too.
+if ! command -v rpm &> /dev/null && ! [ -f /etc/redhat-release ] && ! [ -f /etc/system-release ]; then
     handle_error 1 "This script is intended for RPM-based systems. Please run it on an RPM-based system."
+fi
+
+if ! command -v dnf &> /dev/null && ! command -v yum &> /dev/null && ! command -v microdnf &> /dev/null; then
+    handle_error 1 "Neither yum, dnf nor microdnf package manager was found."
 fi
 
 log "Cleaning up old repositories..." "info"

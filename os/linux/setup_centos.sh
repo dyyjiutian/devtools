@@ -30,7 +30,8 @@ step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 # 若 cache/ 目录中存在对应文件，优先使用本地缓存，否则从官方 URL 下载。
 # 运行 `cache/download.sh linux` 可预先下载所有文件。
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE_DIR="${SCRIPT_DIR}/../../cache"
+CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
+OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 
 # 本地缓存优先下载：有缓存用缓存，否则从官方 URL 下载
 # 用法: fetch <cache相对路径> <官方URL> <输出文件>
@@ -43,6 +44,57 @@ fetch() {
     info "网络下载: $(basename "$url")"
     curl -fsSL "$url" -o "$out"
   fi
+}
+
+# ─── Alibaba Cloud Linux / Docker repo helpers ───────────────────────────────────
+is_alibaba_linux_4() {
+  local ID="" VERSION_ID=""
+  if [[ -r "$OS_RELEASE_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$OS_RELEASE_FILE"
+  fi
+  [[ "$ID" == "alinux" && "${VERSION_ID%%.*}" == "4" ]]
+}
+
+docker_repo_base_url() {
+  if is_alibaba_linux_4; then
+    echo "${DOCKER_MIRROR_BASE_URL:-http://mirrors.cloud.aliyuncs.com}/docker-ce/linux/centos"
+  else
+    echo "https://download.docker.com/linux/centos"
+  fi
+}
+
+docker_repo_version() {
+  if ! is_alibaba_linux_4; then
+    return 0
+  fi
+
+  local version="${DOCKER_CENTOS_REPO_VERSION:-9}"
+  case "$version" in
+    9|10) echo "$version" ;;
+    *)
+      error "DOCKER_CENTOS_REPO_VERSION 必须是 9 或 10，当前: ${version}"
+      return 1
+      ;;
+  esac
+}
+
+render_docker_repo() {
+  local template="$1" output="$2" base_url version
+  local -a sed_args
+
+  base_url="$(docker_repo_base_url)"
+  sed_args=(-e "s|https://download.docker.com/linux/centos|${base_url}|g")
+  if is_alibaba_linux_4; then
+    version="$(docker_repo_version)" || return 1
+    sed_args+=(-e "s|\$releasever|${version}|g")
+  fi
+
+  sed "${sed_args[@]}" "$template" > "$output"
+  [[ -s "$output" ]] || {
+    error "Docker repo 配置为空: ${output}"
+    return 1
+  }
 }
 
 # ─── 用法说明 ────────────────────────────────────────────────────────────────────
@@ -116,7 +168,7 @@ detect_system_info() {
   fi
 
   # 检查是否为 CentOS/RHEL
-  if [[ "$os_id" != "centos" && "$os_id" != "rhel" && "$os_id" != "rocky" && "$os_id" != "almalinux" ]]; then
+  if [[ "$os_id" != "centos" && "$os_id" != "rhel" && "$os_id" != "rocky" && "$os_id" != "almalinux" && "$os_id" != "alinux" && "$os_id" != "anolis" ]]; then
     warn "此脚本主要针对 CentOS/RHEL 系列，当前系统: ${os_id}"
   fi
 
@@ -233,12 +285,20 @@ install_docker() {
   local tmp_repo
   tmp_repo=$(mktemp --suffix=.repo)
   fetch "scripts/docker-ce.repo" "https://download.docker.com/linux/centos/docker-ce.repo" "$tmp_repo"
-  run_cmd cp "$tmp_repo" /etc/yum.repos.d/docker-ce.repo
+  local rendered_repo
+  rendered_repo=$(mktemp --suffix=.repo)
+  render_docker_repo "$tmp_repo" "$rendered_repo"
+  run_cmd cp "$rendered_repo" /etc/yum.repos.d/docker-ce.repo
   rm -f "$tmp_repo"
+  rm -f "$rendered_repo"
 
   # 安装 Docker
   info "安装 Docker CE..."
-  run_cmd "$pkg_manager" install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  if is_alibaba_linux_4; then
+    run_cmd "$pkg_manager" install -y --nobest docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  else
+    run_cmd "$pkg_manager" install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  fi
 
   # 启动并启用 Docker
   info "启动 Docker 服务..."
@@ -696,4 +756,6 @@ main() {
   echo -e "\n${GREEN}${BOLD}✓ 所有任务执行完成！${NC}\n"
 }
 
-main "$@"
+if [[ "${SETUP_CENTOS_NO_MAIN:-false}" != "true" && "${SETUP_CENTOS_NO_MAIN:-false}" != "1" ]]; then
+  main "$@"
+fi
