@@ -201,6 +201,17 @@ _install_linux_fzf() {
     local fzf_dir="$HOME/.fzf"
     if [[ "$DRY_RUN" == "false" ]]; then
         info "安装 fzf ..."
+        if [[ -f "$fzf_dir/install" ]]; then
+            info "发现已有 fzf 源码目录，复用安装脚本 ..."
+            bash "$fzf_dir/install" --all --no-update-rc
+            success "fzf 安装完成"
+            return
+        fi
+        if [[ -d "$fzf_dir" ]]; then
+            local backup_dir="${fzf_dir}.backup.$(date +%Y%m%d_%H%M%S).$$"
+            mv "$fzf_dir" "$backup_dir"
+            warn "发现不完整的 fzf 目录，已备份到: $backup_dir"
+        fi
         git clone --depth 1 https://github.com/junegunn/fzf.git "$fzf_dir"
         # --no-update-rc: 不自动修改 .bashrc，由本脚本统一管理
         "$fzf_dir/install" --all --no-update-rc

@@ -79,6 +79,34 @@ SETUP_CENTOS_NO_MAIN=1 OS_RELEASE_FILE="$TMP_DIR/centos-release" DEVTOOLS_CACHE_
   fail "CentOS repo rendering failed"
 assert_contains "$TMP_DIR/centos.repo" '$releasever'
 
+# A previous interrupted fzf install may leave ~/.fzf behind even though fzf
+# is not yet on PATH. Re-running setup must reuse a complete checkout instead
+# of calling git clone into the non-empty directory.
+mkdir -p "$TMP_DIR/fzf-home/.local/share/blesh" "$TMP_DIR/fzf-home/.fzf" "$TMP_DIR/fzf-bin"
+touch "$TMP_DIR/fzf-home/.local/share/blesh/ble.sh"
+printf '#!/usr/bin/env bash\ntouch "$FZF_INSTALL_MARKER"\n' > "$TMP_DIR/fzf-home/.fzf/install"
+printf '#!/usr/bin/env bash\nif [[ "$1" == "clone" ]]; then touch "$FZF_CLONE_MARKER"; exit 99; fi\nexit 0\n' > "$TMP_DIR/fzf-bin/git"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP_DIR/fzf-bin/zoxide"
+chmod +x "$TMP_DIR/fzf-home/.fzf/install" "$TMP_DIR/fzf-bin/git" "$TMP_DIR/fzf-bin/zoxide"
+
+FZF_INSTALL_MARKER="$TMP_DIR/fzf-install-called" FZF_CLONE_MARKER="$TMP_DIR/fzf-clone-called" PATH="$TMP_DIR/fzf-bin:/usr/bin:/bin" HOME="$TMP_DIR/fzf-home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/terminal/bash/setup.sh" > "$TMP_DIR/fzf.log" 2>&1 ||
+  fail "fzf retry failed; output: $(cat "$TMP_DIR/fzf.log")"
+assert_file "$TMP_DIR/fzf-install-called"
+[[ ! -e "$TMP_DIR/fzf-clone-called" ]] || fail "git clone was called for an existing fzf checkout"
+
+# An incomplete checkout must be preserved and replaced with a fresh clone.
+mkdir -p "$TMP_DIR/fzf-incomplete-home/.local/share/blesh" "$TMP_DIR/fzf-incomplete-home/.fzf" "$TMP_DIR/fzf-incomplete-bin"
+touch "$TMP_DIR/fzf-incomplete-home/.local/share/blesh/ble.sh" "$TMP_DIR/fzf-incomplete-home/.fzf/partial-file"
+printf '#!/usr/bin/env bash\nif [[ "$1" == "clone" ]]; then dest="${@: -1}"; if [[ -e "$dest" ]]; then touch "$FZF_CLONE_MARKER"; exit 99; fi; mkdir -p "$dest"; printf "#!/usr/bin/env bash\\ntouch \\\"$FZF_INSTALL_MARKER\\\"\\n" > "$dest/install"; chmod +x "$dest/install"; fi\nexit 0\n' > "$TMP_DIR/fzf-incomplete-bin/git"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP_DIR/fzf-incomplete-bin/zoxide"
+chmod +x "$TMP_DIR/fzf-incomplete-bin/git" "$TMP_DIR/fzf-incomplete-bin/zoxide"
+
+FZF_INSTALL_MARKER="$TMP_DIR/fzf-incomplete-install-called" FZF_CLONE_MARKER="$TMP_DIR/fzf-incomplete-clone-failed" PATH="$TMP_DIR/fzf-incomplete-bin:/usr/bin:/bin" HOME="$TMP_DIR/fzf-incomplete-home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/terminal/bash/setup.sh" > "$TMP_DIR/fzf-incomplete.log" 2>&1 ||
+  fail "incomplete fzf retry failed; output: $(cat "$TMP_DIR/fzf-incomplete.log")"
+assert_file "$TMP_DIR/fzf-incomplete-install-called"
+[[ ! -e "$TMP_DIR/fzf-incomplete-clone-failed" ]] || fail "incomplete fzf directory was not moved before cloning"
+find "$TMP_DIR/fzf-incomplete-home" -maxdepth 1 -type d -name '.fzf.backup.*' | grep -q . || fail "incomplete fzf directory was not backed up"
+
 # The cached NodeSource script must not reject Alibaba Cloud Linux solely
 # because /etc/redhat-release is absent.
 assert_not_contains "$ROOT/cache/scripts/nodesource-setup-20.x" '! [ -f /etc/redhat-release ] && ! grep -q "Amazon Linux" /etc/system-release'
