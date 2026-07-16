@@ -137,10 +137,16 @@ env -i \
     "${SETPROXY}" test >/dev/null 2>&1
 baidu_call="$(grep 'www.baidu.com' "${CURL_LOG}" || true)"
 aliyun_call="$(grep 'mirrors.aliyun.com' "${CURL_LOG}" || true)"
+cloudflare_call="$(grep 'speed.cloudflare.com/__down?bytes=10000000' "${CURL_LOG}" || true)"
 [[ "${baidu_call}" == *'<--proxy><><--noproxy><*>'* ]] \
     || fail "Baidu direct test did not explicitly bypass proxies"
 [[ "${aliyun_call}" == *'<--proxy><><--noproxy><*>'* ]] \
     || fail "domestic speed test did not explicitly bypass proxies"
+[[ "${cloudflare_call}" == *'<-x><socks5h://127.0.0.1:1081>'* ]] \
+    || fail "overseas speed test did not use Cloudflare 10 MB through SOCKS"
+if grep -q 'proof.ovh.net' "${CURL_LOG}"; then
+    fail "overseas speed test still uses OVH"
+fi
 
 printf '[7/7] installer and complete uninstall lifecycle\n'
 HOME_INSTALL="${TMP_ROOT}/home-install"

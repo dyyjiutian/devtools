@@ -531,7 +531,7 @@ do_test() {
 
     echo ""
     echo -e "${BOLD}━━━ 3. 基准测速（海外经代理 / 国内强制直连）━━━${RESET}"
-    speed_test "海外(经代理) OVH 1MB 测试文件:" "$socks_proxy_arg" "https://proof.ovh.net/files/1Mb.dat" || ok=false
+    speed_test "海外(经代理) Cloudflare 10MB:" "$socks_proxy_arg" "https://speed.cloudflare.com/__down?bytes=10000000" || ok=false
     speed_test "国内(直连)   阿里云镜像     :" "" "https://mirrors.aliyun.com/centos/7/isos/x86_64/CentOS-7-x86_64-Everything-2009.torrent" || ok=false
 
     echo ""
