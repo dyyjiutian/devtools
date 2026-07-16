@@ -37,6 +37,14 @@ DISK_DEVICE=""
 FS_TYPE="ext4"
 FS_TYPE_FROM_CLI=false
 SSH_COMMENT=""
+SWAP_SIZE_GIB=""
+SKIP_GIT=false
+SKIP_SWAP=false
+
+# swap 默认目标：小内存机（<=2GiB）补到至少 4GiB 总虚拟内存
+LOW_MEM_THRESHOLD_MIB=2048
+DEFAULT_SWAP_TARGET_MIB=4096
+DEFAULT_SWAP_FILE="/swapfile"
 
 # ─── 用法说明 ────────────────────────────────────────────────────────────────
 usage() {
@@ -46,7 +54,8 @@ ${BOLD}用法:${NC}
   $(basename "$0") <subcommand> [选项]
 
 ${BOLD}说明:${NC}
-  阿里云 ECS 初始化脚本：创建普通用户、识别并初始化数据盘挂到家目录、生成 SSH 密钥。
+  阿里云 ECS 初始化脚本：创建普通用户、识别并初始化数据盘挂到家目录、生成 SSH 密钥、
+  安装 Git；小内存机器可启用 swap 以便 Agent CLI 正常使用。
   未传参时以交互方式询问用户名、密码方式、数据盘、SSH 注释等。
 
 ${BOLD}子命令:${NC}
@@ -54,14 +63,19 @@ ${BOLD}子命令:${NC}
   init-disk     识别数据盘、分区/格式化，挂载到 /home/<user>
                 （无数据盘时跳过，家目录留在系统盘）
   init-ssh      为用户生成 ed25519 密钥对并打印公钥
-  all           按推荐顺序执行：create-user → init-disk → init-ssh
-  status        只读：查看用户、磁盘、挂载、SSH 状态
+  install-git   安装 Git（已安装则跳过）
+  enable-swap   启用 swap 文件（建议物理内存 <= 2GiB 时使用，默认补到 >= 4GiB）
+  all           按推荐顺序：install-git → create-user → init-disk → init-ssh
+                （内存 <= 2GiB 时会提示/执行 enable-swap）
+  status        只读：查看用户、磁盘、挂载、SSH、内存/swap 状态
 
 ${BOLD}全局选项（均可省略，改为交互输入）:${NC}
   -h, --help              显示此帮助信息并退出
   --dry-run               只打印将要执行的操作，不实际修改
   --user NAME             目标用户名
   --yes                   跳过危险操作确认（格式化磁盘等）
+  --skip-git              all 时跳过 Git 安装
+  --skip-swap             all 时跳过小内存 swap 建议/启用
 
 ${BOLD}create-user 选项:${NC}
   --password PASS         指定用户密码
@@ -74,18 +88,23 @@ ${BOLD}init-disk 选项:${NC}
 ${BOLD}init-ssh 选项:${NC}
   --email COMMENT         SSH 密钥 -C 注释（默认 <user>@<hostname>）
 
+${BOLD}enable-swap 选项:${NC}
+  --swap-size GIB         swap 文件大小（GiB），默认使「内存+swap」达到至少 4GiB
+
 ${BOLD}推荐步骤:${NC}
-  1. create-user
+  1. create-user / all
   2. init-disk     # 有数据盘则挂到 /home/<user>；没有则跳过
   3. init-ssh
+  4. enable-swap   # 内存 <= 2GiB 时建议执行，便于 Agent CLI
 
 ${BOLD}示例:${NC}
-  sudo $(basename "$0") all                 # 全程交互
+  sudo $(basename "$0") all                 # 全程交互（含 Git；小内存提示 swap）
   sudo $(basename "$0") create-user
   sudo $(basename "$0") init-disk --yes
   sudo $(basename "$0") init-ssh
+  sudo $(basename "$0") enable-swap --swap-size 4 --yes
   sudo $(basename "$0") status
-  sudo $(basename "$0") all --user alice --yes   # 部分参数预填
+  sudo $(basename "$0") all --user alice --yes
 
 EOF
 }
@@ -781,6 +800,206 @@ cmd_init_ssh() {
   fi
 }
 
+# ─── 包管理器 / 内存 ──────────────────────────────────────────────────────────
+detect_pkg_manager() {
+  if command -v dnf &>/dev/null; then
+    echo "dnf"
+  elif command -v yum &>/dev/null; then
+    echo "yum"
+  elif command -v apt-get &>/dev/null; then
+    echo "apt-get"
+  else
+    error "未找到可用包管理器（dnf/yum/apt-get）"
+    exit 1
+  fi
+}
+
+mem_total_mib() {
+  local kb
+  kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  echo $((kb / 1024))
+}
+
+swap_total_mib() {
+  local kb
+  kb=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  echo $((kb / 1024))
+}
+
+# ─── install-git ──────────────────────────────────────────────────────────────
+cmd_install_git() {
+  step "安装 Git"
+  require_root
+
+  if is_installed git; then
+    success "Git 已安装：$(git --version)"
+    return 0
+  fi
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+  info "正在通过 ${pkg_manager} 安装 Git..."
+
+  if [[ "$pkg_manager" == "apt-get" ]]; then
+    run_cmd apt-get update -y
+    run_cmd apt-get install -y git
+  else
+    run_cmd "$pkg_manager" install -y git
+  fi
+
+  if [[ "$DRY_RUN" == true ]]; then
+    success "Git 安装步骤已记录（dry-run）"
+    return 0
+  fi
+
+  if is_installed git; then
+    success "Git 安装完成：$(git --version)"
+  else
+    error "Git 安装失败"
+    exit 1
+  fi
+}
+
+# ─── enable-swap ──────────────────────────────────────────────────────────────
+# 计算建议 swap 大小（MiB）：使 内存+swap >= 4GiB，且至少 1GiB
+recommended_swap_mib() {
+  local mem_mib need
+  mem_mib=$(mem_total_mib)
+  need=$((DEFAULT_SWAP_TARGET_MIB - mem_mib))
+  if [[ "$need" -lt 1024 ]]; then
+    need=1024
+  fi
+  echo "$need"
+}
+
+cmd_enable_swap() {
+  step "启用 Swap"
+  require_root
+
+  local mem_mib swap_mib size_mib size_gib
+  mem_mib=$(mem_total_mib)
+  swap_mib=$(swap_total_mib)
+
+  info "物理内存: ${mem_mib} MiB，当前 Swap: ${swap_mib} MiB"
+
+  local total=$((mem_mib + swap_mib))
+  if [[ "$total" -ge "$DEFAULT_SWAP_TARGET_MIB" ]] && [[ "$swap_mib" -gt 0 ]]; then
+    success "已有足够 Swap（内存+swap ≈ ${total} MiB >= ${DEFAULT_SWAP_TARGET_MIB} MiB），跳过"
+    swapon --show 2>/dev/null || true
+    return 0
+  fi
+
+  if [[ -n "$SWAP_SIZE_GIB" ]]; then
+    if ! [[ "$SWAP_SIZE_GIB" =~ ^[0-9]+$ ]] || [[ "$SWAP_SIZE_GIB" -lt 1 ]]; then
+      error "--swap-size 需为正整数（GiB）"
+      exit 1
+    fi
+    size_gib="$SWAP_SIZE_GIB"
+    size_mib=$((size_gib * 1024))
+  else
+    size_mib=$(recommended_swap_mib)
+    size_gib=$(( (size_mib + 1023) / 1024 ))
+    if [[ -t 0 ]] && [[ "$ASSUME_YES" != true ]] && [[ "$DRY_RUN" != true ]]; then
+      local ans
+      ans=$(prompt_line "建议创建 ${size_gib}GiB swap 文件（内存+swap >= 4GiB，便于 Agent CLI），大小 GiB" "$size_gib")
+      if [[ "$ans" =~ ^[0-9]+$ ]] && [[ "$ans" -ge 1 ]]; then
+        size_gib="$ans"
+        size_mib=$((size_gib * 1024))
+      fi
+    fi
+  fi
+
+  local swapfile="$DEFAULT_SWAP_FILE"
+  if [[ -f "$swapfile" ]] || findmnt -n "$swapfile" &>/dev/null || swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$swapfile"; then
+    if swapon --show=NAME --noheadings 2>/dev/null | grep -qx "$swapfile"; then
+      success "Swap 文件已启用: ${swapfile}"
+      swapon --show
+      return 0
+    fi
+  fi
+
+  confirm_destructive "将创建 ${size_gib}GiB swap 文件 ${swapfile} 并写入 fstab，是否继续？"
+
+  info "创建 ${size_gib}GiB swap 文件: ${swapfile} ..."
+  # 优先 fallocate，失败则 dd
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] fallocate/dd ${size_gib}G → ${swapfile}"
+    info "[dry-run] mkswap + swapon + fstab"
+    return 0
+  fi
+
+  if [[ -e "$swapfile" ]]; then
+    warn "已存在 ${swapfile}，先关闭并删除后重建..."
+    swapoff "$swapfile" 2>/dev/null || true
+    rm -f "$swapfile"
+  fi
+
+  if ! fallocate -l "${size_gib}G" "$swapfile" 2>/dev/null; then
+    info "fallocate 不可用，改用 dd（较慢）..."
+    dd if=/dev/zero of="$swapfile" bs=1M count="$size_mib" status=progress
+  fi
+  chmod 600 "$swapfile"
+  mkswap "$swapfile"
+  swapon "$swapfile"
+
+  # fstab
+  if ! grep -qE "^[^#]*[[:space:]]${swapfile}[[:space:]]" /etc/fstab 2>/dev/null; then
+    cp -a /etc/fstab "/etc/fstab.bak.$(date +%Y%m%d%H%M%S)"
+    echo "${swapfile} none swap sw 0 0" >>/etc/fstab
+    success "已写入 /etc/fstab"
+  else
+    success "fstab 中已有 ${swapfile} 条目"
+  fi
+
+  success "Swap 已启用（${size_gib}GiB）"
+  free -h
+  swapon --show
+}
+
+# ─── 小内存时建议/启用 swap（供 all 调用） ────────────────────────────────────
+maybe_enable_swap_for_low_mem() {
+  if [[ "$SKIP_SWAP" == true ]]; then
+    info "已跳过 swap（--skip-swap）"
+    return 0
+  fi
+
+  local mem_mib swap_mib total
+  mem_mib=$(mem_total_mib)
+  swap_mib=$(swap_total_mib)
+  total=$((mem_mib + swap_mib))
+
+  if [[ "$mem_mib" -gt "$LOW_MEM_THRESHOLD_MIB" ]]; then
+    info "物理内存 ${mem_mib} MiB > ${LOW_MEM_THRESHOLD_MIB} MiB，无需强制启用 swap"
+    return 0
+  fi
+
+  warn "检测到小内存 ECS（${mem_mib} MiB <= ${LOW_MEM_THRESHOLD_MIB} MiB）"
+  info "建议启用 swap，使内存+swap >= ${DEFAULT_SWAP_TARGET_MIB} MiB，以便 Agent CLI 正常使用"
+
+  if [[ "$total" -ge "$DEFAULT_SWAP_TARGET_MIB" ]]; then
+    success "当前内存+swap 已达 ${total} MiB，跳过"
+    return 0
+  fi
+
+  if [[ "$ASSUME_YES" == true ]]; then
+    cmd_enable_swap
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    warn "非交互模式：请稍后执行: $(basename "$0") enable-swap --yes"
+    return 0
+  fi
+
+  local yn
+  yn=$(prompt_line "是否现在启用 swap？" "Y")
+  if [[ "$yn" =~ ^[Yy]$ ]]; then
+    cmd_enable_swap
+  else
+    info "已跳过。需要时可执行: sudo $(basename "$0") enable-swap"
+  fi
+}
+
 # ─── status ───────────────────────────────────────────────────────────────────
 cmd_status() {
   step "状态概览"
@@ -793,6 +1012,19 @@ cmd_status() {
   echo -e "  ${BOLD}主机名${NC}     : $(hostname 2>/dev/null || echo unknown)"
   if [[ -f /etc/os-release ]]; then
     echo -e "  ${BOLD}系统${NC}       : $(grep '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')"
+  fi
+  local mem_mib swap_mib
+  mem_mib=$(mem_total_mib)
+  swap_mib=$(swap_total_mib)
+  echo -e "  ${BOLD}内存${NC}       : ${mem_mib} MiB"
+  echo -e "  ${BOLD}Swap${NC}       : ${swap_mib} MiB"
+  if is_installed git; then
+    echo -e "  ${BOLD}Git${NC}        : $(git --version 2>/dev/null)"
+  else
+    echo -e "  ${BOLD}Git${NC}        : 未安装"
+  fi
+  if [[ "$mem_mib" -le "$LOW_MEM_THRESHOLD_MIB" ]] && [[ $((mem_mib + swap_mib)) -lt "$DEFAULT_SWAP_TARGET_MIB" ]]; then
+    warn "小内存且 Swap 不足，建议: sudo $(basename "$0") enable-swap"
   fi
   echo
 
@@ -858,13 +1090,22 @@ cmd_status() {
 
 # ─── all ──────────────────────────────────────────────────────────────────────
 cmd_all() {
-  step "一键初始化（create-user → init-disk → init-ssh）"
+  step "一键初始化（install-git → create-user → init-disk → init-ssh [→ enable-swap]）"
   require_user_arg
+
+  if [[ "$SKIP_GIT" != true ]]; then
+    cmd_install_git
+  else
+    info "已跳过 Git 安装（--skip-git）"
+  fi
+
   cmd_create_user
   cmd_init_disk
   cmd_init_ssh
+  maybe_enable_swap_for_low_mem
+
   echo -e "\n${GREEN}${BOLD}✓ 全部步骤完成${NC}\n"
-  info "推荐后续：用新用户登录，执行 df -h ~ 确认家目录所在磁盘"
+  info "推荐后续：用新用户登录，执行 df -h ~ 与 free -h 确认磁盘与内存"
 }
 
 # ─── 参数解析 ────────────────────────────────────────────────────────────────
@@ -880,6 +1121,20 @@ parse_global_args() {
         ;;
       --yes|-y)
         ASSUME_YES=true
+        ;;
+      --skip-git)
+        SKIP_GIT=true
+        ;;
+      --skip-swap)
+        SKIP_SWAP=true
+        ;;
+      --swap-size)
+        shift
+        SWAP_SIZE_GIB="${1:-}"
+        if [[ -z "$SWAP_SIZE_GIB" ]]; then
+          error "--swap-size 需要参数（GiB）"
+          exit 1
+        fi
         ;;
       --user)
         shift
@@ -954,7 +1209,7 @@ main() {
       usage
       exit 0
       ;;
-    create-user|init-disk|init-ssh|all|status)
+    create-user|init-disk|init-ssh|install-git|enable-swap|all|status)
       ;;
     *)
       error "未知子命令: ${subcommand}"
@@ -974,11 +1229,13 @@ main() {
   fi
 
   case "$subcommand" in
-    create-user) cmd_create_user ;;
-    init-disk)   cmd_init_disk ;;
-    init-ssh)    cmd_init_ssh ;;
-    all)         cmd_all ;;
-    status)      cmd_status ;;
+    create-user)  cmd_create_user ;;
+    init-disk)    cmd_init_disk ;;
+    init-ssh)     cmd_init_ssh ;;
+    install-git)  cmd_install_git ;;
+    enable-swap)  cmd_enable_swap ;;
+    all)          cmd_all ;;
+    status)       cmd_status ;;
   esac
 }
 
