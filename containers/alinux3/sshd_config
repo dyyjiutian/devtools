@@ -1,0 +1,8 @@
+Port 22
+ListenAddress 0.0.0.0
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+UsePAM no
+X11Forwarding no
+PidFile /run/sshd.pid

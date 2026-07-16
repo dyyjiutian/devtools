@@ -1,0 +1,12 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+sh_test(
+    name = "container_scripts_syntax_test",
+    srcs = ["tests/run-docker-tests.sh"],
+    data = [
+        "entrypoint.sh",
+        "user-sync.sh",
+        "tests/entrypoint.bats",
+    ],
+    size = "small",
+)

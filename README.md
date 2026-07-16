@@ -29,6 +29,26 @@ devtools/
 └── tests/                        # Shell regression tests
 ```
 
+## Alibaba Cloud Linux 3 开发镜像
+
+`containers/alinux3/` 提供同时支持 Dev Container、普通 Docker 和 SSH 的开发镜像，包含 bash、zsh、Starship、Vim、Neovim、Git 工具以及 Claude Code、Codex CLI、Cursor Agent CLI。
+
+```bash
+docker buildx bake alinux3-full --load
+scripts/devtools-container-run devtools-alinux3:full-dev
+```
+
+没有 Buildx 时可使用：
+
+```bash
+docker build --file containers/alinux3/Dockerfile --target full \
+  --tag devtools-alinux3:full-dev .
+```
+
+镜像预置 `root` 和 `admin`，启动时由 root 入口脚本按 `DEV_UID` / `DEV_GID` 同步 `admin`，然后以非 root 用户运行开发命令。推荐使用 `scripts/devtools-container-run`，不要直接使用 `docker run --user admin` 进行 UID/GID 同步。
+
+详细说明见 [`containers/alinux3/README.md`](containers/alinux3/README.md)。
+
 ## OS Initialization
 
 ### macOS

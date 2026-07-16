@@ -1,0 +1,22 @@
+{
+  "build": {
+    "context": "..",
+    "dockerfile": "../containers/alinux3/Dockerfile",
+    "target": "full"
+  },
+  "remoteUser": "admin",
+  "updateRemoteUserUID": true,
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=devtools-claude,target=/home/admin/.claude,type=volume",
+    "source=devtools-codex,target=/home/admin/.codex,type=volume",
+    "source=devtools-cursor,target=/home/admin/.cursor,type=volume"
+  ],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  }
+}
