@@ -8,6 +8,7 @@ SETPROXY="${SCRIPT_DIR}/bin/setproxy"
 INSTALLER="${SCRIPT_DIR}/install-setproxy.sh"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/setproxy-test.XXXXXX")"
 FAKE_BIN="${TMP_ROOT}/fake-bin"
+FAKE_DNF_BIN="${TMP_ROOT}/fake-dnf-bin"
 CURL_LOG="${TMP_ROOT}/curl.log"
 
 cleanup() {
@@ -25,7 +26,7 @@ assert_file_contains() {
     grep -qF "${expected}" "${file}" || fail "${file} does not contain: ${expected}"
 }
 
-mkdir -p "${FAKE_BIN}"
+mkdir -p "${FAKE_BIN}" "${FAKE_DNF_BIN}"
 
 cat >"${FAKE_BIN}/uname" <<'EOF'
 #!/usr/bin/env bash
@@ -71,6 +72,11 @@ fi
 exit 0
 EOF
 
+cat >"${FAKE_DNF_BIN}/dnf" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+
 cat >"${FAKE_BIN}/sudo" <<'EOF'
 #!/usr/bin/env bash
 exec "$@"
@@ -103,12 +109,12 @@ esac
 EOF
 
 chmod +x "${FAKE_BIN}/uname" "${FAKE_BIN}/lsof" "${FAKE_BIN}/nc" "${FAKE_BIN}/curl" \
-    "${FAKE_BIN}/docker" "${FAKE_BIN}/sudo" "${FAKE_BIN}/systemctl" "${FAKE_BIN}/colima"
+    "${FAKE_BIN}/docker" "${FAKE_BIN}/sudo" "${FAKE_BIN}/systemctl" "${FAKE_BIN}/colima" "${FAKE_DNF_BIN}/dnf"
 
-printf '[1/7] shell syntax\n'
+printf '[1/10] shell syntax\n'
 bash -n "${SETPROXY}" "${INSTALLER}"
 
-printf '[2/7] macOS V2RayXS autodetection and clean on --emit\n'
+printf '[2/10] macOS V2RayXS autodetection and clean on --emit\n'
 HOME_ON="${TMP_ROOT}/home-on"
 mkdir -p "${HOME_ON}"
 touch "${HOME_ON}/.zshrc"
@@ -118,26 +124,40 @@ env -i \
     CURL_LOG="${CURL_LOG}" \
     "${SETPROXY}" on --emit >"${TMP_ROOT}/on.stdout" 2>"${TMP_ROOT}/on.stderr"
 
-if grep -Ev '^(export [A-Za-z_][A-Za-z0-9_]*=|$)' "${TMP_ROOT}/on.stdout" >/dev/null; then
+if grep -Ev '^(export [A-Za-z_][A-Za-z0-9_]*=|unset [A-Za-z_][A-Za-z0-9_]*|$)' "${TMP_ROOT}/on.stdout" >/dev/null; then
     sed -n '1,120p' "${TMP_ROOT}/on.stdout" >&2
     fail "on --emit stdout contains non-export output"
 fi
 assert_file_contains "${TMP_ROOT}/on.stdout" 'export HTTP_PROXY="http://127.0.0.1:8001"'
 assert_file_contains "${TMP_ROOT}/on.stdout" 'export ALL_PROXY="socks5h://127.0.0.1:1081"'
-assert_file_contains "${TMP_ROOT}/on.stdout" 'export GIT_SSH_COMMAND='
+assert_file_contains "${TMP_ROOT}/on.stdout" 'unset GIT_SSH_COMMAND'
 assert_file_contains "${HOME_ON}/.config/vpn/setproxy.conf" 'HTTP_PORT="8001"'
 assert_file_contains "${HOME_ON}/.config/vpn/setproxy.conf" 'SOCKS_PORT="1081"'
 
-printf '[3/7] emitted Git SSH command uses SOCKS without SSH config changes\n'
+printf '[3/10] Git SSH proxy is opt-in and leaves SSH config unchanged\n'
 (
     set +u
     eval "$(cat "${TMP_ROOT}/on.stdout")"
-    [[ "${GIT_SSH_COMMAND:-}" == *'nc -x 127.0.0.1:1081 -X 5 %h %p'* ]] \
-        || fail "GIT_SSH_COMMAND does not use V2RayXS SOCKS"
+    [[ -z "${GIT_SSH_COMMAND:-}" ]] || fail "default setproxy on exported GIT_SSH_COMMAND"
 )
 [[ ! -e "${HOME_ON}/.ssh/config" ]] || fail "setproxy created an SSH config"
 
-printf '[4/7] clean off --emit\n'
+HOME_GIT_SSH="${TMP_ROOT}/home-git-ssh"
+mkdir -p "${HOME_GIT_SSH}"
+env -i \
+    HOME="${HOME_GIT_SSH}" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    CURL_LOG="${CURL_LOG}" \
+    "${SETPROXY}" on --emit --git-ssh >"${TMP_ROOT}/git-ssh.stdout" 2>"${TMP_ROOT}/git-ssh.stderr"
+assert_file_contains "${TMP_ROOT}/git-ssh.stdout" 'export GIT_SSH_COMMAND='
+(
+    set +u
+    eval "$(cat "${TMP_ROOT}/git-ssh.stdout")"
+    [[ "${GIT_SSH_COMMAND:-}" == *'nc -x 127.0.0.1:1081 -X 5 %h %p'* ]] \
+        || fail "--git-ssh did not use the SOCKS command"
+)
+
+printf '[4/10] clean off --emit\n'
 env -i \
     HOME="${HOME_ON}" \
     PATH="${FAKE_BIN}:/usr/bin:/bin" \
@@ -150,7 +170,7 @@ fi
 assert_file_contains "${TMP_ROOT}/off.stdout" 'GIT_SSH_COMMAND'
 [[ ! -e "${HOME_ON}/.config/vpn/proxy.env" ]] || fail "off did not remove proxy.env"
 
-printf '[5/7] command-line overrides and Git SSH opt-out\n'
+printf '[5/10] command-line overrides and Git SSH opt-out\n'
 HOME_OVERRIDE="${TMP_ROOT}/home-override"
 mkdir -p "${HOME_OVERRIDE}"
 env -i \
@@ -164,7 +184,7 @@ assert_file_contains "${TMP_ROOT}/override.stdout" 'export HTTP_PROXY="http://12
 assert_file_contains "${TMP_ROOT}/override.stdout" 'export ALL_PROXY="socks5h://127.0.0.1:9002"'
 assert_file_contains "${TMP_ROOT}/override.stdout" 'unset GIT_SSH_COMMAND'
 
-printf '[6/8] test --size controls both speed downloads\n'
+printf '[6/10] test --size controls both speed downloads\n'
 : >"${CURL_LOG}"
 env -i \
     HOME="${HOME_ON}" \
@@ -197,8 +217,9 @@ if grep -q 'proof.ovh.net' "${CURL_LOG}"; then
     fail "overseas speed test still uses OVH"
 fi
 
-printf '[7/9] Docker daemon proxy is merged, restored, and never restarted\n'
+printf '[7/10] Docker daemon proxy is opt-in, merged, restored, and never restarted\n'
 DOCKER_DAEMON_JSON="${TMP_ROOT}/linux-daemon.json"
+DOCKER_DNF_CONF="${TMP_ROOT}/docker-dnf.conf"
 cat >"${DOCKER_DAEMON_JSON}" <<'EOF'
 {"log-driver":"json-file","proxies":{"http-proxy":"http://old-proxy:8080"}}
 EOF
@@ -211,6 +232,7 @@ env -i \
     PATH="${FAKE_BIN}:/usr/bin:/bin" \
     FAKE_UNAME=Linux \
     VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    VPN_DNF_CONF="${DOCKER_DNF_CONF}" \
     SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
     "${SETPROXY}" off >/dev/null 2>&1
 assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy":"http://old-proxy:8080"'
@@ -219,8 +241,18 @@ env -i \
     PATH="${FAKE_BIN}:/usr/bin:/bin" \
     FAKE_UNAME=Linux \
     VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    VPN_DNF_CONF="${DOCKER_DNF_CONF}" \
     SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
-    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/docker-on.stdout" 2>"${TMP_ROOT}/docker-on.stderr"
+    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/docker-default.stdout" 2>"${TMP_ROOT}/docker-default.stderr"
+assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy":"http://old-proxy:8080"'
+env -i \
+    HOME="${HOME_DOCKER}" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    VPN_DNF_CONF="${DOCKER_DNF_CONF}" \
+    SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
+    "${SETPROXY}" on --http-port 8001 --docker-daemon >"${TMP_ROOT}/docker-on.stdout" 2>"${TMP_ROOT}/docker-on.stderr"
 assert_file_contains "${DOCKER_DAEMON_JSON}" '"log-driver"'
 assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy": "http://127.0.0.1:8001"'
 assert_file_contains "${TMP_ROOT}/docker-on.stdout" 'sudo systemctl restart docker'
@@ -229,6 +261,7 @@ env -i \
     PATH="${FAKE_BIN}:/usr/bin:/bin" \
     FAKE_UNAME=Linux \
     VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    VPN_DNF_CONF="${DOCKER_DNF_CONF}" \
     SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
     "${SETPROXY}" off >"${TMP_ROOT}/docker-off.stdout" 2>"${TMP_ROOT}/docker-off.stderr"
 assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy": "http://old-proxy:8080"'
@@ -236,7 +269,7 @@ if [[ -s "${SYSTEMCTL_LOG}" ]]; then
     fail "setproxy automatically restarted Docker"
 fi
 
-printf '[8/9] Colima uses the host gateway and Docker Desktop is skipped\n'
+printf '[8/10] Colima uses the host gateway and Docker Desktop is skipped\n'
 COLIMA_DAEMON_JSON="${TMP_ROOT}/colima-daemon.json"
 printf '{"features":{"buildkit":true}}\n' >"${COLIMA_DAEMON_JSON}"
 HOME_COLIMA="${TMP_ROOT}/home-colima"
@@ -247,7 +280,7 @@ env -i \
     FAKE_UNAME=Darwin \
     FAKE_COLIMA_STATUS='runtime: docker' \
     COLIMA_DAEMON_JSON="${COLIMA_DAEMON_JSON}" \
-    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/colima-on.stdout" 2>"${TMP_ROOT}/colima-on.stderr"
+    "${SETPROXY}" on --http-port 8001 --docker-daemon >"${TMP_ROOT}/colima-on.stdout" 2>"${TMP_ROOT}/colima-on.stderr"
 assert_file_contains "${COLIMA_DAEMON_JSON}" '"http-proxy": "http://host.lima.internal:8001"'
 assert_file_contains "${TMP_ROOT}/colima-on.stdout" 'colima restart'
 env -i \
@@ -255,10 +288,45 @@ env -i \
     PATH="${FAKE_BIN}:/usr/bin:/bin" \
     FAKE_UNAME=Darwin \
     FAKE_DOCKER_CONTEXT=desktop-linux \
-    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/desktop.stdout" 2>"${TMP_ROOT}/desktop.stderr"
+    "${SETPROXY}" on --http-port 8001 --docker-daemon >"${TMP_ROOT}/desktop.stdout" 2>"${TMP_ROOT}/desktop.stderr"
 assert_file_contains "${TMP_ROOT}/desktop.stderr" 'Docker Desktop'
 
-printf '[9/9] installer and complete uninstall lifecycle\n'
+printf '[9/10] dnf proxy is applied, restored, and preserves external changes\n'
+DNF_CONF="${TMP_ROOT}/dnf.conf"
+HOME_DNF="${TMP_ROOT}/home-dnf"
+mkdir -p "${HOME_DNF}"
+printf '[main]\nkeepcache=True\nproxy=http://old-proxy:8080\n' >"${DNF_CONF}"
+env -i \
+    HOME="${HOME_DNF}" \
+    PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DNF_CONF="${DNF_CONF}" \
+    "${SETPROXY}" on --http-port 9001 >/dev/null
+assert_file_contains "${DNF_CONF}" 'proxy=http://127.0.0.1:9001'
+env -i \
+    HOME="${HOME_DNF}" \
+    PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DNF_CONF="${DNF_CONF}" \
+    "${SETPROXY}" off >/dev/null
+assert_file_contains "${DNF_CONF}" 'proxy=http://old-proxy:8080'
+env -i \
+    HOME="${HOME_DNF}" \
+    PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DNF_CONF="${DNF_CONF}" \
+    "${SETPROXY}" on --http-port 9001 >/dev/null
+sed -i 's#proxy=http://127.0.0.1:9001#proxy=http://external:8080#' "${DNF_CONF}"
+env -i \
+    HOME="${HOME_DNF}" \
+    PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DNF_CONF="${DNF_CONF}" \
+    "${SETPROXY}" off >"${TMP_ROOT}/dnf-off.stdout" 2>"${TMP_ROOT}/dnf-off.stderr"
+assert_file_contains "${DNF_CONF}" 'proxy=http://external:8080'
+assert_file_contains "${TMP_ROOT}/dnf-off.stderr" 'dnf 代理配置已被其他工具修改'
+
+printf '[10/10] installer and complete uninstall lifecycle\n'
 HOME_INSTALL="${TMP_ROOT}/home-install"
 mkdir -p "${HOME_INSTALL}"
 cat >"${HOME_INSTALL}/.zshrc" <<'EOF'

@@ -10,8 +10,8 @@
 #   eval "$(setproxy on --emit)"
 #
 # Git SSH 地址走 SOCKS：
-#   setproxy 默认导出 GIT_SSH_COMMAND，通过 nc 连接 SOCKS5。
-#   这不会修改 ~/.ssh/config；可用 --no-git-ssh 禁用。
+#   setproxy on --git-ssh 导出 GIT_SSH_COMMAND，通过 nc 连接 SOCKS5。
+#   默认不修改 Git SSH 行为，也不会修改 ~/.ssh/config。
 
 set -euo pipefail
 
@@ -25,6 +25,7 @@ CLI_HTTP_PORT=""
 CLI_SOCKS_HOST=""
 CLI_SOCKS_PORT=""
 CLI_GIT_SSH_PROXY=""
+DOCKER_DAEMON=false
 CLI_TEST_SIZE_MB=""
 
 usage() {
@@ -42,8 +43,9 @@ usage() {
   --http-port PORT       指定 HTTP 代理端口
   --socks-host HOST      指定 SOCKS5 代理主机
   --socks-port PORT      指定 SOCKS5 代理端口
-  --no-git-ssh           不为 Git SSH 导出 GIT_SSH_COMMAND
-  --git-ssh              为 Git SSH 导出 GIT_SSH_COMMAND
+  --no-git-ssh           不为 Git SSH 导出 GIT_SSH_COMMAND（默认）
+  --git-ssh              为本次命令的 Git SSH 导出 GIT_SSH_COMMAND
+  --docker-daemon        为本次 on 配置 Docker 守护进程代理
   --size MB              仅 test：测速大小，范围 1-1000 MB（默认 10）
   -h, --help             显示帮助
 
@@ -119,6 +121,10 @@ while [[ $# -gt 0 ]]; do
             CLI_GIT_SSH_PROXY=true
             shift
             ;;
+        --docker-daemon)
+            DOCKER_DAEMON=true
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -140,6 +146,8 @@ PROXY_DIR="${HOME}/.config/vpn"
 PROXY_ENV="${PROXY_DIR}/proxy.env"
 CONFIG_FILE="${PROXY_DIR}/setproxy.conf"
 DOCKER_STATE_FILE="${PROXY_DIR}/setproxy-docker-state.json"
+DNF_STATE_FILE="${PROXY_DIR}/setproxy-dnf-state.json"
+DNF_CONF="${VPN_DNF_CONF:-/etc/dnf/dnf.conf}"
 DOCKER_DAEMON_JSON="${VPN_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
 MARKER_BEGIN="# >>> vpn-shell-proxy managed >>>"
 MARKER_END="# <<< vpn-shell-proxy managed <<<"
@@ -163,7 +171,6 @@ CONFIG_HTTP_HOST=""
 CONFIG_HTTP_PORT=""
 CONFIG_SOCKS_HOST=""
 CONFIG_SOCKS_PORT=""
-CONFIG_GIT_SSH_PROXY=""
 
 load_config() {
     [[ -f "$CONFIG_FILE" ]] || return 0
@@ -265,7 +272,7 @@ HTTP_HOST="$(first_nonempty "$CLI_HTTP_HOST" "${VPN_HTTP_HOST:-}" "$CONFIG_HTTP_
 HTTP_PORT="$(first_nonempty "$CLI_HTTP_PORT" "${VPN_HTTP_PORT:-}" "$CONFIG_HTTP_PORT" "$DETECTED_HTTP_PORT")"
 SOCKS_HOST="$(first_nonempty "$CLI_SOCKS_HOST" "${VPN_SOCKS_HOST:-}" "$CONFIG_SOCKS_HOST" "127.0.0.1")"
 SOCKS_PORT="$(first_nonempty "$CLI_SOCKS_PORT" "${VPN_SOCKS_PORT:-}" "$CONFIG_SOCKS_PORT" "$DETECTED_SOCKS_PORT")"
-GIT_SSH_PROXY="$(normalize_bool "$(first_nonempty "$CLI_GIT_SSH_PROXY" "${VPN_GIT_SSH_PROXY:-}" "$CONFIG_GIT_SSH_PROXY" "true")")"
+GIT_SSH_PROXY="$(normalize_bool "$(first_nonempty "$CLI_GIT_SSH_PROXY" "${VPN_GIT_SSH_PROXY:-}" "false")")"
 TEST_SIZE_MB="${CLI_TEST_SIZE_MB:-10}"
 
 validate_host "HTTP 代理主机" "$HTTP_HOST"
@@ -299,9 +306,203 @@ write_config() {
         printf 'CONFIG_HTTP_PORT="%s"\n' "$HTTP_PORT"
         printf 'CONFIG_SOCKS_HOST="%s"\n' "$SOCKS_HOST"
         printf 'CONFIG_SOCKS_PORT="%s"\n' "$SOCKS_PORT"
-        printf 'CONFIG_GIT_SSH_PROXY="%s"\n' "$GIT_SSH_PROXY"
     } > "$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
+}
+
+dnf_available() {
+    ! $IS_DARWIN && command -v dnf >/dev/null 2>&1
+}
+
+configure_dnf_proxy_on() {
+    dnf_available || return 0
+
+    local proxy_url="http://${HTTP_HOST}:${HTTP_PORT}"
+    if ! sudo python3 - "$DNF_CONF" "$DNF_STATE_FILE" "$proxy_url" <<'PY'
+import json
+import os
+import re
+import stat
+import sys
+import tempfile
+
+config_path, state_path, proxy_url = sys.argv[1:]
+section_pattern = re.compile(r"^\s*\[([^]]+)\]\s*(?:[;#].*)?$")
+proxy_pattern = re.compile(r"^\s*proxy\s*=", re.IGNORECASE)
+
+def read_text(path):
+    try:
+        with open(path, encoding="utf-8") as source:
+            return source.read()
+    except FileNotFoundError:
+        return ""
+
+def write_atomically(path, content, mode=None):
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    fd, temporary_path = tempfile.mkstemp(prefix=".setproxy-dnf-", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as destination:
+            destination.write(content)
+        if mode is not None:
+            os.chmod(temporary_path, mode)
+        os.replace(temporary_path, path)
+    except BaseException:
+        os.unlink(temporary_path)
+        raise
+
+def find_main(lines):
+    for index, line in enumerate(lines):
+        match = section_pattern.match(line)
+        if match and match.group(1).strip().lower() == "main":
+            for end in range(index + 1, len(lines)):
+                if section_pattern.match(lines[end]):
+                    return index, end
+            return index, len(lines)
+    return None
+
+def proxy_lines(lines, bounds):
+    if bounds is None:
+        return []
+    start, end = bounds
+    return [line for line in lines[start + 1:end] if proxy_pattern.match(line)]
+
+def proxy_values(lines, bounds):
+    return [line.split("=", 1)[1].strip() for line in proxy_lines(lines, bounds)]
+
+def replace_proxy(lines, value):
+    bounds = find_main(lines)
+    if bounds is None:
+        suffix = "" if not lines or lines[-1].endswith("\n") else "\n"
+        return lines + ([suffix] if suffix else []) + ["[main]\n", f"proxy={value}\n"]
+    start, end = bounds
+    body = [line for line in lines[start + 1:end] if not proxy_pattern.match(line)]
+    return lines[:start + 1] + [f"proxy={value}\n"] + body + lines[end:]
+
+config = read_text(config_path)
+lines = config.splitlines(keepends=True)
+bounds = find_main(lines)
+
+try:
+    with open(state_path, encoding="utf-8") as source:
+        state_data = json.load(source)
+except FileNotFoundError:
+    state_data = None
+
+if state_data is None:
+    state_data = {
+        "main_existed": bounds is not None,
+        "original_proxy_lines": proxy_lines(lines, bounds),
+        "applied": proxy_url,
+    }
+else:
+    if not isinstance(state_data, dict) or not isinstance(state_data.get("applied"), str):
+        raise ValueError("dnf 代理状态文件格式无效")
+    if proxy_values(lines, bounds) != [state_data["applied"]]:
+        print("dnf 代理配置已被其他工具修改，未覆盖现有配置", file=sys.stderr)
+        sys.exit(4)
+    state_data["applied"] = proxy_url
+
+config_mode = stat.S_IMODE(os.stat(config_path).st_mode) if os.path.exists(config_path) else 0o644
+write_atomically(config_path, "".join(replace_proxy(lines, proxy_url)), config_mode)
+write_atomically(state_path, json.dumps(state_data, indent=2, sort_keys=True) + "\n", 0o600)
+PY
+    then
+        error "无法写入 dnf 代理配置: ${DNF_CONF}"
+        return 1
+    fi
+    info "dnf 代理已写入 ${DNF_CONF}；需要 sudo 权限"
+}
+
+configure_dnf_proxy_off() {
+    dnf_available || return 0
+
+    local status
+    if sudo python3 - "$DNF_CONF" "$DNF_STATE_FILE" <<'PY'
+import json
+import os
+import re
+import stat
+import sys
+import tempfile
+
+config_path, state_path = sys.argv[1:]
+section_pattern = re.compile(r"^\s*\[([^]]+)\]\s*(?:[;#].*)?$")
+proxy_pattern = re.compile(r"^\s*proxy\s*=", re.IGNORECASE)
+
+if not os.path.exists(state_path):
+    sys.exit(3)
+
+with open(state_path, encoding="utf-8") as source:
+    state_data = json.load(source)
+if not isinstance(state_data, dict) or not isinstance(state_data.get("applied"), str):
+    raise ValueError("dnf 代理状态文件格式无效")
+if not os.path.exists(config_path):
+    print("dnf 配置文件不存在，未使用过期状态恢复", file=sys.stderr)
+    sys.exit(4)
+
+with open(config_path, encoding="utf-8") as source:
+    lines = source.read().splitlines(keepends=True)
+
+def find_main(items):
+    for index, line in enumerate(items):
+        match = section_pattern.match(line)
+        if match and match.group(1).strip().lower() == "main":
+            for end in range(index + 1, len(items)):
+                if section_pattern.match(items[end]):
+                    return index, end
+            return index, len(items)
+    return None
+
+bounds = find_main(lines)
+if bounds is None:
+    current_values = []
+else:
+    start, end = bounds
+    current_values = [line.split("=", 1)[1].strip() for line in lines[start + 1:end] if proxy_pattern.match(line)]
+
+if current_values != [state_data["applied"]]:
+    print("dnf 代理配置已被其他工具修改，未使用过期备份恢复", file=sys.stderr)
+    sys.exit(4)
+
+start, end = bounds
+body = [line for line in lines[start + 1:end] if not proxy_pattern.match(line)]
+original = state_data.get("original_proxy_lines", [])
+if not isinstance(original, list) or not all(isinstance(line, str) for line in original):
+    raise ValueError("dnf 代理状态文件格式无效")
+restored = lines[:start + 1] + original + body + lines[end:]
+if not state_data.get("main_existed") and not body and not original:
+    restored = lines[:start] + lines[end:]
+
+directory = os.path.dirname(config_path) or "."
+fd, temporary_path = tempfile.mkstemp(prefix=".setproxy-dnf-", dir=directory)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as destination:
+        destination.write("".join(restored))
+    os.chmod(temporary_path, stat.S_IMODE(os.stat(config_path).st_mode))
+    os.replace(temporary_path, config_path)
+except BaseException:
+    os.unlink(temporary_path)
+    raise
+os.unlink(state_path)
+PY
+    then
+        info "dnf 代理已恢复: ${DNF_CONF}"
+        return 0
+    fi
+
+    status=$?
+    case "$status" in
+        3) return 0 ;;
+        4)
+            warn "dnf 代理配置已被其他工具修改，未使用过期备份恢复"
+            return 0
+            ;;
+        *)
+            error "无法恢复 dnf 代理配置: ${DNF_CONF}"
+            return "$status"
+            ;;
+    esac
 }
 
 detect_docker_target() {
@@ -665,7 +866,10 @@ do_on() {
     ensure_shell_hook "${HOME}/.bashrc"
     ensure_shell_hook "${HOME}/.zshrc"
     ensure_shell_hook "${HOME}/.profile"
-    configure_docker_proxy_on
+    configure_dnf_proxy_on
+    if $DOCKER_DAEMON; then
+        configure_docker_proxy_on
+    fi
 
     if $EMIT; then
         emit_exports
@@ -694,6 +898,7 @@ do_on() {
 do_off() {
     rm -f "$PROXY_ENV"
     clear_current_shell
+    configure_dnf_proxy_off
     configure_docker_proxy_off
 
     if $EMIT; then
