@@ -28,6 +28,7 @@ reset_terminal() {
     printf '\033[<u'       # pop kitty keyboard protocol flags
     printf '\033[?25h'     # ensure cursor is visible
     stty sane 2>/dev/null || true
+    tput rmcup 2>/dev/null || true  # leave alternate screen; restore scrollback
     close_master
 }
 trap reset_terminal EXIT INT TERM
