@@ -10,8 +10,10 @@ error()   { echo -e "\033[31m[ERROR]\033[0m $1" >&2; exit 1; }
 # When remote tmux has `set -g mouse on`, it sends \033[?1000h (and related)
 # to enable mouse reporting in the local terminal. On abnormal SSH disconnect
 # these sequences are never cancelled, causing Ghostty to misinterpret mouse
-# clicks as escape sequences. This trap fires on any exit (normal or signal).
+# clicks as escape sequences. The exit trap restores terminal state only after
+# an interactive SSH/tmux session has started.
 CTRL_SOCK=""   # path to ControlMaster socket, set after host is picked
+INTERACTIVE_SESSION_STARTED=false
 
 close_master() {
     # Leave the socket alive — ControlPersist=12h expires it automatically.
@@ -20,6 +22,8 @@ close_master() {
 }
 
 reset_terminal() {
+    [[ "$INTERACTIVE_SESSION_STARTED" == "true" ]] || return
+
     printf '\033[?1000l'   # disable X10 mouse click reporting
     printf '\033[?1002l'   # disable mouse drag (button-event) reporting
     printf '\033[?1006l'   # disable SGR extended mouse mode
@@ -210,6 +214,7 @@ establish_master "$HOST"
 # ── Plain SSH mode (--no-tmux or [直接登录] chosen) ───────────────────────────
 connect_plain() {
     success "→ ${HOST}  (plain SSH)"
+    INTERACTIVE_SESSION_STARTED=true
     mssh "$HOST"
 }
 
@@ -251,6 +256,7 @@ if ! _tmux_check=$(mssh "$HOST" "tmux -V" 2>&1); then
 fi
 
 # Do not use exec — trap must fire on exit to clean up terminal state
+INTERACTIVE_SESSION_STARTED=true
 mssh -t "$HOST" "tmux new-session -As $SESSION_Q" || {
     rc=$?
     echo -e "\033[31m[ERROR]\033[0m Remote tmux exited ${rc} on ${HOST}" >&2
