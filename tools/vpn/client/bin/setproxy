@@ -25,6 +25,7 @@ CLI_HTTP_PORT=""
 CLI_SOCKS_HOST=""
 CLI_SOCKS_PORT=""
 CLI_GIT_SSH_PROXY=""
+CLI_TEST_SIZE_MB=""
 
 usage() {
     cat <<'HELP'
@@ -33,7 +34,7 @@ usage() {
   on      开启终端代理，写入 ~/.config/vpn/proxy.env
   off     关闭终端代理
   status  查看代理配置、环境变量和本地端口
-  test    测试常用站点连通性及国内/海外下载速度
+  test    测试常用站点连通性及国内/海外下载速度（默认测速 10MB）
 
 选项:
   --emit                 仅向标准输出打印可供 eval 执行的 shell 代码
@@ -43,6 +44,7 @@ usage() {
   --socks-port PORT      指定 SOCKS5 代理端口
   --no-git-ssh           不为 Git SSH 导出 GIT_SSH_COMMAND
   --git-ssh              为 Git SSH 导出 GIT_SSH_COMMAND
+  --size MB              仅 test：测速大小，范围 1-1000 MB（默认 10）
   -h, --help             显示帮助
 
 配置优先级:
@@ -95,7 +97,8 @@ while [[ $# -gt 0 ]]; do
         --http-port=*)  CLI_HTTP_PORT="${1#*=}"; shift ;;
         --socks-host=*) CLI_SOCKS_HOST="${1#*=}"; shift ;;
         --socks-port=*) CLI_SOCKS_PORT="${1#*=}"; shift ;;
-        --http-host|--http-port|--socks-host|--socks-port)
+        --size=*)       CLI_TEST_SIZE_MB="${1#*=}"; shift ;;
+        --http-host|--http-port|--socks-host|--socks-port|--size)
             option="$1"
             shift
             need_value "$option" "${1:-}"
@@ -104,6 +107,7 @@ while [[ $# -gt 0 ]]; do
                 --http-port)  CLI_HTTP_PORT="$1" ;;
                 --socks-host) CLI_SOCKS_HOST="$1" ;;
                 --socks-port) CLI_SOCKS_PORT="$1" ;;
+                --size)       CLI_TEST_SIZE_MB="$1" ;;
             esac
             shift
             ;;
@@ -135,6 +139,8 @@ fi
 PROXY_DIR="${HOME}/.config/vpn"
 PROXY_ENV="${PROXY_DIR}/proxy.env"
 CONFIG_FILE="${PROXY_DIR}/setproxy.conf"
+DOCKER_STATE_FILE="${PROXY_DIR}/setproxy-docker-state.json"
+DOCKER_DAEMON_JSON="${VPN_DOCKER_DAEMON_JSON:-/etc/docker/daemon.json}"
 MARKER_BEGIN="# >>> vpn-shell-proxy managed >>>"
 MARKER_END="# <<< vpn-shell-proxy managed <<<"
 HOOK_LINE='[ -f "${HOME}/.config/vpn/proxy.env" ] && . "${HOME}/.config/vpn/proxy.env"'
@@ -232,6 +238,15 @@ validate_port() {
     fi
 }
 
+validate_size() {
+    local value="$1"
+    if [[ ! "$value" =~ ^[0-9]+$ ]] \
+        || (( 10#$value < 1 || 10#$value > 1000 )); then
+        error "测速大小必须是 1-1000 的整数 MB: ${value}"
+        exit 1
+    fi
+}
+
 normalize_bool() {
     case "${1:-}" in
         true|TRUE|yes|YES|1|on|ON) printf 'true' ;;
@@ -251,11 +266,17 @@ HTTP_PORT="$(first_nonempty "$CLI_HTTP_PORT" "${VPN_HTTP_PORT:-}" "$CONFIG_HTTP_
 SOCKS_HOST="$(first_nonempty "$CLI_SOCKS_HOST" "${VPN_SOCKS_HOST:-}" "$CONFIG_SOCKS_HOST" "127.0.0.1")"
 SOCKS_PORT="$(first_nonempty "$CLI_SOCKS_PORT" "${VPN_SOCKS_PORT:-}" "$CONFIG_SOCKS_PORT" "$DETECTED_SOCKS_PORT")"
 GIT_SSH_PROXY="$(normalize_bool "$(first_nonempty "$CLI_GIT_SSH_PROXY" "${VPN_GIT_SSH_PROXY:-}" "$CONFIG_GIT_SSH_PROXY" "true")")"
+TEST_SIZE_MB="${CLI_TEST_SIZE_MB:-10}"
 
 validate_host "HTTP 代理主机" "$HTTP_HOST"
 validate_host "SOCKS 代理主机" "$SOCKS_HOST"
 validate_port "HTTP 代理端口" "$HTTP_PORT"
 validate_port "SOCKS 代理端口" "$SOCKS_PORT"
+if [[ -n "$CLI_TEST_SIZE_MB" && "$ACTION" != "test" ]]; then
+    error "--size 仅可与 test 一起使用"
+    exit 1
+fi
+validate_size "$TEST_SIZE_MB"
 
 ensure_shell_hook() {
     local rc="$1"
@@ -281,6 +302,237 @@ write_config() {
         printf 'CONFIG_GIT_SSH_PROXY="%s"\n' "$GIT_SSH_PROXY"
     } > "$CONFIG_FILE"
     chmod 600 "$CONFIG_FILE"
+}
+
+detect_docker_target() {
+    DOCKER_TARGET_KIND=""
+    DOCKER_TARGET_NAME=""
+
+    if $IS_DARWIN; then
+        local colima_status=""
+        if command -v colima >/dev/null 2>&1; then
+            colima_status="$(colima status 2>/dev/null || true)"
+            if grep -Eqi 'runtime[[:space:]]*:[[:space:]]*docker' <<< "$colima_status"; then
+                DOCKER_TARGET_KIND="colima"
+                DOCKER_TARGET_NAME="colima:${COLIMA_PROFILE:-default}"
+                return 0
+            fi
+        fi
+        if command -v docker >/dev/null 2>&1 \
+            && [[ "$(docker context show 2>/dev/null || true)" == desktop-* ]]; then
+            DOCKER_TARGET_KIND="desktop"
+            DOCKER_TARGET_NAME="docker-desktop"
+        fi
+    elif command -v docker >/dev/null 2>&1; then
+        DOCKER_TARGET_KIND="linux"
+        DOCKER_TARGET_NAME="linux"
+    fi
+}
+
+read_linux_docker_config() {
+    sudo cat "$DOCKER_DAEMON_JSON" 2>/dev/null || printf '{}\n'
+}
+
+write_linux_docker_config() {
+    local content="$1"
+    sudo mkdir -p "$(dirname "$DOCKER_DAEMON_JSON")" \
+        && printf '%s\n' "$content" | sudo tee "$DOCKER_DAEMON_JSON" >/dev/null
+}
+
+read_colima_docker_config() {
+    colima ssh -- sudo cat /etc/docker/daemon.json 2>/dev/null || printf '{}\n'
+}
+
+write_colima_docker_config() {
+    local content="$1"
+    printf '%s\n' "$content" | colima ssh -- sudo tee /etc/docker/daemon.json >/dev/null
+}
+
+transform_docker_config() {
+    local action="$1" target="$2" proxy_url="$3" config="$4"
+    local config_input status output
+    config_input="$(mktemp "${TMPDIR:-/tmp}/setproxy-docker.XXXXXX")" || return 1
+    printf '%s\n' "$config" > "$config_input"
+
+    if output="$(python3 - "$action" "$target" "$DOCKER_STATE_FILE" "$proxy_url" "$config_input" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+action, target, state_path, proxy_url, config_path = sys.argv[1:]
+
+with open(config_path, encoding="utf-8") as config_file:
+    config = json.load(config_file)
+if not isinstance(config, dict):
+    raise ValueError("daemon.json 根节点必须是对象")
+
+try:
+    with open(state_path, encoding="utf-8") as state_file:
+        state = json.load(state_file)
+except FileNotFoundError:
+    state = {"targets": {}}
+
+if not isinstance(state, dict) or not isinstance(state.get("targets", {}), dict):
+    raise ValueError("Docker 代理状态文件格式无效")
+targets = state.setdefault("targets", {})
+
+def write_state():
+    directory = os.path.dirname(state_path)
+    if directory:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+    fd, temporary_path = tempfile.mkstemp(prefix=".setproxy-docker-", dir=directory or None)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as state_file:
+            json.dump(state, state_file, indent=2, sort_keys=True)
+            state_file.write("\n")
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, state_path)
+    except BaseException:
+        os.unlink(temporary_path)
+        raise
+
+if action == "apply":
+    applied = {
+        "http-proxy": proxy_url,
+        "https-proxy": proxy_url,
+        "no-proxy": "127.0.0.1,localhost,::1",
+    }
+    targets[target] = {
+        "previous_exists": "proxies" in config,
+        "previous": config.get("proxies"),
+        "applied": applied,
+    }
+    config["proxies"] = applied
+    write_state()
+elif action == "restore":
+    saved = targets.get(target)
+    if saved is None:
+        sys.exit(3)
+    if config.get("proxies") != saved.get("applied"):
+        sys.exit(4)
+    if saved.get("previous_exists"):
+        config["proxies"] = saved.get("previous")
+    else:
+        config.pop("proxies", None)
+    targets.pop(target)
+    if targets:
+        write_state()
+    elif os.path.exists(state_path):
+        os.unlink(state_path)
+else:
+    raise ValueError("未知 Docker 配置操作")
+
+print(json.dumps(config, indent=2, sort_keys=True))
+PY
+)"; then
+        rm -f "$config_input"
+        printf '%s' "$output"
+        return 0
+    else
+        status=$?
+        rm -f "$config_input"
+        return "$status"
+    fi
+}
+
+configure_docker_target() {
+    local action="$1" target="$2" proxy_url="$3" current updated status
+    case "$DOCKER_TARGET_KIND" in
+        linux) current="$(read_linux_docker_config)" ;;
+        colima) current="$(read_colima_docker_config)" ;;
+        *) return 0 ;;
+    esac
+
+    if updated="$(transform_docker_config "$action" "$target" "$proxy_url" "$current")"; then
+        :
+    else
+        status=$?
+        case "$status" in
+            3) return 0 ;;
+            4)
+                warn "Docker 代理配置已被其他工具修改，未使用过期备份恢复: ${target}"
+                return 0
+                ;;
+            *)
+                warn "无法处理 Docker 守护进程配置: ${target}"
+                return 0
+                ;;
+        esac
+    fi
+
+    case "$DOCKER_TARGET_KIND" in
+        linux)
+            if ! write_linux_docker_config "$updated"; then
+                warn "无法写入 ${DOCKER_DAEMON_JSON}；终端代理已保持启用"
+                return 0
+            fi
+            if [[ "$action" == "apply" ]]; then
+                info "Docker 守护进程代理已写入 ${DOCKER_DAEMON_JSON}；请手动执行: sudo systemctl restart docker"
+            else
+                info "Docker 守护进程代理已恢复；请手动执行: sudo systemctl restart docker"
+            fi
+            ;;
+        colima)
+            if ! write_colima_docker_config "$updated"; then
+                warn "无法写入 Colima Docker 守护进程配置；终端代理已保持启用"
+                return 0
+            fi
+            if [[ "$action" == "apply" ]]; then
+                info "Colima Docker 守护进程代理已写入；请手动执行: colima restart"
+            else
+                info "Colima Docker 守护进程代理已恢复；请手动执行: colima restart"
+            fi
+            ;;
+    esac
+}
+
+configure_docker_proxy_on() {
+    detect_docker_target
+    case "$DOCKER_TARGET_KIND" in
+        linux)
+            configure_docker_target apply "$DOCKER_TARGET_NAME" \
+                "http://${HTTP_HOST}:${HTTP_PORT}"
+            ;;
+        colima)
+            configure_docker_target apply "$DOCKER_TARGET_NAME" \
+                "http://host.lima.internal:${HTTP_PORT}"
+            ;;
+        desktop)
+            warn "检测到 Docker Desktop；其 daemon.json 代理会被忽略，请在 Docker Desktop 设置中手动配置"
+            ;;
+    esac
+}
+
+configure_docker_proxy_off() {
+    detect_docker_target
+    case "$DOCKER_TARGET_KIND" in
+        linux|colima) configure_docker_target restore "$DOCKER_TARGET_NAME" "" ;;
+        desktop) warn "检测到 Docker Desktop；请在 Docker Desktop 设置中手动关闭代理" ;;
+    esac
+}
+
+docker_proxy_status() {
+    detect_docker_target
+    case "$DOCKER_TARGET_KIND" in
+        linux)
+            echo -e "${BOLD}Docker 守护进程代理${RESET}"
+            echo "  引擎: Linux Docker"
+            echo "  配置: ${DOCKER_DAEMON_JSON}"
+            [[ -f "$DOCKER_STATE_FILE" ]] && echo "  setproxy 配置已写入，变更后请执行: sudo systemctl restart docker" \
+                || echo "  状态: 未由 setproxy 管理"
+            ;;
+        colima)
+            echo -e "${BOLD}Docker 守护进程代理${RESET}"
+            echo "  引擎: Colima (${COLIMA_PROFILE:-default})"
+            [[ -f "$DOCKER_STATE_FILE" ]] && echo "  setproxy 配置已写入，变更后请执行: colima restart" \
+                || echo "  状态: 未由 setproxy 管理"
+            ;;
+        desktop)
+            echo -e "${BOLD}Docker 守护进程代理${RESET}"
+            echo "  引擎: Docker Desktop（请在 Desktop 设置中管理代理）"
+            ;;
+    esac
 }
 
 nc_supports_proxy() {
@@ -413,6 +665,7 @@ do_on() {
     ensure_shell_hook "${HOME}/.bashrc"
     ensure_shell_hook "${HOME}/.zshrc"
     ensure_shell_hook "${HOME}/.profile"
+    configure_docker_proxy_on
 
     if $EMIT; then
         emit_exports
@@ -441,6 +694,7 @@ do_on() {
 do_off() {
     rm -f "$PROXY_ENV"
     clear_current_shell
+    configure_docker_proxy_off
 
     if $EMIT; then
         emit_unsets
@@ -497,6 +751,8 @@ do_status() {
     fi
 
     echo ""
+    docker_proxy_status
+    echo ""
     log_hint
 }
 
@@ -504,6 +760,8 @@ do_test() {
     local ok=true
     local http_proxy_arg="http://${HTTP_HOST}:${HTTP_PORT}"
     local socks_proxy_arg="socks5h://${SOCKS_HOST}:${SOCKS_PORT}"
+    local size_bytes=$((10#$TEST_SIZE_MB * 1000000))
+    local range_end=$((size_bytes - 1))
 
     echo -e "${BOLD}━━━ 1. 配置与端口 ━━━${RESET}"
     echo "  HTTP 代理 : ${http_proxy_arg}"
@@ -533,10 +791,11 @@ do_test() {
 
     echo ""
     echo -e "${BOLD}━━━ 3. 基准测速（海外经代理 / 国内强制直连）━━━${RESET}"
-    speed_test "海外(经代理) Cloudflare 10MB:" "$socks_proxy_arg" "https://speed.cloudflare.com/__down?bytes=10000000" || ok=false
-    speed_test "国内(直连)   清华 TUNA 10MB :" "" \
+    speed_test "海外(经代理) Cloudflare ${TEST_SIZE_MB}MB:" "$socks_proxy_arg" \
+        "https://speed.cloudflare.com/__down?bytes=${size_bytes}" || ok=false
+    speed_test "国内(直连)   清华 TUNA ${TEST_SIZE_MB}MB :" "" \
         "https://mirrors.tuna.tsinghua.edu.cn/archlinux/iso/latest/archlinux-x86_64.iso" \
-        "Range: bytes=0-9999999" || ok=false
+        "Range: bytes=0-${range_end}" || ok=false
 
     echo ""
     if $ok; then

@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# speed_test: compare overseas proxied and domestic direct download throughput.
+
+set -euo pipefail
+
+RED='\033[0;31m'; GREEN='\033[0;32m'; BOLD='\033[1m'; RESET='\033[0m'
+
+usage() {
+    cat <<'HELP'
+用法: speed_test [--size MB] [--vpn-port PORT]
+
+执行两项固定 2 MB 下载测速:
+  海外  Cloudflare，默认直连；指定端口时经本机 SOCKS5 代理
+  国内  清华 TUNA，强制直连
+
+可选 VPN 端口:
+  --vpn-port PORT       使用 socks5h://127.0.0.1:PORT
+  VPN_PORT              也可通过环境变量指定，命令行优先
+
+选项:
+  --size MB             两项测速的下载大小，默认 2MB，范围 1-1000
+  -h, --help            显示帮助
+HELP
+}
+
+error() {
+    echo -e "${RED}[ERROR]${RESET} $*" >&2
+}
+
+validate_port() {
+    local value="$1"
+    if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 65535 )); then
+        error "VPN 端口必须是 1-65535 的端口号: ${value}"
+        exit 1
+    fi
+}
+
+validate_size() {
+    local value="$1"
+    if [[ ! "$value" =~ ^[0-9]+$ ]] \
+        || (( 10#$value < 1 || 10#$value > 1000 )); then
+        error "测速大小必须是 1-1000 的整数 MB: ${value}"
+        exit 1
+    fi
+}
+
+CLI_VPN_PORT=""
+SIZE_MB=2
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            if [[ $# -ne 1 ]]; then
+                error "--help 不支持与其他参数组合"
+                usage >&2
+                exit 1
+            fi
+            usage
+            exit 0
+            ;;
+        --vpn-port=*) CLI_VPN_PORT="${1#*=}" ;;
+        --vpn-port)
+            shift
+            if [[ -z "${1:-}" ]]; then
+                error "--vpn-port 缺少参数"
+                usage >&2
+                exit 1
+            fi
+            CLI_VPN_PORT="$1"
+            ;;
+        --size=*) SIZE_MB="${1#*=}" ;;
+        --size)
+            shift
+            if [[ -z "${1:-}" ]]; then
+                error "--size 缺少参数"
+                usage >&2
+                exit 1
+            fi
+            SIZE_MB="$1"
+            ;;
+        *)
+            error "未知参数: $1"
+            usage >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+vpn_port="${CLI_VPN_PORT:-${VPN_PORT:-}}"
+[[ -z "$vpn_port" ]] || validate_port "$vpn_port"
+validate_size "$SIZE_MB"
+size_bytes=$((10#$SIZE_MB * 1000000))
+range_end=$((size_bytes - 1))
+
+if ! command -v curl >/dev/null 2>&1; then
+    error "未找到 curl"
+    exit 1
+fi
+
+curl_request() {
+    local proxy_arg="$1"
+    shift
+    if [[ -n "$proxy_arg" ]]; then
+        curl -x "$proxy_arg" "$@"
+    else
+        curl --proxy '' --noproxy '*' "$@"
+    fi
+}
+
+run_speed_test() {
+    local label="$1" proxy_arg="$2" url="$3" range_header="${4:-}"
+    local stats code time_total size speed_bps kbps mbps
+    local curl_args=(-sSL --connect-timeout 10 --max-time 30 \
+        -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}")
+
+    [[ -n "$range_header" ]] && curl_args+=(-H "$range_header")
+    stats="$(curl_request "$proxy_arg" "${curl_args[@]}" "$url" 2>/dev/null)" \
+        || stats="000 0 0 0"
+    read -r code time_total size speed_bps <<< "$stats"
+
+    if [[ "$code" =~ ^2 ]]; then
+        kbps="$(awk -v b="$speed_bps" 'BEGIN{printf "%.0f", b/1024}')"
+        mbps="$(awk -v b="$speed_bps" 'BEGIN{printf "%.2f", b*8/1000000}')"
+        echo -e "  ${label} ${GREEN}${kbps} KB/s（约 ${mbps} Mbps，${size} bytes，耗时 ${time_total}s）${RESET}"
+        return 0
+    fi
+
+    echo -e "  ${label} ${RED}下载失败 (HTTP ${code})${RESET}"
+    return 1
+}
+
+ok=true
+overseas_proxy_arg=""
+[[ -z "$vpn_port" ]] || overseas_proxy_arg="socks5h://127.0.0.1:${vpn_port}"
+
+echo -e "${BOLD}━━━ 网速测试（默认直连 / 可选海外 VPN 端口）━━━${RESET}"
+run_speed_test "海外          Cloudflare ${SIZE_MB}MB:" "$overseas_proxy_arg" \
+    "https://speed.cloudflare.com/__down?bytes=${size_bytes}" || ok=false
+run_speed_test "国内(直连)   清华 TUNA ${SIZE_MB}MB :" "" \
+    "https://mirrors.tuna.tsinghua.edu.cn/archlinux/iso/latest/archlinux-x86_64.iso" \
+    "Range: bytes=0-${range_end}" || ok=false
+
+if ! $ok; then
+    error "网速测试未完全通过"
+    exit 1
+fi

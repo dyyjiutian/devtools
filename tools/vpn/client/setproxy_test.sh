@@ -29,7 +29,7 @@ mkdir -p "${FAKE_BIN}"
 
 cat >"${FAKE_BIN}/uname" <<'EOF'
 #!/usr/bin/env bash
-echo Darwin
+echo "${FAKE_UNAME:-Darwin}"
 EOF
 
 cat >"${FAKE_BIN}/lsof" <<'EOF'
@@ -63,7 +63,47 @@ case "$*" in
 esac
 EOF
 
-chmod +x "${FAKE_BIN}/uname" "${FAKE_BIN}/lsof" "${FAKE_BIN}/nc" "${FAKE_BIN}/curl"
+cat >"${FAKE_BIN}/docker" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "context" && "${2:-}" == "show" ]]; then
+    printf '%s\n' "${FAKE_DOCKER_CONTEXT:-default}"
+fi
+exit 0
+EOF
+
+cat >"${FAKE_BIN}/sudo" <<'EOF'
+#!/usr/bin/env bash
+exec "$@"
+EOF
+
+cat >"${FAKE_BIN}/systemctl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${SYSTEMCTL_LOG:?}"
+EOF
+
+cat >"${FAKE_BIN}/colima" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+    status)
+        [[ -n "${FAKE_COLIMA_STATUS:-}" ]] || exit 1
+        printf '%s\n' "${FAKE_COLIMA_STATUS}"
+        ;;
+    ssh)
+        shift
+        [[ "${1:-}" == "--" ]] && shift
+        [[ "${1:-}" == "sudo" ]] && shift
+        case "${1:-}" in
+            cat) cat "${COLIMA_DAEMON_JSON:?}" ;;
+            tee) cat >"${COLIMA_DAEMON_JSON:?}" ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    *) exit 1 ;;
+esac
+EOF
+
+chmod +x "${FAKE_BIN}/uname" "${FAKE_BIN}/lsof" "${FAKE_BIN}/nc" "${FAKE_BIN}/curl" \
+    "${FAKE_BIN}/docker" "${FAKE_BIN}/sudo" "${FAKE_BIN}/systemctl" "${FAKE_BIN}/colima"
 
 printf '[1/7] shell syntax\n'
 bash -n "${SETPROXY}" "${INSTALLER}"
@@ -124,7 +164,7 @@ assert_file_contains "${TMP_ROOT}/override.stdout" 'export HTTP_PROXY="http://12
 assert_file_contains "${TMP_ROOT}/override.stdout" 'export ALL_PROXY="socks5h://127.0.0.1:9002"'
 assert_file_contains "${TMP_ROOT}/override.stdout" 'unset GIT_SSH_COMMAND'
 
-printf '[6/7] domestic test calls bypass inherited proxies\n'
+printf '[6/8] test --size controls both speed downloads\n'
 : >"${CURL_LOG}"
 env -i \
     HOME="${HOME_ON}" \
@@ -134,18 +174,22 @@ env -i \
     ALL_PROXY="socks5h://127.0.0.1:9998" \
     VPN_HTTP_PORT=8001 \
     VPN_SOCKS_PORT=1081 \
-    "${SETPROXY}" test >/dev/null 2>&1
+    "${SETPROXY}" test --size 2 >/dev/null 2>&1
 baidu_call="$(grep 'www.baidu.com' "${CURL_LOG}" || true)"
 tuna_call="$(grep 'mirrors.tuna.tsinghua.edu.cn/archlinux/iso/latest/archlinux-x86_64.iso' "${CURL_LOG}" || true)"
-cloudflare_call="$(grep 'speed.cloudflare.com/__down?bytes=10000000' "${CURL_LOG}" || true)"
+cloudflare_call="$(grep 'speed.cloudflare.com/__down?bytes=2000000' "${CURL_LOG}" || true)"
 [[ "${baidu_call}" == *'<--proxy><><--noproxy><*>'* ]] \
     || fail "Baidu direct test did not explicitly bypass proxies"
 [[ "${tuna_call}" == *'<--proxy><><--noproxy><*>'* ]] \
     || fail "domestic TUNA speed test did not explicitly bypass proxies"
-[[ "${tuna_call}" == *'<-H><Range: bytes=0-9999999>'* ]] \
-    || fail "domestic TUNA speed test did not request a fixed 10 MB range"
+[[ "${tuna_call}" == *'<-H><Range: bytes=0-1999999>'* ]] \
+    || fail "domestic TUNA speed test ignored --size"
 [[ "${cloudflare_call}" == *'<-x><socks5h://127.0.0.1:1081>'* ]] \
     || fail "overseas speed test did not use Cloudflare 10 MB through SOCKS"
+if env -i HOME="${HOME_ON}" PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    "${SETPROXY}" test --size 0 >/dev/null 2>&1; then
+    fail "setproxy test accepted an invalid --size"
+fi
 if grep -q 'mirrors.aliyun.com/centos' "${CURL_LOG}"; then
     fail "domestic speed test still uses the small Aliyun torrent"
 fi
@@ -153,7 +197,68 @@ if grep -q 'proof.ovh.net' "${CURL_LOG}"; then
     fail "overseas speed test still uses OVH"
 fi
 
-printf '[7/7] installer and complete uninstall lifecycle\n'
+printf '[7/9] Docker daemon proxy is merged, restored, and never restarted\n'
+DOCKER_DAEMON_JSON="${TMP_ROOT}/linux-daemon.json"
+cat >"${DOCKER_DAEMON_JSON}" <<'EOF'
+{"log-driver":"json-file","proxies":{"http-proxy":"http://old-proxy:8080"}}
+EOF
+HOME_DOCKER="${TMP_ROOT}/home-docker"
+SYSTEMCTL_LOG="${TMP_ROOT}/systemctl.log"
+mkdir -p "${HOME_DOCKER}"
+: >"${SYSTEMCTL_LOG}"
+env -i \
+    HOME="${HOME_DOCKER}" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
+    "${SETPROXY}" off >/dev/null 2>&1
+assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy":"http://old-proxy:8080"'
+env -i \
+    HOME="${HOME_DOCKER}" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
+    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/docker-on.stdout" 2>"${TMP_ROOT}/docker-on.stderr"
+assert_file_contains "${DOCKER_DAEMON_JSON}" '"log-driver"'
+assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy": "http://127.0.0.1:8001"'
+assert_file_contains "${TMP_ROOT}/docker-on.stdout" 'sudo systemctl restart docker'
+env -i \
+    HOME="${HOME_DOCKER}" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DOCKER_DAEMON_JSON="${DOCKER_DAEMON_JSON}" \
+    SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
+    "${SETPROXY}" off >"${TMP_ROOT}/docker-off.stdout" 2>"${TMP_ROOT}/docker-off.stderr"
+assert_file_contains "${DOCKER_DAEMON_JSON}" '"http-proxy": "http://old-proxy:8080"'
+if [[ -s "${SYSTEMCTL_LOG}" ]]; then
+    fail "setproxy automatically restarted Docker"
+fi
+
+printf '[8/9] Colima uses the host gateway and Docker Desktop is skipped\n'
+COLIMA_DAEMON_JSON="${TMP_ROOT}/colima-daemon.json"
+printf '{"features":{"buildkit":true}}\n' >"${COLIMA_DAEMON_JSON}"
+HOME_COLIMA="${TMP_ROOT}/home-colima"
+mkdir -p "${HOME_COLIMA}"
+env -i \
+    HOME="${HOME_COLIMA}" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Darwin \
+    FAKE_COLIMA_STATUS='runtime: docker' \
+    COLIMA_DAEMON_JSON="${COLIMA_DAEMON_JSON}" \
+    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/colima-on.stdout" 2>"${TMP_ROOT}/colima-on.stderr"
+assert_file_contains "${COLIMA_DAEMON_JSON}" '"http-proxy": "http://host.lima.internal:8001"'
+assert_file_contains "${TMP_ROOT}/colima-on.stdout" 'colima restart'
+env -i \
+    HOME="${TMP_ROOT}/home-desktop" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Darwin \
+    FAKE_DOCKER_CONTEXT=desktop-linux \
+    "${SETPROXY}" on --http-port 8001 >"${TMP_ROOT}/desktop.stdout" 2>"${TMP_ROOT}/desktop.stderr"
+assert_file_contains "${TMP_ROOT}/desktop.stderr" 'Docker Desktop'
+
+printf '[9/9] installer and complete uninstall lifecycle\n'
 HOME_INSTALL="${TMP_ROOT}/home-install"
 mkdir -p "${HOME_INSTALL}"
 cat >"${HOME_INSTALL}/.zshrc" <<'EOF'
@@ -164,6 +269,7 @@ EOF
 env -i HOME="${HOME_INSTALL}" SHELL=/bin/zsh PATH="/usr/bin:/bin" \
     bash "${INSTALLER}" >"${TMP_ROOT}/install.stdout" 2>"${TMP_ROOT}/install.stderr"
 [[ -x "${HOME_INSTALL}/.local/bin/setproxy" ]] || fail "installer did not install executable"
+[[ -x "${HOME_INSTALL}/.local/bin/speed_test" ]] || fail "installer did not install speed_test executable"
 assert_file_contains "${TMP_ROOT}/install.stderr" '已有 setproxy/unsetproxy'
 if grep -qF '# >>> devtools setproxy PATH >>>' "${HOME_INSTALL}/.zshrc"; then
     fail "installer duplicated an existing ~/.local/bin PATH entry"
@@ -180,6 +286,7 @@ env -i \
 env -i HOME="${HOME_INSTALL}" SHELL=/bin/zsh PATH="/usr/bin:/bin" \
     bash "${INSTALLER}" --uninstall >/dev/null
 [[ ! -e "${HOME_INSTALL}/.local/bin/setproxy" ]] || fail "uninstall left executable"
+[[ ! -e "${HOME_INSTALL}/.local/bin/speed_test" ]] || fail "uninstall left speed_test executable"
 [[ ! -e "${HOME_INSTALL}/.config/vpn/proxy.env" ]] || fail "uninstall left proxy.env"
 [[ ! -e "${HOME_INSTALL}/.config/vpn/setproxy.conf" ]] || fail "uninstall left setproxy.conf"
 if grep -qE 'devtools setproxy PATH|vpn-shell-proxy managed' "${HOME_INSTALL}/.zshrc"; then
