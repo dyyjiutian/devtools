@@ -189,7 +189,7 @@ bash tools/vpn/client/setproxy_test.sh
 
 Expected: all commands exit zero, Linux setup reports its PASS line, and setproxy reports `PASS: setproxy regression checks`.
 
-- [ ] **Step 3: Review the diff and commit only scoped files**
+- [x] **Step 3: Review the diff and commit only scoped files**
 
 Confirm `git status --short` still shows the two unrelated user-owned tests as untracked and unstaged. Stage only the design, plan, Linux setup implementation/test/helper, and VPN README, then commit the TUN feature.
 
