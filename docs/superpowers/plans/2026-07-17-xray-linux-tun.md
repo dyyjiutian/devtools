@@ -4,7 +4,7 @@
 
 **Goal:** Add an opt-in Linux host TUN mode to `linux_setup.sh` without changing the default SOCKS/HTTP installation.
 
-**Architecture:** Keep Xray v26.3.27 and add an `xray0` inbound only for `--tun`. A dedicated helper manages an IPv4/IPv6 policy table for locally originated traffic, while marked Xray outbound sockets use the main table to prevent loops; systemd binds routing setup and teardown to the Xray client lifecycle.
+**Architecture:** Keep Xray v26.3.27 and add an `xray0` inbound only for `--tun`. A dedicated helper manages an IPv4/IPv6 policy table for locally originated traffic, while a dynamic Xray service UID and outbound socket marks use the main table to prevent loops, including internal DNS; systemd binds routing setup and teardown to the Xray client lifecycle.
 
 **Tech Stack:** Bash, Xray JSON configuration, systemd, Linux iproute2 policy routing, shell regression tests, Markdown.
 
@@ -54,7 +54,7 @@ Expected: FAIL because help has no `--tun`, sourcing executes the installer, and
 Add `TUN_MODE=false`, parse `--tun`, guard the bottom-level dispatch with:
 
 ```bash
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${LINUX_SETUP_SOURCE_ONLY:-false}" != "true" ]]; then
     main "$@"
 fi
 ```
@@ -74,7 +74,7 @@ Expected: configuration assertions pass.
 - Modify: `tools/vpn/client/linux_setup_test.sh`
 
 **Interfaces:**
-- Consumes: `XRAY_TUN_IFACE`, `XRAY_TUN_TABLE`, `XRAY_TUN_MARK`, and `ip` from `PATH`.
+- Consumes: `XRAY_TUN_IFACE`, `XRAY_TUN_TABLE`, `XRAY_TUN_MARK`, `XRAY_TUN_BYPASS_UID`, `ip`, and `sysctl`.
 - Produces: `up`, `down`, and `status` actions for the managed routes and rules.
 
 - [x] **Step 1: Write failing helper tests with a fake `ip`**
@@ -83,11 +83,12 @@ Log fake `ip` arguments and assert `up` requests:
 
 ```text
 -4 route replace default dev xray0 table 1001
+-4 rule add priority 9990 uidrange 4242-4242 lookup main
 -4 rule add priority 10000 fwmark 255 lookup main
 -4 rule add priority 10010 uidrange 0-4294967294 lookup 1001
 ```
 
-Assert equivalent IPv6 operations and exact deletion/flush operations for `down`. Run repeated `up` and `down` calls to require idempotent behaviour.
+Assert equivalent IPv6 operations and exact deletion operations for `down`. Run repeated `up` and `down` calls to require idempotent behaviour.
 
 - [x] **Step 2: Run helper tests and verify RED**
 
@@ -97,7 +98,7 @@ Expected: FAIL because `bin/xray-tun-route` does not exist.
 
 - [x] **Step 3: Implement the minimal route helper**
 
-Implement strict action parsing, exact-rule cleanup before addition, IPv4 as required, IPv6 as best-effort, and a read-only `status` action. Match only locally originated packets with `uidrange`; match Xray sockets first with `fwmark`.
+Implement strict action parsing, exact-rule cleanup before addition, IPv4 as required, IPv6 as best-effort, and a read-only `status` action. Match only locally originated packets with `uidrange`; bypass the complete dynamic Xray UID before matching marked sockets and general local traffic.
 
 - [x] **Step 4: Run helper tests and verify GREEN**
 
@@ -191,3 +192,29 @@ Expected: all commands exit zero, Linux setup reports its PASS line, and setprox
 - [ ] **Step 3: Review the diff and commit only scoped files**
 
 Confirm `git status --short` still shows the two unrelated user-owned tests as untracked and unstaged. Stage only the design, plan, Linux setup implementation/test/helper, and VPN README, then commit the TUN feature.
+
+### Task 5: Apply code-review hardening
+
+**Files:**
+- Modify: `tools/vpn/client/bin/xray-tun-route`
+- Modify: `tools/vpn/client/linux_setup.sh`
+- Modify: `tools/vpn/client/linux_setup_test.sh`
+- Modify: `docs/superpowers/specs/2026-07-17-xray-linux-tun-design.md`
+
+**Interfaces:**
+- Consumes: reviewer findings against commit `af20dba`.
+- Produces: safe reverse-path filtering, internal DNS bypass, startup readiness, source compatibility, and exact route ownership.
+
+- [x] **Step 1: Reproduce each review issue with a failing test**
+
+Cover `rp_filter` save/restore, delayed `xray0` creation, sourced `proxy on`, an occupied rule priority, exact route deletion, and a dedicated Xray UID bypass.
+
+- [x] **Step 2: Implement the review fixes**
+
+Use a systemd `DynamicUser` in TUN mode, persist its runtime UID for teardown, wait up to five seconds for `xray0`, safely manage `rp_filter`, reject conflicting route/rule ownership, and preserve normal sourced proxy dispatch.
+
+- [x] **Step 3: Run the focused Linux TUN regression suite**
+
+Run: `bash tools/vpn/client/linux_setup_test.sh`
+
+Expected: all seven Linux setup TUN regression sections pass.

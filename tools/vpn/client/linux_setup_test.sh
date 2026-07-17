@@ -35,6 +35,7 @@ render_client_config() {
     (
         set --
         [[ "$mode" == "tun" ]] && set -- --tun
+        export LINUX_SETUP_SOURCE_ONLY=true
         # shellcheck source=linux_setup.sh
         source "$LINUX_SETUP"
         XRAY_CONFIG_DIR="$config_dir"
@@ -46,11 +47,21 @@ render_client_config() {
     )
 }
 
-echo "[1/6] --tun is documented"
+echo "[1/7] --tun is documented"
 help_output="$(bash "$LINUX_SETUP" --help)"
 [[ "$help_output" == *"--tun"* ]] || fail "linux_setup.sh --help should document --tun"
 
-echo "[2/6] default and TUN client configurations"
+echo "[2/7] sourcing proxy on still updates the current shell"
+source_home="${TMP_DIR}/source-home"
+mkdir -p "$source_home"
+if ! env -i HOME="$source_home" PATH="/usr/bin:/bin" \
+    VPN_HTTP_PORT=18009 VPN_SOCKS_PORT=18008 \
+    bash -c 'set -euo pipefail; setup=$1; set -- proxy on; source "$setup" >/dev/null; [[ "${HTTP_PROXY:-}" == "http://127.0.0.1:18009" ]]' \
+    bash "$LINUX_SETUP"; then
+    fail "source linux_setup.sh proxy on should update the current shell"
+fi
+
+echo "[3/7] default and TUN client configurations"
 normal_dir="${TMP_DIR}/normal"
 tun_dir="${TMP_DIR}/tun"
 mkdir -p "$normal_dir" "$tun_dir"
@@ -68,40 +79,126 @@ assert_file_contains "${tun_dir}/client.json" '"mark": 255'
 python3 -m json.tool "${normal_dir}/client.json" >/dev/null
 python3 -m json.tool "${tun_dir}/client.json" >/dev/null
 
-echo "[3/6] TUN policy routing helper"
+echo "[4/7] TUN policy routing helper"
 fake_ip="${TMP_DIR}/ip"
 ip_log="${TMP_DIR}/ip.log"
+fake_sysctl="${TMP_DIR}/sysctl"
+sysctl_log="${TMP_DIR}/sysctl.log"
+sysctl_state_dir="${TMP_DIR}/sysctl-state"
+tun_state_file="${TMP_DIR}/xray-tun.state"
+tun_uid_state_file="${TMP_DIR}/xray-tun.uid"
+mkdir -p "$sysctl_state_dir"
+printf '1\n' > "${sysctl_state_dir}/all"
+printf '1\n' > "${sysctl_state_dir}/iface"
 cat > "$fake_ip" <<'FAKE_IP'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$IP_LOG"
+if [[ " $* " == *" link show dev xray0 "* && -n "${FAKE_IP_LINK_FAILURES:-}" ]]; then
+    count=0
+    [[ -f "$FAKE_IP_COUNT_FILE" ]] && read -r count < "$FAKE_IP_COUNT_FILE"
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$FAKE_IP_COUNT_FILE"
+    ((count > FAKE_IP_LINK_FAILURES)) || exit 1
+fi
 if [[ " $* " == *" rule delete "* ]]; then
     exit 2
+fi
+if [[ " $* " == *" rule show "* && "${FAKE_IP_RULE_CONFLICT:-false}" == "true" ]]; then
+    echo '10010: from all lookup main'
 fi
 exit 0
 FAKE_IP
 chmod +x "$fake_ip"
+cat > "$fake_sysctl" <<'FAKE_SYSCTL'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$SYSCTL_LOG"
+if [[ "${1:-}" == "-n" ]]; then
+    if [[ "$2" == "net.ipv4.conf.all.rp_filter" ]]; then
+        cat "${FAKE_SYSCTL_STATE_DIR}/all"
+    else
+        cat "${FAKE_SYSCTL_STATE_DIR}/iface"
+    fi
+    exit 0
+fi
+[[ "${1:-}" == "-q" ]] && shift
+if [[ "${1:-}" == "-w" ]]; then
+    assignment="$2"
+    value="${assignment#*=}"
+    if [[ "$assignment" == net.ipv4.conf.all.rp_filter=* ]]; then
+        printf '%s\n' "$value" > "${FAKE_SYSCTL_STATE_DIR}/all"
+    else
+        printf '%s\n' "$value" > "${FAKE_SYSCTL_STATE_DIR}/iface"
+    fi
+    exit 0
+fi
+exit 2
+FAKE_SYSCTL
+chmod +x "$fake_sysctl"
 
-IP_BIN="$fake_ip" IP_LOG="$ip_log" "$TUN_ROUTE_HELPER" up
-IP_BIN="$fake_ip" IP_LOG="$ip_log" "$TUN_ROUTE_HELPER" up
-IP_BIN="$fake_ip" IP_LOG="$ip_log" "$TUN_ROUTE_HELPER" status >/dev/null
-IP_BIN="$fake_ip" IP_LOG="$ip_log" "$TUN_ROUTE_HELPER" down
-IP_BIN="$fake_ip" IP_LOG="$ip_log" "$TUN_ROUTE_HELPER" down
+run_tun_helper() {
+    IP_BIN="$fake_ip" IP_LOG="$ip_log" \
+        SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
+        FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
+        XRAY_TUN_STATE_FILE="$tun_state_file" \
+        XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+        XRAY_TUN_BYPASS_UID=4242 \
+        "$TUN_ROUTE_HELPER" "$@"
+}
+
+run_tun_helper up
+run_tun_helper up
+run_tun_helper status >/dev/null
+run_tun_helper down
+run_tun_helper down
 
 assert_file_contains "$ip_log" '-4 route replace default dev xray0 table 1001'
+assert_file_contains "$ip_log" '-4 rule add priority 9990 uidrange 4242-4242 lookup main'
 assert_file_contains "$ip_log" '-4 rule add priority 10000 fwmark 255 lookup main'
 assert_file_contains "$ip_log" '-4 rule add priority 10010 uidrange 0-4294967294 lookup 1001'
 assert_file_contains "$ip_log" '-6 route replace default dev xray0 table 1001'
 assert_file_contains "$ip_log" '-6 rule add priority 10000 fwmark 255 lookup main'
 assert_file_contains "$ip_log" '-6 rule add priority 10010 uidrange 0-4294967294 lookup 1001'
-assert_file_contains "$ip_log" '-4 route flush table 1001'
-assert_file_contains "$ip_log" '-6 route flush table 1001'
+assert_file_contains "$ip_log" '-4 route delete default dev xray0 table 1001'
+assert_file_contains "$ip_log" '-6 route delete default dev xray0 table 1001'
+assert_file_contains "$sysctl_log" '-w net.ipv4.conf.all.rp_filter=0'
+assert_file_contains "$sysctl_log" '-w net.ipv4.conf.xray0.rp_filter=0'
+assert_file_contains "$sysctl_log" '-w net.ipv4.conf.all.rp_filter=1'
 
-echo "[4/6] normal and TUN systemd units"
+race_count_file="${TMP_DIR}/link-attempts"
+IP_BIN="$fake_ip" IP_LOG="$ip_log" \
+    SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
+    FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
+    FAKE_IP_LINK_FAILURES=2 FAKE_IP_COUNT_FILE="$race_count_file" \
+    XRAY_TUN_WAIT_ATTEMPTS=3 XRAY_TUN_WAIT_INTERVAL=0 \
+    XRAY_TUN_STATE_FILE="$tun_state_file" \
+    XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+    XRAY_TUN_BYPASS_UID=4242 \
+    "$TUN_ROUTE_HELPER" up
+[[ "$(< "$race_count_file")" -eq 3 ]] \
+    || fail "TUN helper should wait until xray0 appears"
+run_tun_helper down
+
+conflict_ip_log="${TMP_DIR}/conflict-ip.log"
+if IP_BIN="$fake_ip" IP_LOG="$conflict_ip_log" \
+    SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
+    FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
+    FAKE_IP_RULE_CONFLICT=true XRAY_TUN_WAIT_INTERVAL=0 \
+    XRAY_TUN_STATE_FILE="$tun_state_file" \
+    XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+    XRAY_TUN_BYPASS_UID=4242 \
+    "$TUN_ROUTE_HELPER" up >/dev/null 2>&1; then
+    fail "TUN helper should reject occupied policy-rule priorities"
+fi
+assert_file_not_contains "$conflict_ip_log" \
+    '-4 route delete default dev xray0 table 1001'
+
+echo "[5/7] normal and TUN systemd units"
 normal_systemd_dir="${TMP_DIR}/systemd-normal"
 tun_systemd_dir="${TMP_DIR}/systemd-tun"
 mkdir -p "$normal_systemd_dir" "$tun_systemd_dir"
 (
     set --
+    export LINUX_SETUP_SOURCE_ONLY=true
     # shellcheck source=linux_setup.sh
     source "$LINUX_SETUP"
     XRAY_SYSTEMD_DIR="$normal_systemd_dir"
@@ -110,6 +207,7 @@ mkdir -p "$normal_systemd_dir" "$tun_systemd_dir"
 )
 (
     set -- --tun
+    export LINUX_SETUP_SOURCE_ONLY=true
     # shellcheck source=linux_setup.sh
     source "$LINUX_SETUP"
     XRAY_SYSTEMD_DIR="$tun_systemd_dir"
@@ -122,7 +220,11 @@ normal_unit="${normal_systemd_dir}/xray-client.service"
 tun_unit="${tun_systemd_dir}/xray-client.service"
 route_unit="${tun_systemd_dir}/xray-client-tun-routing.service"
 assert_file_not_contains "$normal_unit" 'xray-client-tun-routing.service'
+assert_file_contains "$normal_unit" 'User=nobody'
+assert_file_not_contains "$normal_unit" 'DynamicUser=true'
 assert_file_contains "$tun_unit" 'Wants=xray-client-tun-routing.service'
+assert_file_contains "$tun_unit" 'User=xray-tun'
+assert_file_contains "$tun_unit" 'DynamicUser=true'
 assert_file_contains "$route_unit" 'After=xray-client.service'
 assert_file_contains "$route_unit" 'Requires=xray-client.service'
 assert_file_contains "$route_unit" 'BindsTo=xray-client.service'
@@ -130,7 +232,7 @@ assert_file_contains "$route_unit" 'ExecStart=/usr/local/libexec/xray-client-tun
 assert_file_contains "$route_unit" 'ExecStop=/usr/local/libexec/xray-client-tun-route down'
 assert_file_contains "$route_unit" 'RemainAfterExit=yes'
 
-echo "[5/6] TUN support install and removal lifecycle"
+echo "[6/7] TUN support install and removal lifecycle"
 lifecycle_systemd_dir="${TMP_DIR}/systemd-lifecycle"
 lifecycle_helper="${TMP_DIR}/libexec/xray-client-tun-route"
 systemctl_log="${TMP_DIR}/systemctl.log"
@@ -145,6 +247,7 @@ chmod +x "${fake_bin}/systemctl"
 
 (
     set -- --tun
+    export LINUX_SETUP_SOURCE_ONLY=true
     # shellcheck source=linux_setup.sh
     source "$LINUX_SETUP"
     XRAY_SYSTEMD_DIR="$lifecycle_systemd_dir"
@@ -154,6 +257,11 @@ chmod +x "${fake_bin}/systemctl"
     [[ -f "${lifecycle_systemd_dir}/xray-client-tun-routing.service" ]] \
         || fail "TUN routing unit should be installed"
     PATH="${fake_bin}:$PATH" IP_BIN="$fake_ip" IP_LOG="$ip_log" \
+        SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
+        FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
+        XRAY_TUN_STATE_FILE="$tun_state_file" \
+        XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+        XRAY_TUN_BYPASS_UID=4242 \
         SYSTEMCTL_LOG="$systemctl_log" remove_tun_routing
 )
 
@@ -163,9 +271,10 @@ chmod +x "${fake_bin}/systemctl"
 assert_file_contains "$systemctl_log" 'stop xray-client-tun-routing.service'
 assert_file_contains "$systemctl_log" 'disable xray-client-tun-routing.service'
 
-echo "[6/6] install, status, and clean wire the TUN lifecycle"
+echo "[7/7] install, status, and clean wire the TUN lifecycle"
 (
     set --
+    export LINUX_SETUP_SOURCE_ONLY=true
     # shellcheck source=linux_setup.sh
     source "$LINUX_SETUP"
     assert_text_contains "$(declare -f do_install)" 'remove_tun_routing'

@@ -234,6 +234,8 @@ sudo ./client/linux_setup.sh install --tun \
 `--tun` 会在保留 SOCKS5/HTTP 入站的同时创建 `xray0`，并通过
 `xray-client-tun-routing.service` 自动管理宿主机策略路由。流量进入 Xray 后仍使用
 同一套路由规则：内网和国内域名/IP 直连，境外流量通过 VLESS Reality。
+TUN 模式使用 systemd 动态专用用户绕过 Xray 自身流量（包括内部 DNS），同时临时
+关闭会影响 `xray0` 回包的反向路径过滤；停止或卸载时会恢复脚本启用前的值。
 
 TUN 模式下宿主机应用通常不再需要 `proxy on`、`setproxy on`、`--dnf-proxy` 或
 `--docker-daemon`；这些显式代理方式仍然兼容。TUN 不会设置

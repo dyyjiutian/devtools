@@ -2,12 +2,21 @@
 set -euo pipefail
 
 IP_BIN="${IP_BIN:-ip}"
+SYSCTL_BIN="${SYSCTL_BIN:-sysctl}"
+SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
 TUN_IFACE="${XRAY_TUN_IFACE:-xray0}"
 ROUTE_TABLE="${XRAY_TUN_TABLE:-1001}"
 SOCKET_MARK="${XRAY_TUN_MARK:-255}"
 MARK_RULE_PRIORITY="${XRAY_TUN_MARK_PRIORITY:-10000}"
+BYPASS_RULE_PRIORITY="${XRAY_TUN_BYPASS_PRIORITY:-9990}"
 TUN_RULE_PRIORITY="${XRAY_TUN_RULE_PRIORITY:-10010}"
 MAX_LOCAL_UID=4294967294
+STATE_FILE="${XRAY_TUN_STATE_FILE:-/run/xray-client-tun/rp-filter.state}"
+UID_STATE_FILE="${XRAY_TUN_UID_STATE_FILE:-/run/xray-client-tun/bypass.uid}"
+XRAY_SERVICE="${XRAY_TUN_SERVICE:-xray-client.service}"
+BYPASS_UID="${XRAY_TUN_BYPASS_UID:-}"
+WAIT_ATTEMPTS="${XRAY_TUN_WAIT_ATTEMPTS:-50}"
+WAIT_INTERVAL="${XRAY_TUN_WAIT_INTERVAL:-0.1}"
 
 info() {
     echo "[xray-tun-route] $*"
@@ -17,33 +26,199 @@ warn() {
     echo "[xray-tun-route] WARN: $*" >&2
 }
 
+read_rp_filter() {
+    "$SYSCTL_BIN" -n "$1" 2>/dev/null
+}
+
+set_rp_filter() {
+    "$SYSCTL_BIN" -q -w "$1=$2"
+}
+
+prepare_rp_filter() {
+    local all_key="net.ipv4.conf.all.rp_filter"
+    local iface_key="net.ipv4.conf.${TUN_IFACE}.rp_filter"
+    local old_all old_iface
+
+    old_all="$(read_rp_filter "$all_key")" || return 1
+    old_iface="$(read_rp_filter "$iface_key")" || return 1
+    [[ "$old_all" =~ ^[0-2]$ && "$old_iface" =~ ^[0-2]$ ]] || {
+        warn "无法识别当前 rp_filter 设置"
+        return 1
+    }
+
+    if [[ ! -f "$STATE_FILE" ]]; then
+        mkdir -p "$(dirname "$STATE_FILE")"
+        chmod 0700 "$(dirname "$STATE_FILE")"
+        (umask 077; printf '%s %s\n' "$old_all" "$old_iface" > "$STATE_FILE")
+    fi
+
+    set_rp_filter "$all_key" 0
+    set_rp_filter "$iface_key" 0
+}
+
+restore_rp_filter() {
+    [[ -f "$STATE_FILE" ]] || return 0
+
+    local all_key="net.ipv4.conf.all.rp_filter"
+    local iface_key="net.ipv4.conf.${TUN_IFACE}.rp_filter"
+    local old_all old_iface current
+    read -r old_all old_iface < "$STATE_FILE"
+
+    current="$(read_rp_filter "$iface_key" 2>/dev/null || true)"
+    if [[ "$current" == "0" ]]; then
+        set_rp_filter "$iface_key" "$old_iface" || true
+    elif [[ -n "$current" && "$current" != "$old_iface" ]]; then
+        warn "${iface_key} 已被外部修改，保留当前值 ${current}"
+    fi
+
+    current="$(read_rp_filter "$all_key" 2>/dev/null || true)"
+    if [[ "$current" == "0" ]]; then
+        set_rp_filter "$all_key" "$old_all" || true
+    elif [[ -n "$current" && "$current" != "$old_all" ]]; then
+        warn "${all_key} 已被外部修改，保留当前值 ${current}"
+    fi
+
+    rm -f "$STATE_FILE"
+}
+
+wait_for_tun_iface() {
+    local attempt
+    for ((attempt = 1; attempt <= WAIT_ATTEMPTS; attempt++)); do
+        if "$IP_BIN" link show dev "$TUN_IFACE" >/dev/null 2>&1; then
+            return 0
+        fi
+        ((attempt < WAIT_ATTEMPTS)) && sleep "$WAIT_INTERVAL"
+    done
+    warn "等待 ${TUN_IFACE} 就绪超时"
+    return 1
+}
+
+resolve_bypass_uid() {
+    if [[ -z "$BYPASS_UID" ]]; then
+        BYPASS_UID="$($SYSTEMCTL_BIN show "$XRAY_SERVICE" --property=UID --value 2>/dev/null || true)"
+    fi
+    [[ "$BYPASS_UID" =~ ^[0-9]+$ ]] || {
+        warn "无法获取 ${XRAY_SERVICE} 的运行 UID"
+        return 1
+    }
+}
+
+load_bypass_uid_for_down() {
+    if [[ -z "$BYPASS_UID" && -f "$UID_STATE_FILE" ]]; then
+        read -r BYPASS_UID < "$UID_STATE_FILE"
+    fi
+    if [[ ! "$BYPASS_UID" =~ ^[0-9]+$ ]]; then
+        BYPASS_UID="$($SYSTEMCTL_BIN show "$XRAY_SERVICE" --property=UID --value 2>/dev/null || true)"
+    fi
+    [[ "$BYPASS_UID" =~ ^[0-9]+$ ]]
+}
+
+save_bypass_uid() {
+    mkdir -p "$(dirname "$UID_STATE_FILE")"
+    chmod 0700 "$(dirname "$UID_STATE_FILE")"
+    (umask 077; printf '%s\n' "$BYPASS_UID" > "$UID_STATE_FILE")
+}
+
+delete_bypass_rule() {
+    local family="$1" uid="$2"
+    "$IP_BIN" "$family" rule delete priority "$BYPASS_RULE_PRIORITY" \
+        uidrange "${uid}-${uid}" lookup main 2>/dev/null || true
+}
+
+remove_stale_bypass_rules() {
+    local old_uid=""
+    [[ -f "$UID_STATE_FILE" ]] && read -r old_uid < "$UID_STATE_FILE"
+    if [[ "$old_uid" =~ ^[0-9]+$ && "$old_uid" != "$BYPASS_UID" ]]; then
+        delete_bypass_rule -4 "$old_uid"
+        delete_bypass_rule -6 "$old_uid"
+    fi
+}
+
 delete_rules() {
     local family="$1"
+    if [[ "$BYPASS_UID" =~ ^[0-9]+$ ]]; then
+        delete_bypass_rule "$family" "$BYPASS_UID"
+    fi
     "$IP_BIN" "$family" rule delete priority "$MARK_RULE_PRIORITY" \
         fwmark "$SOCKET_MARK" lookup main 2>/dev/null || true
     "$IP_BIN" "$family" rule delete priority "$TUN_RULE_PRIORITY" \
         uidrange "0-${MAX_LOCAL_UID}" lookup "$ROUTE_TABLE" 2>/dev/null || true
 }
 
+ensure_rule_slot() {
+    local family="$1" priority="$2" expected_regex="$3"
+    local line
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*${priority}: ]] || continue
+        if [[ ! "$line" =~ $expected_regex ]]; then
+            warn "策略规则优先级 ${priority} 已被占用: ${line}"
+            return 1
+        fi
+    done < <("$IP_BIN" "$family" rule show 2>/dev/null)
+}
+
+ensure_route_table_available() {
+    local family="$1" line
+    while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        if [[ ! "$line" =~ ^default[[:space:]].*dev[[:space:]]${TUN_IFACE}([[:space:]]|$) ]]; then
+            warn "路由表 ${ROUTE_TABLE} 已包含非本工具管理的默认路由: ${line}"
+            return 1
+        fi
+    done < <("$IP_BIN" "$family" route show table "$ROUTE_TABLE" default 2>/dev/null)
+}
+
+ensure_family_available() {
+    local family="$1"
+    ensure_rule_slot "$family" "$BYPASS_RULE_PRIORITY" \
+        "uidrange[[:space:]]+${BYPASS_UID}-${BYPASS_UID}.*lookup[[:space:]]+main" || return 1
+    ensure_rule_slot "$family" "$MARK_RULE_PRIORITY" \
+        'fwmark[[:space:]]+(0xff|255).*lookup[[:space:]]+main' || return 1
+    ensure_rule_slot "$family" "$TUN_RULE_PRIORITY" \
+        "uidrange[[:space:]]+0-${MAX_LOCAL_UID}.*lookup[[:space:]]+${ROUTE_TABLE}" || return 1
+    ensure_route_table_available "$family"
+}
+
 up_family() {
     local family="$1"
+    ensure_family_available "$family" || return 1
     delete_rules "$family"
-    "$IP_BIN" "$family" route replace default dev "$TUN_IFACE" table "$ROUTE_TABLE"
-    "$IP_BIN" "$family" rule add priority "$MARK_RULE_PRIORITY" \
-        fwmark "$SOCKET_MARK" lookup main
-    "$IP_BIN" "$family" rule add priority "$TUN_RULE_PRIORITY" \
-        uidrange "0-${MAX_LOCAL_UID}" lookup "$ROUTE_TABLE"
+    "$IP_BIN" "$family" route replace default dev "$TUN_IFACE" table "$ROUTE_TABLE" \
+        || return 1
+    if ! "$IP_BIN" "$family" rule add priority "$BYPASS_RULE_PRIORITY" \
+        uidrange "${BYPASS_UID}-${BYPASS_UID}" lookup main; then
+        down_family "$family"
+        return 1
+    fi
+    if ! "$IP_BIN" "$family" rule add priority "$MARK_RULE_PRIORITY" \
+        fwmark "$SOCKET_MARK" lookup main; then
+        down_family "$family"
+        return 1
+    fi
+    if ! "$IP_BIN" "$family" rule add priority "$TUN_RULE_PRIORITY" \
+        uidrange "0-${MAX_LOCAL_UID}" lookup "$ROUTE_TABLE"; then
+        down_family "$family"
+        return 1
+    fi
 }
 
 down_family() {
     local family="$1"
     delete_rules "$family"
-    "$IP_BIN" "$family" route flush table "$ROUTE_TABLE" 2>/dev/null || true
+    "$IP_BIN" "$family" route delete default dev "$TUN_IFACE" table "$ROUTE_TABLE" \
+        2>/dev/null || true
 }
 
 routes_up() {
-    "$IP_BIN" link show dev "$TUN_IFACE" >/dev/null
-    up_family -4
+    wait_for_tun_iface
+    resolve_bypass_uid
+    remove_stale_bypass_rules
+    save_bypass_uid
+    prepare_rp_filter
+    if ! up_family -4; then
+        restore_rp_filter
+        return 1
+    fi
     if ! up_family -6; then
         warn "IPv6 策略路由不可用，继续使用 IPv4 TUN"
         down_family -6
@@ -52,18 +227,21 @@ routes_up() {
 }
 
 routes_down() {
+    load_bypass_uid_for_down || warn "无法定位 Xray UID，仅清理 mark 和 TUN 规则"
     down_family -4
     down_family -6
+    restore_rp_filter
+    rm -f "$UID_STATE_FILE"
     info "已移除 ${TUN_IFACE} 宿主机策略路由"
 }
 
 routes_status() {
     "$IP_BIN" link show dev "$TUN_IFACE" 2>/dev/null || true
     "$IP_BIN" -4 rule show 2>/dev/null | grep -E \
-        "(^|[[:space:]])(${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
+        "(^|[[:space:]])(${BYPASS_RULE_PRIORITY}|${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
     "$IP_BIN" -4 route show table "$ROUTE_TABLE" 2>/dev/null || true
     "$IP_BIN" -6 rule show 2>/dev/null | grep -E \
-        "(^|[[:space:]])(${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
+        "(^|[[:space:]])(${BYPASS_RULE_PRIORITY}|${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
     "$IP_BIN" -6 route show table "$ROUTE_TABLE" 2>/dev/null || true
 }
 

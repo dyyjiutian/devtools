@@ -680,7 +680,13 @@ JSON_EOF
 
 write_systemd_service() {
     local tun_wants=""
+    local service_user="nobody"
+    local dynamic_user=""
     $TUN_MODE && tun_wants="Wants=xray-client-tun-routing.service"
+    if $TUN_MODE; then
+        service_user="xray-tun"
+        dynamic_user="DynamicUser=true"
+    fi
     mkdir -p "$XRAY_SYSTEMD_DIR"
     cat > "${XRAY_SYSTEMD_DIR}/xray-client.service" <<EOF
 [Unit]
@@ -690,7 +696,8 @@ After=network.target nss-lookup.target
 ${tun_wants}
 
 [Service]
-User=nobody
+User=${service_user}
+${dynamic_user}
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
@@ -1286,6 +1293,6 @@ main() {
     esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${LINUX_SETUP_SOURCE_ONLY:-false}" != "true" ]]; then
     main "$@"
 fi

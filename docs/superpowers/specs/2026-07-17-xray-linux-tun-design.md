@@ -17,15 +17,16 @@ Add an opt-in `--tun` mode to `tools/vpn/client/linux_setup.sh` for Linux hosts 
 
 The existing Xray routing rules remain authoritative after packets enter `xray0`: private and Chinese destinations use the `direct` outbound, while foreign destinations use the VLESS Reality `proxy` outbound.
 
-Linux policy routing uses a dedicated table containing default IPv4 and IPv6 routes through `xray0`. A `uidrange` rule applies that table only to locally originated host traffic, so forwarded traffic from containers, virtual machines, and routers is not captured. Both Xray outbounds set a Linux socket mark, and a higher-priority `fwmark` rule sends marked Xray sockets through the normal main table. This prevents Xray outbound connections from re-entering the TUN interface.
+Linux policy routing uses a dedicated table containing default IPv4 and IPv6 routes through `xray0`. A `uidrange` rule applies that table only to locally originated host traffic, so forwarded traffic from containers, virtual machines, and routers is not captured. In TUN mode systemd gives Xray a dedicated dynamic user; a higher-priority UID rule sends every Xray socket, including internal DNS traffic that has no outbound sockopt, through the normal main table. Both configurable Xray outbounds additionally set a Linux socket mark as defence in depth.
 
-The route helper performs idempotent `up` and `down` operations. The systemd TUN routing unit starts after `xray-client.service`, is wanted by the Xray client only in TUN mode, and is bound to the Xray service lifecycle. Stopping or reinstalling the client removes the managed rules. If the TUN route table becomes empty unexpectedly, Linux policy lookup falls through to the main table, favouring restored direct connectivity over a host-wide outage.
+The route helper performs idempotent `up` and `down` operations. It waits for `xray0` to appear, rejects occupied policy-rule priorities or a conflicting table default, and deletes only the exact default route and rules it owns. It saves and temporarily disables the effective IPv4 `rp_filter` values while TUN routing is active, then safely restores values that were not externally changed. The systemd TUN routing unit starts after `xray-client.service`, is wanted by the Xray client only in TUN mode, and is bound to the Xray service lifecycle. Stopping or reinstalling the client removes the managed rules. If the TUN route table becomes empty unexpectedly, Linux policy lookup falls through to the main table, favouring restored direct connectivity over a host-wide outage.
 
 ## Compatibility and Limitations
 
 - TUN mode is Linux-only and opt-in; macOS configuration is unchanged.
 - Xray v26.3.27 is retained. Its TUN implementation supports TCP and UDP but not ICMP, so `ping` is not a TUN connectivity test.
 - Existing terminal proxy commands remain valid but are normally unnecessary in TUN mode.
+- Sourcing `linux_setup.sh proxy on|off` continues to update the current shell; the source-only mode exists solely for the regression harness.
 - No `GIT_SSH_COMMAND` is introduced by TUN mode.
 - Host TCP/UDP traffic is captured; forwarded container and virtual-machine traffic is intentionally excluded.
 - Domain sniffing is enabled on the TUN inbound for HTTP, TLS, and QUIC. Traffic without a recoverable domain falls back to the existing GeoIP routing rules.
@@ -39,4 +40,4 @@ The route helper performs idempotent `up` and `down` operations. The systemd TUN
 
 ## Verification
 
-Regression tests must prove that the default configuration contains no TUN inbound or socket marks, `--tun` produces the TUN inbound and marked outbounds, the generated systemd units have the required lifecycle relationship, and route helper actions issue only the owned policy route operations. Syntax checks, the Linux setup regression suite, and the existing setproxy regression suite must all pass.
+Regression tests must prove that the default configuration contains no TUN inbound or socket marks, `--tun` produces the TUN inbound and marked outbounds, sourced proxy commands still execute, the generated systemd units use the required dynamic user and lifecycle relationship, and route helper actions wait for `xray0`, handle `rp_filter`, reject priority conflicts, and issue only exact owned policy route operations. Syntax checks, the Linux setup regression suite, and the existing setproxy regression suite must all pass.
