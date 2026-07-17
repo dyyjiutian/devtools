@@ -26,6 +26,7 @@ CLI_SOCKS_HOST=""
 CLI_SOCKS_PORT=""
 CLI_GIT_SSH_PROXY=""
 DOCKER_DAEMON=false
+DNF_PROXY=false
 CLI_TEST_SIZE_MB=""
 
 usage() {
@@ -46,6 +47,7 @@ usage() {
   --no-git-ssh           不为 Git SSH 导出 GIT_SSH_COMMAND（默认）
   --git-ssh              为本次命令的 Git SSH 导出 GIT_SSH_COMMAND
   --docker-daemon        为本次 on 配置 Docker 守护进程代理
+  --dnf-proxy            为本次 on 配置 dnf 下载代理
   --size MB              仅 test：测速大小，范围 1-1000 MB（默认 10）
   -h, --help             显示帮助
 
@@ -123,6 +125,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --docker-daemon)
             DOCKER_DAEMON=true
+            shift
+            ;;
+        --dnf-proxy)
+            DNF_PROXY=true
             shift
             ;;
         -h|--help)
@@ -866,7 +872,13 @@ do_on() {
     ensure_shell_hook "${HOME}/.bashrc"
     ensure_shell_hook "${HOME}/.zshrc"
     ensure_shell_hook "${HOME}/.profile"
-    configure_dnf_proxy_on
+    if $DNF_PROXY; then
+        if dnf_available; then
+            configure_dnf_proxy_on
+        else
+            warn "当前系统不支持 dnf 代理配置；终端代理仍会启用"
+        fi
+    fi
     if $DOCKER_DAEMON; then
         configure_docker_proxy_on
     fi

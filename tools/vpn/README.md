@@ -280,6 +280,7 @@ export http_proxy=http://127.0.0.1:10809
 setproxy on                    # 终端 HTTP/HTTPS/SOCKS 代理；Git SSH 与 Docker 不受影响
 setproxy on --git-ssh          # 额外让 Git SSH 通过本地 SOCKS5
 setproxy on --docker-daemon    # 额外写入 Docker daemon.json 的 HTTP 代理
+setproxy on --dnf-proxy        # 额外写入 dnf 的 HTTP 下载代理
 setproxy off
 setproxy status   # 查看代理状态 + 端口监听 + xray 日志查看方式
 setproxy test     # 测试常用站点连通性 + 海外/国内基准测速
@@ -288,10 +289,11 @@ setproxy test     # 测试常用站点连通性 + 海外/国内基准测速
 `setproxy` 与 `linux_setup.sh proxy` 管理的是同一份配置文件
 （`~/.config/vpn/proxy.env`），两者可互操作、随意混用。
 
-在安装了 dnf 的 Linux 上，`setproxy on` 会通过 `sudo` 在
-`/etc/dnf/dnf.conf` 写入 HTTP 代理，因此安装软件也能走本地代理；`setproxy off`
-会恢复该工具写入前的 dnf 代理配置。若该项配置期间被手动或被其他工具修改，
-`setproxy off` 会保留当前值并提示，避免覆盖用户修改。
+在安装了 dnf 的 Linux 上，`setproxy on --dnf-proxy` 会通过 `sudo` 在
+`/etc/dnf/dnf.conf` 写入 HTTP 代理，因此安装软件也能走本地代理；普通的
+`setproxy on` 不修改 dnf。只要存在由 setproxy 管理的状态，`setproxy off` 就会
+自动恢复写入前的 dnf 代理配置，无需再次传 `--dnf-proxy`。若该项配置期间被
+手动或被其他工具修改，`setproxy off` 会保留当前值并提示，避免覆盖用户修改。
 
 ---
 

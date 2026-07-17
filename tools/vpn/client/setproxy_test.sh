@@ -110,6 +110,10 @@ EOF
 
 chmod +x "${FAKE_BIN}/uname" "${FAKE_BIN}/lsof" "${FAKE_BIN}/nc" "${FAKE_BIN}/curl" \
     "${FAKE_BIN}/docker" "${FAKE_BIN}/sudo" "${FAKE_BIN}/systemctl" "${FAKE_BIN}/colima" "${FAKE_DNF_BIN}/dnf"
+ln -s /bin/bash "${FAKE_BIN}/bash"
+ln -s /bin/chmod "${FAKE_BIN}/chmod"
+ln -s /bin/grep "${FAKE_BIN}/grep"
+ln -s /bin/mkdir "${FAKE_BIN}/mkdir"
 
 printf '[1/10] shell syntax\n'
 bash -n "${SETPROXY}" "${INSTALLER}"
@@ -296,12 +300,21 @@ DNF_CONF="${TMP_ROOT}/dnf.conf"
 HOME_DNF="${TMP_ROOT}/home-dnf"
 mkdir -p "${HOME_DNF}"
 printf '[main]\nkeepcache=True\nproxy=http://old-proxy:8080\n' >"${DNF_CONF}"
+cp "${DNF_CONF}" "${TMP_ROOT}/dnf-original.conf"
 env -i \
     HOME="${HOME_DNF}" \
     PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
     FAKE_UNAME=Linux \
     VPN_DNF_CONF="${DNF_CONF}" \
     "${SETPROXY}" on --http-port 9001 >/dev/null
+cmp -s "${TMP_ROOT}/dnf-original.conf" "${DNF_CONF}" \
+    || fail "default setproxy on modified dnf.conf"
+env -i \
+    HOME="${HOME_DNF}" \
+    PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Linux \
+    VPN_DNF_CONF="${DNF_CONF}" \
+    "${SETPROXY}" on --http-port 9001 --dnf-proxy >/dev/null
 assert_file_contains "${DNF_CONF}" 'proxy=http://127.0.0.1:9001'
 env -i \
     HOME="${HOME_DNF}" \
@@ -315,7 +328,7 @@ env -i \
     PATH="${FAKE_DNF_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
     FAKE_UNAME=Linux \
     VPN_DNF_CONF="${DNF_CONF}" \
-    "${SETPROXY}" on --http-port 9001 >/dev/null
+    "${SETPROXY}" on --http-port 9001 --dnf-proxy >/dev/null
 sed -i 's#proxy=http://127.0.0.1:9001#proxy=http://external:8080#' "${DNF_CONF}"
 env -i \
     HOME="${HOME_DNF}" \
@@ -325,6 +338,26 @@ env -i \
     "${SETPROXY}" off >"${TMP_ROOT}/dnf-off.stdout" 2>"${TMP_ROOT}/dnf-off.stderr"
 assert_file_contains "${DNF_CONF}" 'proxy=http://external:8080'
 assert_file_contains "${TMP_ROOT}/dnf-off.stderr" 'dnf 代理配置已被其他工具修改'
+
+env -i \
+    HOME="${TMP_ROOT}/home-dnf-unsupported" \
+    PATH="${FAKE_BIN}:/usr/bin:/bin" \
+    FAKE_UNAME=Darwin \
+    "${SETPROXY}" on --emit --dnf-proxy \
+    >"${TMP_ROOT}/dnf-unsupported.stdout" 2>"${TMP_ROOT}/dnf-unsupported.stderr"
+assert_file_contains "${TMP_ROOT}/dnf-unsupported.stderr" '当前系统不支持 dnf 代理配置'
+assert_file_contains "${TMP_ROOT}/dnf-unsupported.stdout" 'export HTTP_PROXY='
+assert_file_contains "${TMP_ROOT}/dnf-unsupported.stdout" 'export ALL_PROXY='
+
+env -i \
+    HOME="${TMP_ROOT}/home-dnf-missing" \
+    PATH="${FAKE_BIN}" \
+    FAKE_UNAME=Linux \
+    "${SETPROXY}" on --emit --dnf-proxy \
+    >"${TMP_ROOT}/dnf-missing.stdout" 2>"${TMP_ROOT}/dnf-missing.stderr"
+assert_file_contains "${TMP_ROOT}/dnf-missing.stderr" '当前系统不支持 dnf 代理配置'
+assert_file_contains "${TMP_ROOT}/dnf-missing.stdout" 'export HTTP_PROXY='
+assert_file_contains "${TMP_ROOT}/dnf-missing.stdout" 'export ALL_PROXY='
 
 printf '[10/10] installer and complete uninstall lifecycle\n'
 HOME_INSTALL="${TMP_ROOT}/home-install"
