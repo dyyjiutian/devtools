@@ -14,6 +14,7 @@
 #        --relay-ip=198.51.100.10 \
 #        --uuid=<UUID> --public-key=<PUB_KEY> --short-id=<SHORT_ID>
 #   sudo ./linux_setup.sh install --vless="vless://<uuid>@<host>:<port>?...&pbk=...&sid=...#tag"
+#   sudo ./linux_setup.sh install --tun --vless="vless://<uuid>@<host>:<port>?...&pbk=...&sid=...#tag"
 #   （--vless 与 --uuid/--public-key/--short-id 二者只可选其一，不能同时使用）
 #   sudo ./linux_setup.sh status
 #   sudo ./linux_setup.sh clean
@@ -51,6 +52,7 @@ usage() {
 用法:
   sudo ./linux_setup.sh install --uuid=<UUID> --public-key=<KEY> --short-id=<SID> [OPTIONS]
   sudo ./linux_setup.sh install --vless="vless://<uuid>@<host>:<port>?...#tag"
+  sudo ./linux_setup.sh install --tun --vless="vless://<uuid>@<host>:<port>?...#tag"
   sudo ./linux_setup.sh status
   sudo ./linux_setup.sh clean
   ./linux_setup.sh proxy on | off | status | test
@@ -76,6 +78,7 @@ install 可选参数:
   --sni=DOMAIN         Reality SNI 域名（默认 www.icloud.com）
   --socks-port=PORT    本地 SOCKS5 端口（默认 10808）
   --http-port=PORT     本地 HTTP 端口（默认 10809）
+  --tun                启用 Linux TUN 模式，自动接管宿主机 TCP/UDP 流量
   --dry-run            仅预览，不实际执行
   --no-mirror          仅从 GitHub 下载，禁用国内镜像
   --force              跳过中继 TCP 连通性预检
@@ -109,6 +112,7 @@ esac
 DRY_RUN=false
 USE_MIRROR=true
 FORCE_SETUP=false
+TUN_MODE=false
 RELAY_IP="198.51.100.10"
 RELAY_PORT=443
 UUID=""
@@ -126,6 +130,9 @@ PROXY_EMIT=false
 XRAY_BIN="/usr/local/bin/xray"
 XRAY_CONFIG_DIR="/usr/local/etc/xray"
 XRAY_DAT_DIR="/usr/local/share/xray"
+XRAY_SYSTEMD_DIR="${XRAY_SYSTEMD_DIR:-/etc/systemd/system}"
+XRAY_TUN_HELPER_PATH="${XRAY_TUN_HELPER_PATH:-/usr/local/libexec/xray-client-tun-route}"
+XRAY_TUN_HELPER_SOURCE="${SCRIPT_DIR}/bin/xray-tun-route"
 
 PROXY_DIR="${HOME}/.config/vpn"
 PROXY_ENV="${PROXY_DIR}/proxy.env"
@@ -256,6 +263,7 @@ for arg in "$@"; do
         --sni=*)         SNI="${arg#*=}" ;;
         --socks-port=*)  SOCKS_PORT="${arg#*=}" ;;
         --http-port=*)   HTTP_PORT="${arg#*=}" ;;
+        --tun)            TUN_MODE=true ;;
         --dry-run)       DRY_RUN=true ;;
         --no-mirror)     USE_MIRROR=false ;;
         --force)         FORCE_SETUP=true ;;
@@ -520,6 +528,36 @@ install_xray() {
 }
 
 write_client_config() {
+    local tun_inbound_json=""
+    local proxy_sockopt_json=""
+    local direct_stream_json=""
+
+    if $TUN_MODE; then
+        tun_inbound_json=',
+    {
+      "tag": "tun",
+      "protocol": "tun",
+      "settings": {
+        "name": "xray0",
+        "MTU": 1500
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"]
+      }
+    }'
+        proxy_sockopt_json=',
+        "sockopt": {
+          "mark": 255
+        }'
+        direct_stream_json=',
+      "streamSettings": {
+        "sockopt": {
+          "mark": 255
+        }
+      }'
+    fi
+
     mkdir -p "$XRAY_CONFIG_DIR"
     cat > "${XRAY_CONFIG_DIR}/client.json" <<JSON_EOF
 {
@@ -568,7 +606,7 @@ write_client_config() {
       "settings": {
         "allowTransparent": false
       }
-    }
+    }${tun_inbound_json}
   ],
   "outbounds": [
     {
@@ -600,6 +638,7 @@ write_client_config() {
           "shortId": "${SHORT_ID}",
           "spiderX": "${SPIDER_X}"
         }
+${proxy_sockopt_json}
       }
     },
     {
@@ -608,6 +647,7 @@ write_client_config() {
       "settings": {
         "domainStrategy": "UseIPv4"
       }
+${direct_stream_json}
     },
     {
       "tag": "block",
@@ -639,11 +679,15 @@ JSON_EOF
 }
 
 write_systemd_service() {
-    cat > /etc/systemd/system/xray-client.service <<EOF
+    local tun_wants=""
+    $TUN_MODE && tun_wants="Wants=xray-client-tun-routing.service"
+    mkdir -p "$XRAY_SYSTEMD_DIR"
+    cat > "${XRAY_SYSTEMD_DIR}/xray-client.service" <<EOF
 [Unit]
 Description=Xray Client - VPN VLESS+Reality
 Documentation=https://xtls.github.io
 After=network.target nss-lookup.target
+${tun_wants}
 
 [Service]
 User=nobody
@@ -659,6 +703,39 @@ LimitNOFILE=1000000
 [Install]
 WantedBy=multi-user.target
 EOF
+}
+
+write_tun_routing_service() {
+    mkdir -p "$XRAY_SYSTEMD_DIR"
+    cat > "${XRAY_SYSTEMD_DIR}/xray-client-tun-routing.service" <<EOF
+[Unit]
+Description=Xray Client Linux TUN Policy Routing
+Requires=xray-client.service
+After=xray-client.service
+BindsTo=xray-client.service
+
+[Service]
+Type=oneshot
+ExecStart=${XRAY_TUN_HELPER_PATH} up
+ExecStop=${XRAY_TUN_HELPER_PATH} down
+RemainAfterExit=yes
+EOF
+}
+
+install_tun_routing() {
+    mkdir -p "$(dirname "$XRAY_TUN_HELPER_PATH")"
+    install -m 0755 "$XRAY_TUN_HELPER_SOURCE" "$XRAY_TUN_HELPER_PATH"
+    write_tun_routing_service
+}
+
+remove_tun_routing() {
+    systemctl stop xray-client-tun-routing.service 2>/dev/null || true
+    if [[ -x "$XRAY_TUN_HELPER_PATH" ]]; then
+        "$XRAY_TUN_HELPER_PATH" down 2>/dev/null || true
+    fi
+    systemctl disable xray-client-tun-routing.service 2>/dev/null || true
+    rm -f "${XRAY_SYSTEMD_DIR}/xray-client-tun-routing.service"
+    rm -f "$XRAY_TUN_HELPER_PATH"
 }
 
 do_install() {
@@ -697,12 +774,21 @@ do_install() {
     UUID="$UUID_NORM"
     SHORT_ID="$SHORT_ID_NORM"
 
+    if ! $DRY_RUN; then
+        remove_tun_routing
+        if $TUN_MODE; then
+            command -v ip &>/dev/null || { error "TUN 模式需要 iproute2 的 ip 命令"; exit 1; }
+            [[ -c /dev/net/tun ]] || { error "未找到 /dev/net/tun，请先加载 Linux tun 内核模块"; exit 1; }
+        fi
+    fi
+
     step "部署 Xray 客户端"
     info "中继节点  : ${RELAY_IP}:${RELAY_PORT}"
     info "UUID      : ${UUID}"
     info "SNI       : ${SNI}"
     info "SOCKS5    : 127.0.0.1:${SOCKS_PORT}"
     info "HTTP代理  : 127.0.0.1:${HTTP_PORT}"
+    $TUN_MODE && info "TUN 模式  : xray0（宿主机 TCP/UDP 自动分流）"
     $DRY_RUN && warn "[dry-run] 仅预览，不执行实际操作"
 
     if ! $DRY_RUN; then
@@ -737,9 +823,13 @@ do_install() {
 
     step "配置 xray-client systemd 服务"
     if $DRY_RUN; then
-        info "[dry-run] 将创建 /etc/systemd/system/xray-client.service"
+        info "[dry-run] 将创建 ${XRAY_SYSTEMD_DIR}/xray-client.service"
+        $TUN_MODE && info "[dry-run] 将安装 xray0 策略路由辅助脚本和 systemd 单元"
     else
         write_systemd_service
+        if $TUN_MODE; then
+            install_tun_routing
+        fi
         systemctl daemon-reload
         systemctl enable xray-client
         systemctl restart xray-client
@@ -748,6 +838,10 @@ do_install() {
             success "xray-client 服务运行中"
         else
             error "xray-client 启动失败，查看日志: journalctl -u xray-client -n 50"
+            exit 1
+        fi
+        if $TUN_MODE && ! systemctl is-active --quiet xray-client-tun-routing.service; then
+            error "xray0 策略路由启动失败，查看日志: journalctl -u xray-client-tun-routing -n 50"
             exit 1
         fi
     fi
@@ -778,6 +872,15 @@ do_install() {
     fi
 
     step "客户端配置完成！"
+    local tun_summary=""
+    if $TUN_MODE; then
+        tun_summary="
+${BOLD}━━━ Linux TUN 模式 ━━━${RESET}
+  宿主机 TCP/UDP 已自动进入 xray0，无需执行 setproxy on
+  国内/内网流量直连，境外流量通过代理；Docker/虚拟机转发流量不接管
+  查看路由   : ${XRAY_TUN_HELPER_PATH} status
+"
+    fi
     cat <<EOF
 
 ${BOLD}━━━ 代理端口 ━━━${RESET}
@@ -793,6 +896,8 @@ ${BOLD}━━━ 终端代理（可选）━━━${RESET}
 ${BOLD}━━━ 全局 setproxy 命令（可选）━━━${RESET}
   ./install-setproxy.sh          # 安装 setproxy 到 ~/.local/bin
   setproxy on | off | status | test  # 之后任意目录可直接使用
+
+${tun_summary}
 
 ${BOLD}━━━ 浏览器配置 ━━━${RESET}
   SwitchyOmega → SOCKS5 → 127.0.0.1:${SOCKS_PORT}
@@ -847,6 +952,21 @@ do_status() {
     echo -e "${BOLD}━━━ 代理端口监听 ━━━${RESET}"
     ss -tlnp 2>/dev/null | grep -E "${SOCKS_PORT}|${HTTP_PORT}" || echo "代理端口未监听"
 
+    if [[ -f "${XRAY_SYSTEMD_DIR}/xray-client-tun-routing.service" ]]; then
+        echo ""
+        echo -e "${BOLD}━━━ Linux TUN 路由 ━━━${RESET}"
+        if systemctl is-active --quiet xray-client-tun-routing.service; then
+            echo "  xray-client-tun-routing.service 运行中"
+        else
+            echo -e "  ${RED}xray-client-tun-routing.service 未运行${RESET}"
+        fi
+        if [[ -x "$XRAY_TUN_HELPER_PATH" ]]; then
+            "$XRAY_TUN_HELPER_PATH" status || true
+        else
+            echo -e "  ${RED}xray-tun-route 辅助脚本缺失${RESET}"
+        fi
+    fi
+
     if [[ -f "${XRAY_CONFIG_DIR}/client.json" ]] && command -v xray &>/dev/null; then
         echo ""
         echo -e "${BOLD}━━━ 配置校验 ━━━${RESET}"
@@ -875,10 +995,11 @@ do_clean() {
         exit 1
     fi
     step "停止并移除 Xray 客户端"
+    remove_tun_routing
     systemctl stop xray-client 2>/dev/null || true
     systemctl disable xray-client 2>/dev/null || true
-    rm -f /etc/systemd/system/xray-client.service
-    rm -f /usr/local/etc/xray/client.json
+    rm -f "${XRAY_SYSTEMD_DIR}/xray-client.service"
+    rm -f "${XRAY_CONFIG_DIR}/client.json"
     systemctl daemon-reload
     success "Xray 客户端已停止并移除"
 }
@@ -1156,9 +1277,15 @@ do_proxy() {
 }
 
 # ── 主流程 ────────────────────────────────────────────────────────────────────
-case "$SUBCOMMAND" in
-    install) do_install ;;
-    status)  do_status ;;
-    clean)   do_clean ;;
-    proxy)   do_proxy ;;
-esac
+main() {
+    case "$SUBCOMMAND" in
+        install) do_install ;;
+        status)  do_status ;;
+        clean)   do_clean ;;
+        proxy)   do_proxy ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi

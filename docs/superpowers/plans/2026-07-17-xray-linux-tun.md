@@ -30,7 +30,7 @@
 - Consumes: `linux_setup.sh --help`, sourceable `write_client_config`, `TUN_MODE`.
 - Produces: assertions for default compatibility and the requested TUN JSON.
 
-- [ ] **Step 1: Write the failing CLI and render tests**
+- [x] **Step 1: Write the failing CLI and render tests**
 
 Create a temporary configuration directory, source `linux_setup.sh` without executing its main dispatch, and assert:
 
@@ -43,13 +43,13 @@ assert_file_contains "$cfg" '"name": "xray0"'
 assert_file_contains "$cfg" '"mark": 255'
 ```
 
-- [ ] **Step 2: Run the new test and verify RED**
+- [x] **Step 2: Run the new test and verify RED**
 
 Run: `bash tools/vpn/client/linux_setup_test.sh`
 
 Expected: FAIL because help has no `--tun`, sourcing executes the installer, and no TUN JSON is rendered.
 
-- [ ] **Step 3: Add source-safe dispatch and minimal TUN rendering**
+- [x] **Step 3: Add source-safe dispatch and minimal TUN rendering**
 
 Add `TUN_MODE=false`, parse `--tun`, guard the bottom-level dispatch with:
 
@@ -61,7 +61,7 @@ fi
 
 Render a `tun` inbound with `name: xray0`, `MTU: 1500`, and HTTP/TLS/QUIC sniffing. In TUN mode add `sockopt.mark: 255` to both `proxy` and `direct` outbounds.
 
-- [ ] **Step 4: Run the new test and verify GREEN**
+- [x] **Step 4: Run the new test and verify GREEN**
 
 Run: `bash tools/vpn/client/linux_setup_test.sh`
 
@@ -77,7 +77,7 @@ Expected: configuration assertions pass.
 - Consumes: `XRAY_TUN_IFACE`, `XRAY_TUN_TABLE`, `XRAY_TUN_MARK`, and `ip` from `PATH`.
 - Produces: `up`, `down`, and `status` actions for the managed routes and rules.
 
-- [ ] **Step 1: Write failing helper tests with a fake `ip`**
+- [x] **Step 1: Write failing helper tests with a fake `ip`**
 
 Log fake `ip` arguments and assert `up` requests:
 
@@ -89,17 +89,17 @@ Log fake `ip` arguments and assert `up` requests:
 
 Assert equivalent IPv6 operations and exact deletion/flush operations for `down`. Run repeated `up` and `down` calls to require idempotent behaviour.
 
-- [ ] **Step 2: Run helper tests and verify RED**
+- [x] **Step 2: Run helper tests and verify RED**
 
 Run: `bash tools/vpn/client/linux_setup_test.sh`
 
 Expected: FAIL because `bin/xray-tun-route` does not exist.
 
-- [ ] **Step 3: Implement the minimal route helper**
+- [x] **Step 3: Implement the minimal route helper**
 
 Implement strict action parsing, exact-rule cleanup before addition, IPv4 as required, IPv6 as best-effort, and a read-only `status` action. Match only locally originated packets with `uidrange`; match Xray sockets first with `fwmark`.
 
-- [ ] **Step 4: Run helper tests and verify GREEN**
+- [x] **Step 4: Run helper tests and verify GREEN**
 
 Run: `bash tools/vpn/client/linux_setup_test.sh`
 
@@ -115,7 +115,7 @@ Expected: helper assertions pass without invoking the real `ip` command.
 - Consumes: repository helper `bin/xray-tun-route` and variables `XRAY_SYSTEMD_DIR`, `XRAY_TUN_HELPER_PATH`.
 - Produces: `xray-client-tun-routing.service`, conditional `Wants`, safe mode switching, status, and cleanup.
 
-- [ ] **Step 1: Write failing generated-unit and cleanup tests**
+- [x] **Step 1: Write failing generated-unit and cleanup tests**
 
 Assert that TUN mode generates a oneshot unit containing:
 
@@ -130,13 +130,13 @@ RemainAfterExit=yes
 
 Assert the TUN Xray unit wants the route unit, while normal mode does not. With fake `systemctl` and temporary paths, assert reinstall/cleanup invokes helper `down` and removes only managed files.
 
-- [ ] **Step 2: Run the suite and verify RED**
+- [x] **Step 2: Run the suite and verify RED**
 
 Run: `bash tools/vpn/client/linux_setup_test.sh`
 
 Expected: FAIL because TUN unit generation and cleanup functions are absent.
 
-- [ ] **Step 3: Implement installation, transition, and status integration**
+- [x] **Step 3: Implement installation, transition, and status integration**
 
 Use overridable defaults:
 
@@ -147,7 +147,7 @@ XRAY_TUN_HELPER_PATH="${XRAY_TUN_HELPER_PATH:-/usr/local/libexec/xray-client-tun
 
 Install the helper with mode `0755`, generate the routing unit only in TUN mode, remove stale routing before every install, and show `ip link`, helper status, and unit status in `do_status`. Make `do_clean` stop routing before Xray and remove both managed units.
 
-- [ ] **Step 4: Run the suite and verify GREEN**
+- [x] **Step 4: Run the suite and verify GREEN**
 
 Run: `bash tools/vpn/client/linux_setup_test.sh`
 
@@ -165,7 +165,7 @@ Expected: all Linux setup regression checks pass.
 - Consumes: final CLI and service behaviour.
 - Produces: user-facing installation, rollback, limitation, and verification instructions.
 
-- [ ] **Step 1: Document TUN usage and rollback**
+- [x] **Step 1: Document TUN usage and rollback**
 
 Add an example:
 
@@ -175,7 +175,7 @@ sudo ./linux_setup.sh install --tun --vless="vless://..."
 
 Explain automatic host TCP/UDP capture, retained China-direct routing, excluded forwarded traffic, redundant-but-compatible `setproxy`, lack of ICMP in v26.3.27, and switching back by reinstalling without `--tun`.
 
-- [ ] **Step 2: Run final verification**
+- [x] **Step 2: Run final verification**
 
 Run:
 

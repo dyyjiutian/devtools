@@ -197,7 +197,7 @@ vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=
 
 ---
 
-## 方案 B：Linux（systemd + 终端代理）
+## 方案 B：Linux（systemd + 终端代理 / TUN）
 
 在国内 Linux 机器上，两种方式二选一（不能同时使用）：
 
@@ -212,6 +212,10 @@ sudo ./client/linux_setup.sh install \
   --uuid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \
   --public-key=<base64_public_key> \
   --short-id=<十六进制_short_id>
+
+# 可选：在上述任一种安装命令中增加 --tun，自动接管 Linux 宿主机 TCP/UDP
+sudo ./client/linux_setup.sh install --tun \
+  --vless="vless://<UUID>@198.51.100.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.icloud.com&fp=chrome&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&type=tcp&headerType=none#标签"
 ```
 
 若同时传入 `--vless` 与 `--uuid` / `--public-key` / `--short-id` 中任意一个，脚本会报错退出。
@@ -224,6 +228,23 @@ sudo ./client/linux_setup.sh install \
 - 暴露 SOCKS5（`127.0.0.1:10808`）和 HTTP（`127.0.0.1:10809`）
 - 配置 systemd 服务 `xray-client` 并设为开机自启
 - 配置路由：国内直连，claude.ai / anthropic.com 走代理
+
+### Linux TUN 模式（可选）
+
+`--tun` 会在保留 SOCKS5/HTTP 入站的同时创建 `xray0`，并通过
+`xray-client-tun-routing.service` 自动管理宿主机策略路由。流量进入 Xray 后仍使用
+同一套路由规则：内网和国内域名/IP 直连，境外流量通过 VLESS Reality。
+
+TUN 模式下宿主机应用通常不再需要 `proxy on`、`setproxy on`、`--dnf-proxy` 或
+`--docker-daemon`；这些显式代理方式仍然兼容。TUN 不会设置
+`GIT_SSH_COMMAND`，Git SSH 会和其他宿主机 TCP 流量一样自动分流。
+
+策略规则只匹配宿主机本地进程，不接管 Docker 容器、虚拟机或路由器转发的流量。
+当前固定的 Xray v26.3.27 TUN 支持 TCP/UDP，但不支持 ICMP，因此不能用 `ping`
+判断隧道是否正常，请使用 `linux_setup.sh status` 或 HTTP/SSH 测试。
+
+切回普通 SOCKS5/HTTP 模式时，使用原参数重新安装但不要传 `--tun`；脚本会先撤销
+之前管理的 TUN 路由。彻底卸载可执行 `sudo ./client/linux_setup.sh clean`。
 
 本地端口：
 - SOCKS5：`socks5h://127.0.0.1:10808`
@@ -438,6 +459,7 @@ sudo ./relay/setup.sh --clean
 ./client/linux_setup.sh proxy test    # 常用站点连通性 + 海外/国内基准测速
 sudo ./client/linux_setup.sh clean    # 停止并卸载
 systemctl status xray-client          # 原生 systemd 命令
+systemctl status xray-client-tun-routing  # TUN 策略路由（仅 --tun 模式存在）
 journalctl -u xray-client -n 50 --no-pager  # 最近日志
 journalctl -u xray-client -f          # 实时日志
 systemctl restart xray-client         # 重启

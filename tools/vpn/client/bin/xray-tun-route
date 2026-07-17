@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IP_BIN="${IP_BIN:-ip}"
+TUN_IFACE="${XRAY_TUN_IFACE:-xray0}"
+ROUTE_TABLE="${XRAY_TUN_TABLE:-1001}"
+SOCKET_MARK="${XRAY_TUN_MARK:-255}"
+MARK_RULE_PRIORITY="${XRAY_TUN_MARK_PRIORITY:-10000}"
+TUN_RULE_PRIORITY="${XRAY_TUN_RULE_PRIORITY:-10010}"
+MAX_LOCAL_UID=4294967294
+
+info() {
+    echo "[xray-tun-route] $*"
+}
+
+warn() {
+    echo "[xray-tun-route] WARN: $*" >&2
+}
+
+delete_rules() {
+    local family="$1"
+    "$IP_BIN" "$family" rule delete priority "$MARK_RULE_PRIORITY" \
+        fwmark "$SOCKET_MARK" lookup main 2>/dev/null || true
+    "$IP_BIN" "$family" rule delete priority "$TUN_RULE_PRIORITY" \
+        uidrange "0-${MAX_LOCAL_UID}" lookup "$ROUTE_TABLE" 2>/dev/null || true
+}
+
+up_family() {
+    local family="$1"
+    delete_rules "$family"
+    "$IP_BIN" "$family" route replace default dev "$TUN_IFACE" table "$ROUTE_TABLE"
+    "$IP_BIN" "$family" rule add priority "$MARK_RULE_PRIORITY" \
+        fwmark "$SOCKET_MARK" lookup main
+    "$IP_BIN" "$family" rule add priority "$TUN_RULE_PRIORITY" \
+        uidrange "0-${MAX_LOCAL_UID}" lookup "$ROUTE_TABLE"
+}
+
+down_family() {
+    local family="$1"
+    delete_rules "$family"
+    "$IP_BIN" "$family" route flush table "$ROUTE_TABLE" 2>/dev/null || true
+}
+
+routes_up() {
+    "$IP_BIN" link show dev "$TUN_IFACE" >/dev/null
+    up_family -4
+    if ! up_family -6; then
+        warn "IPv6 策略路由不可用，继续使用 IPv4 TUN"
+        down_family -6
+    fi
+    info "已启用 ${TUN_IFACE} 宿主机策略路由"
+}
+
+routes_down() {
+    down_family -4
+    down_family -6
+    info "已移除 ${TUN_IFACE} 宿主机策略路由"
+}
+
+routes_status() {
+    "$IP_BIN" link show dev "$TUN_IFACE" 2>/dev/null || true
+    "$IP_BIN" -4 rule show 2>/dev/null | grep -E \
+        "(^|[[:space:]])(${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
+    "$IP_BIN" -4 route show table "$ROUTE_TABLE" 2>/dev/null || true
+    "$IP_BIN" -6 rule show 2>/dev/null | grep -E \
+        "(^|[[:space:]])(${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
+    "$IP_BIN" -6 route show table "$ROUTE_TABLE" 2>/dev/null || true
+}
+
+case "${1:-}" in
+    up)     routes_up ;;
+    down)   routes_down ;;
+    status) routes_status ;;
+    *)
+        echo "用法: $0 up | down | status" >&2
+        exit 2
+        ;;
+esac
