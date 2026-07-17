@@ -124,6 +124,10 @@ fi
 if [[ "${1:-}" == "-w" ]]; then
     assignment="$2"
     value="${assignment#*=}"
+    if [[ "$assignment" == net.ipv4.conf.xray0.rp_filter=* \
+        && "${FAKE_SYSCTL_FAIL_IFACE:-false}" == "true" ]]; then
+        exit 1
+    fi
     if [[ "$assignment" == net.ipv4.conf.all.rp_filter=* ]]; then
         printf '%s\n' "$value" > "${FAKE_SYSCTL_STATE_DIR}/all"
     else
@@ -191,6 +195,20 @@ if IP_BIN="$fake_ip" IP_LOG="$conflict_ip_log" \
 fi
 assert_file_not_contains "$conflict_ip_log" \
     '-4 route delete default dev xray0 table 1001'
+
+printf '1\n' > "${sysctl_state_dir}/all"
+printf '1\n' > "${sysctl_state_dir}/iface"
+if IP_BIN="$fake_ip" IP_LOG="$ip_log" \
+    SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
+    FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" FAKE_SYSCTL_FAIL_IFACE=true \
+    XRAY_TUN_STATE_FILE="$tun_state_file" \
+    XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+    XRAY_TUN_BYPASS_UID=4242 XRAY_TUN_WAIT_INTERVAL=0 \
+    "$TUN_ROUTE_HELPER" up >/dev/null 2>&1; then
+    fail "TUN helper should fail if rp_filter cannot be disabled"
+fi
+[[ "$(< "${sysctl_state_dir}/all")" -eq 1 ]] \
+    || fail "TUN helper should restore global rp_filter after partial setup failure"
 
 echo "[5/7] normal and TUN systemd units"
 normal_systemd_dir="${TMP_DIR}/systemd-normal"

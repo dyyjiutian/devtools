@@ -52,8 +52,8 @@ prepare_rp_filter() {
         (umask 077; printf '%s %s\n' "$old_all" "$old_iface" > "$STATE_FILE")
     fi
 
-    set_rp_filter "$all_key" 0
-    set_rp_filter "$iface_key" 0
+    set_rp_filter "$all_key" 0 || return 1
+    set_rp_filter "$iface_key" 0 || return 1
 }
 
 restore_rp_filter() {
@@ -214,7 +214,10 @@ routes_up() {
     resolve_bypass_uid
     remove_stale_bypass_rules
     save_bypass_uid
-    prepare_rp_filter
+    if ! prepare_rp_filter; then
+        restore_rp_filter
+        return 1
+    fi
     if ! up_family -4; then
         restore_rp_filter
         return 1
