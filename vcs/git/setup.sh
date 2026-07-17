@@ -151,6 +151,82 @@ install_delta() {
   fi
 }
 
+install_gh() {
+  step "安装/检查 GitHub CLI (gh) ..."
+  if command -v gh &>/dev/null; then
+    success "GitHub CLI 已安装: $(gh --version | head -1)"
+    info "请执行: gh auth login"
+    return
+  fi
+
+  case "$(uname -s)" in
+    Darwin)
+      if ! command -v brew &>/dev/null; then
+        warn "未找到 Homebrew，跳过 GitHub CLI 安装。可手动执行: brew install gh"
+        return
+      fi
+      if ! try_cmd brew install gh; then
+        warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+        return
+      fi
+      ;;
+    Linux)
+      if command -v apt-get &>/dev/null; then
+        if ! try_cmd sudo apt-get update || ! try_cmd sudo apt-get install -y gh; then
+          warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+          return
+        fi
+      elif command -v dnf &>/dev/null; then
+        if dnf --version 2>/dev/null | head -1 | grep -q '^5'; then
+          if ! try_cmd sudo dnf install -y dnf5-plugins \
+            || ! try_cmd sudo dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo \
+            || ! try_cmd sudo dnf install -y gh; then
+            warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+            return
+          fi
+        elif ! try_cmd sudo dnf install -y 'dnf-command(config-manager)' \
+          || ! try_cmd sudo dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo \
+          || ! try_cmd sudo dnf install -y gh; then
+          warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+          return
+        fi
+      elif command -v yum &>/dev/null; then
+        if ! try_cmd sudo yum install -y gh; then
+          warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+          return
+        fi
+      elif command -v pacman &>/dev/null; then
+        if ! try_cmd sudo pacman -S --needed gh; then
+          warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+          return
+        fi
+      elif command -v zypper &>/dev/null; then
+        if ! try_cmd sudo zypper install -y gh; then
+          warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
+          return
+        fi
+      else
+        warn "未找到可用包管理器，跳过 GitHub CLI 安装"
+        warn "可手动安装 gh 后重跑本脚本以启用 GitHub git review 工作流"
+        return
+      fi
+      ;;
+    *)
+      warn "不支持的系统: $(uname -s)，跳过 GitHub CLI 安装"
+      return
+      ;;
+  esac
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    info "GitHub CLI 安装完成后，请执行: gh auth login"
+  elif command -v gh &>/dev/null; then
+    success "GitHub CLI 安装完成"
+    info "请执行: gh auth login"
+  else
+    warn "GitHub CLI 安装命令已执行，但当前 PATH 未找到 gh"
+  fi
+}
+
 install_subcommands() {
   if [[ "$SKIP_SUBCMD" == "true" ]]; then
     info "跳过 git 子命令安装"
@@ -196,6 +272,7 @@ main() {
 
   require_git
   install_delta
+  install_gh
   install_subcommands
   run_config
   install_aliases

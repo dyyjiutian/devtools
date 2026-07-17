@@ -38,9 +38,10 @@ bash setup.sh --skip-config # 跳过 git config
 执行内容（每步对应 `scripts/` 下一个可单独运行的脚本）：
 
 1. 安装 [git-delta](https://github.com/dandavison/delta) 并配置为 diff/log/show pager
-2. `scripts/sub-command.sh`：安装 `git rb` / `git bc` / `git wc` / `git review` 子命令及 man 手册到 `~/.local/bin`
-3. `scripts/config.sh`：写入推荐的 git 全局配置与 status / pull / fetch / checkout 性能优化
-4. `scripts/alias.sh`：安装 `gitroot`
+2. 安装 [GitHub CLI (`gh`)](https://cli.github.com/)；DNF 系统自动添加 GitHub 官方 RPM 源，并提示执行 `gh auth login` 完成 GitHub 认证
+3. `scripts/sub-command.sh`：安装 `git rb` / `git bc` / `git wc` / `git review` 子命令及 man 手册到 `~/.local/bin`
+4. `scripts/config.sh`：写入推荐的 git 全局配置与 status / pull / fetch / checkout 性能优化
+5. `scripts/alias.sh`：安装 `gitroot`
 
 `setup.sh` 支持 `--skip-delta` / `--skip-subcmd` / `--skip-config` / `--skip-alias` 分别跳过对应步骤，并会自动把 `~/.local/bin` 写入 rc 文件的 `PATH`。
 
@@ -75,7 +76,7 @@ bash scripts/sub-command.sh --dry-run  # 预览
 | GitLab | URL 含 `gitlab` | `git push -o merge_request.create -o merge_request.target=<主干>` |
 | Gerrit | 其余情况 | `git push origin HEAD:refs/for/<主干>` |
 
-Alibaba GitLab 采用 Gerrit 风格的 `refs/for/<主干>/<当前分支>` 提交，识别优先级高于通用 GitLab。GitHub 需要安装 [`gh`](https://cli.github.com/) 并已登录认证；GitLab 使用服务端 push options，无需额外 CLI。
+Alibaba GitLab 采用 Gerrit 风格的 `refs/for/<主干>/<当前分支>` 提交，识别优先级高于通用 GitLab。`setup.sh` 会安装 [GitHub CLI (`gh`)](https://cli.github.com/)；安装后请自行执行 `gh auth login` 完成认证。GitLab 使用服务端 push options，无需额外 CLI。
 
 ---
 

@@ -206,7 +206,7 @@ See [`vcs/git/README.md`](vcs/git/README.md) for full documentation.
 
 ### One-Shot Setup (`vcs/git/setup.sh`)
 
-Installs git-delta, installs the `git rb` / `git bc` / `git wc` / `git review` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
+Installs git-delta and GitHub CLI (`gh`; then run `gh auth login` to authenticate), installs the `git rb` / `git bc` / `git wc` / `git review` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
 
 ```bash
 bash vcs/git/setup.sh           # Full setup
