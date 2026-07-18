@@ -282,6 +282,11 @@ nft_firewall_up() {
         ct mark set "$SOCKET_MARK" meta mark set "$SOCKET_MARK" || return 1
     "$NFT_BIN" add rule inet "$NFT_TABLE" output \
         ct mark "$SOCKET_MARK" meta mark set "$SOCKET_MARK" || return 1
+    "$NFT_BIN" add rule inet "$NFT_TABLE" output \
+        ip protocol icmp icmp type echo-reply meta mark set "$SOCKET_MARK" || return 1
+    "$NFT_BIN" add rule inet "$NFT_TABLE" output \
+        ip6 nexthdr icmpv6 icmpv6 type echo-reply \
+        meta mark set "$SOCKET_MARK" || return 1
     "$NFT_BIN" list table inet "$NFT_TABLE" >/dev/null || return 1
 }
 
@@ -310,6 +315,15 @@ iptables_firewall_up_family() {
     "$firewall_bin" -t mangle -A "$IPTABLES_OUTPUT_CHAIN" \
         -m connmark --mark "$SOCKET_MARK" \
         -j MARK --set-mark "$SOCKET_MARK" || return 1
+    if [[ "$family" == 4 ]]; then
+        "$firewall_bin" -t mangle -A "$IPTABLES_OUTPUT_CHAIN" \
+            -p icmp --icmp-type echo-reply \
+            -j MARK --set-mark "$SOCKET_MARK" || return 1
+    else
+        "$firewall_bin" -t mangle -A "$IPTABLES_OUTPUT_CHAIN" \
+            -p ipv6-icmp --icmpv6-type echo-reply \
+            -j MARK --set-mark "$SOCKET_MARK" || return 1
+    fi
 }
 
 iptables_firewall_down_family() {

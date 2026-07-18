@@ -36,6 +36,7 @@ uidrange 0-4294967294 lookup 1001
 
 - 在物理接口进入的 `NEW` 连接上设置连接标记 `255`；来自 `xray0` 的流量不标记，避免回环。
 - 在本机输出链恢复连接标记到 packet mark `255`。
+- 对 IPv4/IPv6 ICMP `echo-reply` 额外直接恢复 packet mark `255`，即使 ICMP 连接跟踪状态异常也不把 ping 回包送进 TUN。
 - 现有 `ip rule priority 10000 fwmark 255 lookup main` 使这些回包走主路由，绕过 `table 1001`。
 - 使用独立 nftables 表；没有 nftables 时使用等价的 IPv4/IPv6 iptables mangle 链。
 - nftables 和 iptables 都不可用或规则安装/验证失败时，返回失败并清理已创建的所有状态。

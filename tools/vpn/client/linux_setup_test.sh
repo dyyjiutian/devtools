@@ -280,6 +280,7 @@ assert_file_contains "$firewall_log" 'iifname xray0 return'
 assert_file_contains "$firewall_log" 'ct state new'
 assert_file_contains "$firewall_log" 'ct mark set 255'
 assert_file_contains "$firewall_log" 'meta mark set 255'
+assert_file_contains "$firewall_log" 'echo-reply'
 run_tun_helper down
 
 echo "[4c/7] TUN firewall backend fallback and fail-closed setup"
