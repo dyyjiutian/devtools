@@ -224,4 +224,4 @@ cp terminal/starship/starship-tokyo.toml ~/.config/starship.toml
 | `vim/` | Vim（vim-plug + coc.nvim） | `./setup.sh` |
 | `yazi/` | Yazi 文件管理器 | `./setup.sh` |
 | `iterm2/` | iTerm2 配置导入 | 手动导入 `config/` |
-| `tmux/` | tmux 配置 | `cp tmux.conf ~/.tmux.conf` |
+| `tmux/` | tmux 3.7b + 配置 + TPM | `./setup.sh` |

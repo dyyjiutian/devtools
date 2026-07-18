@@ -103,12 +103,11 @@ Vim configuration with vim-plug and coc.nvim language servers (Python, Go, Java,
 
 ### tmux (`terminal/tmux/`)
 
-tmux configuration with custom keybindings and status bar styling.
+Installs **tmux 3.7b** (source build on Linux; Homebrew on macOS), deploys config, and sets up TPM plugins. Enables `extended-keys` for Codex Shift+Enter newlines.
 
 ```bash
-# Copy config to home directory
-cp terminal/tmux/tmux.conf ~/.tmux.conf
-tmux source-file ~/.tmux.conf
+./terminal/tmux/setup.sh              # install 3.7b + config + TPM
+./terminal/tmux/setup.sh --install-bin-only
 ```
 
 ### yazi (`terminal/yazi/`)

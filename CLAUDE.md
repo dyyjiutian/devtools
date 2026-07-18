@@ -16,6 +16,7 @@ os/
 terminal/
 ├── iterm2/                 # iTerm2 configuration and SSH login scripts
 ├── oh-my-zsh/              # Oh My Zsh configuration (theme, plugins)
+├── tmux/                   # tmux 3.7b installer + config (extended-keys)
 └── vim/                    # Vim configuration with vim-plug and coc.nvim
 
 editors/
@@ -68,6 +69,11 @@ Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSourc
 **iTerm2** (`terminal/iterm2/`):
 - `config/` - iTerm2 profile exports
 - `scripts/login.exp` - Expect script for password-based SSH login: `./login.exp <user> <host> <password>`
+
+**tmux** (`terminal/tmux/`):
+- `setup.sh` - Installs tmux 3.7b (Linux: build from source to `~/.local` or `TMUX_PREFIX`; macOS: Homebrew), links `tmux.conf`, installs TPM plugins
+- `tmux.conf` - Prefix `Ctrl-Space`, vi copy-mode, status bar, `extended-keys` for Codex Shift+Enter
+- Linux OS init scripts call `setup.sh --install-bin-only` with `TMUX_PREFIX=/usr/local` (do not use distro tmux 2.7)
 
 ## Editor Configuration
 

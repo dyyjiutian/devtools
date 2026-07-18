@@ -45,8 +45,9 @@ cache/
 | `Xray-linux-64-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip | VPN Linux 客户端 x86_64 |
 | `Xray-linux-arm64-v8a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip | VPN Linux 客户端 arm64 |
 | `Xray-linux-arm32-v7a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm32-v7a.zip | VPN Linux 客户端 arm32 |
+| `tmux-3.7b.tar.gz` | https://github.com/tmux/tmux/releases/download/3.7b/tmux-3.7b.tar.gz | Linux 源码编译（`terminal/tmux/setup.sh`） |
 
-> **tmux**：通过系统包管理器（dnf/yum）安装，无法离线缓存。离线环境需提前配置内网 yum 源。
+> **tmux**：不使用发行版包（Alinux/CentOS 常为 2.7，无 `extended-keys`）。离线时缓存上述源码包；编译仍需本机有 `gcc` / `libevent-devel` / `ncurses-devel` / `bison`。
 
 ---
 

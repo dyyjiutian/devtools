@@ -57,7 +57,7 @@ ${BOLD}安装的软件:${NC}
     cloc（代码行数统计）
 
   终端增强工具:
-    tmux, fzf, yazi, zoxide, lazygit, gh（GitHub CLI）
+    tmux 3.7b（源码安装）, fzf, yazi, zoxide, lazygit, gh（GitHub CLI）
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
@@ -248,11 +248,21 @@ install_cloc() {
 install_tools() {
   step "终端增强工具安装"
 
-  # tmux
-  if is_installed tmux; then
-    success "tmux 已安装：$(tmux -V)"
+  # tmux 3.7b（统一源码安装，保证 extended-keys / Codex Shift+Enter）
+  local tmux_setup cache_dir
+  tmux_setup="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../terminal/tmux/setup.sh"
+  cache_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../cache"
+  if [[ -f "$tmux_setup" ]]; then
+    info "通过 terminal/tmux/setup.sh 安装 tmux 3.7b..."
+    if TMUX_PREFIX=/usr/local DEVTOOLS_CACHE_DIR="$cache_dir" \
+        bash "$tmux_setup" --install-bin-only; then
+      hash -r 2>/dev/null || true
+      success "tmux 安装完成：$(/usr/local/bin/tmux -V 2>/dev/null || tmux -V 2>/dev/null || true)"
+    else
+      warn "tmux 安装失败"
+    fi
   else
-    run_cmd apt-get install -y tmux && success "tmux 安装完成" || warn "tmux 安装失败"
+    warn "找不到 $tmux_setup，跳过 tmux"
   fi
 
   # fzf

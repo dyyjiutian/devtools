@@ -134,7 +134,7 @@ ${BOLD}安装的软件:${NC}
     cloc             - 代码行数统计工具
 
   终端增强工具:
-    tmux             - 终端复用器
+    tmux 3.7b        - 终端复用器（源码安装到 /usr/local，支持 extended-keys）
     fzf              - 模糊搜索工具
     yazi             - 终端文件管理器
     zoxide           - 快速目录跳转工具
@@ -451,17 +451,19 @@ install_tools() {
   local pkg_manager
   pkg_manager=$(detect_pkg_manager)
 
-  # tmux
-  if is_installed tmux; then
-    success "tmux 已安装：$(tmux -V)"
-  else
-    info "正在安装 tmux..."
-    run_cmd "$pkg_manager" install -y tmux
-    if is_installed tmux; then
-      success "tmux 安装完成：$(tmux -V)"
+  # tmux 3.7b（发行版包常为 2.7，缺 extended-keys；统一源码安装）
+  local tmux_setup="${SCRIPT_DIR}/../../terminal/tmux/setup.sh"
+  if [[ -f "$tmux_setup" ]]; then
+    info "通过 terminal/tmux/setup.sh 安装 tmux 3.7b..."
+    if TMUX_PREFIX=/usr/local DEVTOOLS_CACHE_DIR="$CACHE_DIR" \
+        bash "$tmux_setup" --install-bin-only; then
+      hash -r 2>/dev/null || true
+      success "tmux 安装完成：$(command -v tmux 2>/dev/null || echo /usr/local/bin/tmux) $(/usr/local/bin/tmux -V 2>/dev/null || tmux -V 2>/dev/null || true)"
     else
       warn "tmux 安装失败"
     fi
+  else
+    warn "找不到 $tmux_setup，跳过 tmux"
   fi
 
   # fzf

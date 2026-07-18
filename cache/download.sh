@@ -76,6 +76,7 @@ download_linux() {
   local starship_version="1.25.1"
   local nerd_fonts_version="3.3.0"
   local xray_version="26.3.27"
+  local tmux_version="3.7b"
 
   # yazi (x86_64 / arm64) — musl 静态编译版，兼容 CentOS/RHEL 8（glibc 2.28）
   for arch in x86_64 aarch64; do
@@ -118,6 +119,11 @@ download_linux() {
       "https://github.com/XTLS/Xray-core/releases/download/v${xray_version}/Xray-linux-${arch}.zip" \
       "${BINARIES_DIR}/Xray-linux-${arch}-v${xray_version}.zip"
   done
+
+  # tmux 源码包（terminal/tmux/setup.sh / os/linux 源码编译用）
+  download \
+    "https://github.com/tmux/tmux/releases/download/${tmux_version}/tmux-${tmux_version}.tar.gz" \
+    "${BINARIES_DIR}/tmux-${tmux_version}.tar.gz"
 
   # Nerd Fonts Symbols Only — 架构无关，yazi/终端图标字体
   download \
