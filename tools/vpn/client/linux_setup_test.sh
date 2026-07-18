@@ -92,7 +92,7 @@ printf '1\n' > "${sysctl_state_dir}/all"
 printf '1\n' > "${sysctl_state_dir}/iface"
 cat > "$fake_ip" <<'FAKE_IP'
 #!/usr/bin/env bash
-printf '%s\n' "$*" >> "$IP_LOG"
+printf '%s\n' "$*" >> "${ORDER_LOG:-$IP_LOG}"
 if [[ " $* " == *" link show dev xray0 "* && -n "${FAKE_IP_LINK_FAILURES:-}" ]]; then
     count=0
     [[ -f "$FAKE_IP_COUNT_FILE" ]] && read -r count < "$FAKE_IP_COUNT_FILE"
@@ -139,12 +139,96 @@ exit 2
 FAKE_SYSCTL
 chmod +x "$fake_sysctl"
 
+firewall_log="${TMP_DIR}/firewall.log"
+firewall_state_file="${TMP_DIR}/xray-tun.firewall"
+fake_nft="${TMP_DIR}/nft"
+fake_iptables="${TMP_DIR}/iptables"
+fake_ip6tables="${TMP_DIR}/ip6tables"
+fake_nft_state="${TMP_DIR}/nft.state"
+cat > "$fake_nft" <<'FAKE_NFT'
+#!/usr/bin/env bash
+printf 'nft %s\n' "$*" >> "${ORDER_LOG:-$FIREWALL_LOG}"
+if [[ "${FAKE_NFT_FAIL:-false}" == "true" ]]; then
+    exit 1
+fi
+if [[ "${FAKE_NFT_VERIFY_FAIL:-false}" == "true" && "$*" == *"list"* ]]; then
+    exit 1
+fi
+if [[ "$*" == *"add table inet xray_client_tun"* ]]; then
+    : > "$FAKE_NFT_STATE"
+fi
+if [[ "$*" == *"delete table inet xray_client_tun"* ]]; then
+    rm -f "$FAKE_NFT_STATE"
+fi
+if [[ "$*" == *"list"* ]]; then
+    if [[ "${FAKE_NFT_TABLE_EXISTS:-false}" == "true" \
+        || -f "$FAKE_NFT_STATE" ]]; then
+        echo 'table inet xray_client_tun'
+        exit 0
+    fi
+    exit 1
+fi
+exit 0
+FAKE_NFT
+cat > "$fake_iptables" <<'FAKE_IPTABLES'
+#!/usr/bin/env bash
+printf 'iptables %s\n' "$*" >> "${ORDER_LOG:-$FIREWALL_LOG}"
+[[ "${FAKE_IPTABLES_FAIL:-false}" == "true" ]] && exit 1
+if [[ "$*" == *" -L "* && "${FAKE_IPTABLES_CHAIN_EXISTS:-false}" == "true" ]]; then
+    exit 0
+fi
+if [[ "$*" == *" -L "* ]]; then
+    exit 1
+fi
+exit 0
+FAKE_IPTABLES
+cat > "$fake_ip6tables" <<'FAKE_IP6TABLES'
+#!/usr/bin/env bash
+printf 'ip6tables %s\n' "$*" >> "${ORDER_LOG:-$FIREWALL_LOG}"
+[[ "${FAKE_IP6TABLES_FAIL:-false}" == "true" ]] && exit 1
+if [[ "$*" == *" -L "* && "${FAKE_IP6TABLES_CHAIN_EXISTS:-false}" == "true" ]]; then
+    exit 0
+fi
+if [[ "$*" == *" -L "* ]]; then
+    exit 1
+fi
+exit 0
+FAKE_IP6TABLES
+chmod +x "$fake_nft" "$fake_iptables" "$fake_ip6tables"
+
 run_tun_helper() {
     IP_BIN="$fake_ip" IP_LOG="$ip_log" \
         SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
         FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
+        NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
+        IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
+        ORDER_LOG="${ORDER_LOG:-}" \
+        FAKE_NFT_VERIFY=true \
+        FAKE_NFT_STATE="$fake_nft_state" \
         XRAY_TUN_STATE_FILE="$tun_state_file" \
         XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+        XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
+        XRAY_TUN_BYPASS_UID=4242 \
+        "$TUN_ROUTE_HELPER" "$@"
+}
+
+run_firewall_helper() {
+    env \
+        IP_BIN="$fake_ip" IP_LOG="$ip_log" \
+        SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
+        FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
+        NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
+        IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
+        FAKE_NFT_VERIFY="${FAKE_NFT_VERIFY:-true}" \
+        FAKE_NFT_STATE="$fake_nft_state" \
+        FAKE_NFT_TABLE_EXISTS="${FAKE_NFT_TABLE_EXISTS:-false}" \
+        FAKE_NFT_FAIL="${FAKE_NFT_FAIL:-false}" \
+        FAKE_NFT_VERIFY_FAIL="${FAKE_NFT_VERIFY_FAIL:-false}" \
+        FAKE_IPTABLES_FAIL="${FAKE_IPTABLES_FAIL:-false}" \
+        FAKE_IP6TABLES_FAIL="${FAKE_IP6TABLES_FAIL:-false}" \
+        XRAY_TUN_STATE_FILE="$tun_state_file" \
+        XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
+        XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
         XRAY_TUN_BYPASS_UID=4242 \
         "$TUN_ROUTE_HELPER" "$@"
 }
@@ -174,6 +258,10 @@ IP_BIN="$fake_ip" IP_LOG="$ip_log" \
     FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
     FAKE_IP_LINK_FAILURES=2 FAKE_IP_COUNT_FILE="$race_count_file" \
     XRAY_TUN_WAIT_ATTEMPTS=3 XRAY_TUN_WAIT_INTERVAL=0 \
+    NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
+    IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
+    FAKE_NFT_VERIFY=true FAKE_NFT_STATE="$fake_nft_state" \
+    XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
     XRAY_TUN_STATE_FILE="$tun_state_file" \
     XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
     XRAY_TUN_BYPASS_UID=4242 \
@@ -182,11 +270,64 @@ IP_BIN="$fake_ip" IP_LOG="$ip_log" \
     || fail "TUN helper should wait until xray0 appears"
 run_tun_helper down
 
+echo "[4b/7] TUN protects inbound connection replies"
+NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
+    IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
+    FAKE_NFT_VERIFY=true XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
+    run_tun_helper up
+assert_file_contains "$firewall_log" 'table inet xray_client_tun'
+assert_file_contains "$firewall_log" 'iifname xray0 return'
+assert_file_contains "$firewall_log" 'ct state new'
+assert_file_contains "$firewall_log" 'ct mark set 255'
+assert_file_contains "$firewall_log" 'meta mark set 255'
+run_tun_helper down
+
+echo "[4c/7] TUN firewall backend fallback and fail-closed setup"
+firewall_log="${TMP_DIR}/fallback-firewall.log"
+FAKE_NFT_FAIL=true run_firewall_helper up
+assert_file_contains "$firewall_log" 'iptables -t mangle -N XRAY_TUN_PREROUTING'
+assert_file_contains "$firewall_log" 'ip6tables -t mangle -N XRAY_TUN_PREROUTING'
+run_firewall_helper down
+
+if FAKE_NFT_TABLE_EXISTS=true run_firewall_helper up >/dev/null 2>&1; then
+    fail "TUN setup should reject an existing unmanaged nftables table"
+fi
+assert_file_not_contains "$firewall_log" 'nft delete table inet xray_client_tun'
+
+order_log="${TMP_DIR}/order.log"
+: > "$order_log"
+ORDER_LOG="$order_log" run_firewall_helper up
+firewall_line=$(rg -n 'nft add table inet xray_client_tun' "$order_log" | cut -d: -f1)
+route_line=$(rg -n -- '-4 route replace default dev xray0 table 1001' "$order_log" | cut -d: -f1)
+[[ -n "$firewall_line" && -n "$route_line" && "$firewall_line" -lt "$route_line" ]] \
+    || fail "firewall protection must be installed before TUN policy routes"
+ORDER_LOG="$order_log" run_firewall_helper down
+assert_file_contains "$order_log" 'nft delete table inet xray_client_tun'
+
+: > "$ip_log"
+if FAKE_NFT_FAIL=true FAKE_IPTABLES_FAIL=true FAKE_IP6TABLES_FAIL=true \
+    run_firewall_helper up >/dev/null 2>&1; then
+    fail "TUN setup should fail when every firewall backend fails"
+fi
+assert_file_not_contains "$ip_log" 'route replace default dev xray0 table 1001'
+
+printf '1\n' > "${sysctl_state_dir}/all"
+printf '1\n' > "${sysctl_state_dir}/iface"
+if FAKE_NFT_VERIFY_FAIL=true run_firewall_helper up >/dev/null 2>&1; then
+    fail "TUN setup should fail when firewall verification fails"
+fi
+[[ "$(< "${sysctl_state_dir}/all")" -eq 1 ]] \
+    || fail "firewall verification failure should restore global rp_filter"
+
 conflict_ip_log="${TMP_DIR}/conflict-ip.log"
 if IP_BIN="$fake_ip" IP_LOG="$conflict_ip_log" \
     SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
     FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" \
     FAKE_IP_RULE_CONFLICT=true XRAY_TUN_WAIT_INTERVAL=0 \
+    NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
+    IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
+    FAKE_NFT_VERIFY=true FAKE_NFT_STATE="$fake_nft_state" \
+    XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
     XRAY_TUN_STATE_FILE="$tun_state_file" \
     XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
     XRAY_TUN_BYPASS_UID=4242 \
@@ -201,6 +342,10 @@ printf '1\n' > "${sysctl_state_dir}/iface"
 if IP_BIN="$fake_ip" IP_LOG="$ip_log" \
     SYSCTL_BIN="$fake_sysctl" SYSCTL_LOG="$sysctl_log" \
     FAKE_SYSCTL_STATE_DIR="$sysctl_state_dir" FAKE_SYSCTL_FAIL_IFACE=true \
+    NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
+    IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
+    FAKE_NFT_VERIFY=true FAKE_NFT_STATE="$fake_nft_state" \
+    XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
     XRAY_TUN_STATE_FILE="$tun_state_file" \
     XRAY_TUN_UID_STATE_FILE="$tun_uid_state_file" \
     XRAY_TUN_BYPASS_UID=4242 XRAY_TUN_WAIT_INTERVAL=0 \

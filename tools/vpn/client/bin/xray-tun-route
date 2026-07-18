@@ -4,6 +4,9 @@ set -euo pipefail
 IP_BIN="${IP_BIN:-ip}"
 SYSCTL_BIN="${SYSCTL_BIN:-sysctl}"
 SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
+NFT_BIN="${NFT_BIN:-nft}"
+IPTABLES_BIN="${IPTABLES_BIN:-iptables}"
+IP6TABLES_BIN="${IP6TABLES_BIN:-ip6tables}"
 TUN_IFACE="${XRAY_TUN_IFACE:-xray0}"
 ROUTE_TABLE="${XRAY_TUN_TABLE:-1001}"
 SOCKET_MARK="${XRAY_TUN_MARK:-255}"
@@ -13,8 +16,17 @@ TUN_RULE_PRIORITY="${XRAY_TUN_RULE_PRIORITY:-10010}"
 MAX_LOCAL_UID=4294967294
 STATE_FILE="${XRAY_TUN_STATE_FILE:-/run/xray-client-tun/rp-filter.state}"
 UID_STATE_FILE="${XRAY_TUN_UID_STATE_FILE:-/run/xray-client-tun/bypass.uid}"
+FIREWALL_STATE_FILE="${XRAY_TUN_FIREWALL_STATE_FILE:-/run/xray-client-tun/firewall.backend}"
+NFT_TABLE="${XRAY_TUN_NFT_TABLE:-xray_client_tun}"
+IPTABLES_PREROUTING_CHAIN="${XRAY_TUN_IPTABLES_PREROUTING_CHAIN:-XRAY_TUN_PREROUTING}"
+IPTABLES_OUTPUT_CHAIN="${XRAY_TUN_IPTABLES_OUTPUT_CHAIN:-XRAY_TUN_OUTPUT}"
 XRAY_SERVICE="${XRAY_TUN_SERVICE:-xray-client.service}"
 BYPASS_UID="${XRAY_TUN_BYPASS_UID:-}"
+FIREWALL_BACKEND=""
+FIREWALL_FORCE_CLEANUP=false
+NFT_CREATED=false
+IPTABLES_V4_CREATED=false
+IPTABLES_V6_CREATED=false
 WAIT_ATTEMPTS="${XRAY_TUN_WAIT_ATTEMPTS:-50}"
 WAIT_INTERVAL="${XRAY_TUN_WAIT_INTERVAL:-0.1}"
 
@@ -209,6 +221,166 @@ down_family() {
         2>/dev/null || true
 }
 
+command_available() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+detect_firewall_backend() {
+    if command_available "$NFT_BIN" && "$NFT_BIN" --version >/dev/null 2>&1; then
+        printf '%s\n' nft
+        return 0
+    fi
+    if command_available "$IPTABLES_BIN" && command_available "$IP6TABLES_BIN"; then
+        printf '%s\n' iptables
+        return 0
+    fi
+    warn "未找到可用的 nftables 或 iptables/ip6tables，拒绝启用 TUN"
+    return 1
+}
+
+save_firewall_backend() {
+    mkdir -p "$(dirname "$FIREWALL_STATE_FILE")"
+    chmod 0700 "$(dirname "$FIREWALL_STATE_FILE")"
+    (umask 077; printf '%s\n' "$FIREWALL_BACKEND" > "$FIREWALL_STATE_FILE")
+}
+
+load_firewall_backend() {
+    if [[ -z "$FIREWALL_BACKEND" && -f "$FIREWALL_STATE_FILE" ]]; then
+        read -r FIREWALL_BACKEND < "$FIREWALL_STATE_FILE"
+        FIREWALL_FORCE_CLEANUP=true
+        [[ "$FIREWALL_BACKEND" == nft ]] && NFT_CREATED=true
+        [[ "$FIREWALL_BACKEND" == iptables ]] && {
+            IPTABLES_V4_CREATED=true
+            IPTABLES_V6_CREATED=true
+        }
+    fi
+    [[ "$FIREWALL_BACKEND" == nft || "$FIREWALL_BACKEND" == iptables ]]
+}
+
+nft_firewall_down() {
+    if $NFT_CREATED || $FIREWALL_FORCE_CLEANUP; then
+        "$NFT_BIN" delete table inet "$NFT_TABLE" 2>/dev/null || true
+    fi
+    NFT_CREATED=false
+}
+
+nft_firewall_up() {
+    if "$NFT_BIN" list table inet "$NFT_TABLE" >/dev/null 2>&1; then
+        warn "nftables 表 ${NFT_TABLE} 已存在，拒绝覆盖非本工具状态"
+        return 1
+    fi
+    "$NFT_BIN" add table inet "$NFT_TABLE" || return 1
+    NFT_CREATED=true
+    "$NFT_BIN" add chain inet "$NFT_TABLE" prerouting \
+        '{ type filter hook prerouting priority mangle; policy accept; }' || return 1
+    "$NFT_BIN" add chain inet "$NFT_TABLE" output \
+        '{ type route hook output priority mangle; policy accept; }' || return 1
+    "$NFT_BIN" add rule inet "$NFT_TABLE" prerouting \
+        iifname "$TUN_IFACE" return || return 1
+    "$NFT_BIN" add rule inet "$NFT_TABLE" prerouting \
+        iifname '!=' "$TUN_IFACE" ct state new ct mark 0 \
+        ct mark set "$SOCKET_MARK" meta mark set "$SOCKET_MARK" || return 1
+    "$NFT_BIN" add rule inet "$NFT_TABLE" output \
+        ct mark "$SOCKET_MARK" meta mark set "$SOCKET_MARK" || return 1
+    "$NFT_BIN" list table inet "$NFT_TABLE" >/dev/null || return 1
+}
+
+iptables_firewall_up_family() {
+    local firewall_bin="$1" family="$2"
+    if "$firewall_bin" -t mangle -L "$IPTABLES_PREROUTING_CHAIN" -n \
+        >/dev/null 2>&1 || "$firewall_bin" -t mangle -L "$IPTABLES_OUTPUT_CHAIN" -n \
+        >/dev/null 2>&1; then
+        warn "iptables 链已存在，拒绝覆盖非本工具状态"
+        return 1
+    fi
+    "$firewall_bin" -t mangle -N "$IPTABLES_PREROUTING_CHAIN" || return 1
+    "$firewall_bin" -t mangle -N "$IPTABLES_OUTPUT_CHAIN" || return 1
+    if [[ "$family" == 4 ]]; then
+        IPTABLES_V4_CREATED=true
+    else
+        IPTABLES_V6_CREATED=true
+    fi
+    "$firewall_bin" -t mangle -A PREROUTING -j "$IPTABLES_PREROUTING_CHAIN" || return 1
+    "$firewall_bin" -t mangle -A OUTPUT -j "$IPTABLES_OUTPUT_CHAIN" || return 1
+    "$firewall_bin" -t mangle -A "$IPTABLES_PREROUTING_CHAIN" \
+        -i "$TUN_IFACE" -j RETURN || return 1
+    "$firewall_bin" -t mangle -A "$IPTABLES_PREROUTING_CHAIN" \
+        -m conntrack --ctstate NEW -m connmark --mark 0 \
+        -j CONNMARK --set-mark "$SOCKET_MARK" || return 1
+    "$firewall_bin" -t mangle -A "$IPTABLES_OUTPUT_CHAIN" \
+        -m connmark --mark "$SOCKET_MARK" \
+        -j MARK --set-mark "$SOCKET_MARK" || return 1
+}
+
+iptables_firewall_down_family() {
+    local firewall_bin="$1" family="$2" should_cleanup=false
+    if [[ "$family" == 4 && "$IPTABLES_V4_CREATED" == true ]] \
+        || [[ "$family" == 6 && "$IPTABLES_V6_CREATED" == true ]]; then
+        should_cleanup=true
+    fi
+    $should_cleanup || return 0
+    "$firewall_bin" -t mangle -D PREROUTING -j "$IPTABLES_PREROUTING_CHAIN" \
+        2>/dev/null || true
+    "$firewall_bin" -t mangle -D OUTPUT -j "$IPTABLES_OUTPUT_CHAIN" \
+        2>/dev/null || true
+    "$firewall_bin" -t mangle -F "$IPTABLES_PREROUTING_CHAIN" \
+        2>/dev/null || true
+    "$firewall_bin" -t mangle -F "$IPTABLES_OUTPUT_CHAIN" \
+        2>/dev/null || true
+    "$firewall_bin" -t mangle -X "$IPTABLES_PREROUTING_CHAIN" \
+        2>/dev/null || true
+    "$firewall_bin" -t mangle -X "$IPTABLES_OUTPUT_CHAIN" \
+        2>/dev/null || true
+    if [[ "$family" == 4 ]]; then
+        IPTABLES_V4_CREATED=false
+    else
+        IPTABLES_V6_CREATED=false
+    fi
+}
+
+iptables_firewall_down() {
+    iptables_firewall_down_family "$IPTABLES_BIN" 4
+    iptables_firewall_down_family "$IP6TABLES_BIN" 6
+}
+
+firewall_down() {
+    load_firewall_backend || true
+    case "$FIREWALL_BACKEND" in
+        nft)       nft_firewall_down ;;
+        iptables)  iptables_firewall_down ;;
+    esac
+    rm -f "$FIREWALL_STATE_FILE"
+    FIREWALL_BACKEND=""
+    FIREWALL_FORCE_CLEANUP=false
+}
+
+firewall_up() {
+    firewall_down
+    FIREWALL_BACKEND="$(detect_firewall_backend)"
+    case "$FIREWALL_BACKEND" in
+        nft)
+            if ! nft_firewall_up; then
+                nft_firewall_down
+                FIREWALL_BACKEND=""
+                return 1
+            fi
+            ;;
+        iptables)
+            if ! iptables_firewall_up_family "$IPTABLES_BIN" 4 \
+                || ! iptables_firewall_up_family "$IP6TABLES_BIN" 6; then
+                iptables_firewall_down
+                FIREWALL_BACKEND=""
+                return 1
+            fi
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    save_firewall_backend
+    info "已启用 ${FIREWALL_BACKEND} 入站连接回包保护"
+}
+
 routes_up() {
     wait_for_tun_iface
     resolve_bypass_uid
@@ -218,7 +390,12 @@ routes_up() {
         restore_rp_filter
         return 1
     fi
+    if ! firewall_up; then
+        restore_rp_filter
+        return 1
+    fi
     if ! up_family -4; then
+        firewall_down
         restore_rp_filter
         return 1
     fi
@@ -233,6 +410,7 @@ routes_down() {
     load_bypass_uid_for_down || warn "无法定位 Xray UID，仅清理 mark 和 TUN 规则"
     down_family -4
     down_family -6
+    firewall_down
     restore_rp_filter
     rm -f "$UID_STATE_FILE"
     info "已移除 ${TUN_IFACE} 宿主机策略路由"
@@ -246,6 +424,9 @@ routes_status() {
     "$IP_BIN" -6 rule show 2>/dev/null | grep -E \
         "(^|[[:space:]])(${BYPASS_RULE_PRIORITY}|${MARK_RULE_PRIORITY}|${TUN_RULE_PRIORITY}):" || true
     "$IP_BIN" -6 route show table "$ROUTE_TABLE" 2>/dev/null || true
+    if load_firewall_backend; then
+        echo "[xray-tun-route] firewall backend: ${FIREWALL_BACKEND}"
+    fi
 }
 
 case "${1:-}" in

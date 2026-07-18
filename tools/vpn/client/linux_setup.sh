@@ -78,7 +78,7 @@ install 可选参数:
   --sni=DOMAIN         Reality SNI 域名（默认 www.icloud.com）
   --socks-port=PORT    本地 SOCKS5 端口（默认 10808）
   --http-port=PORT     本地 HTTP 端口（默认 10809）
-  --tun                启用 Linux TUN 模式，自动接管宿主机 TCP/UDP 流量
+  --tun                启用 Linux TUN 模式；保护远程 SSH/ping 回包并接管宿主机 TCP/UDP
   --dry-run            仅预览，不实际执行
   --no-mirror          仅从 GitHub 下载，禁用国内镜像
   --force              跳过中继 TCP 连通性预检

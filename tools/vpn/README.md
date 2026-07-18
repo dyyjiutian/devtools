@@ -237,13 +237,27 @@ sudo ./client/linux_setup.sh install --tun \
 TUN 模式使用 systemd 动态专用用户绕过 Xray 自身流量（包括内部 DNS），同时临时
 关闭会影响 `xray0` 回包的反向路径过滤；停止或卸载时会恢复脚本启用前的值。
 
+启用策略路由前，脚本还会安装独立的 nftables 入站连接标记规则；没有 nftables 时
+回退到 IPv4/IPv6 iptables。来自物理网卡的入站新连接（包括任意客户端的 SSH 和
+ping）会动态标记为 `255`，本机回包按标记优先走主路由，因此不依赖某个固定来源 IP，
+更换 SSH 客户端也不会改变行为。若两种防火墙后端都不可用，脚本会拒绝启用 TUN，
+不会先添加全局策略路由。阿里云安全组和系统防火墙是否放行 SSH/ICMP 仍需单独配置。
+
 TUN 模式下宿主机应用通常不再需要 `proxy on`、`setproxy on`、`--dnf-proxy` 或
 `--docker-daemon`；这些显式代理方式仍然兼容。TUN 不会设置
 `GIT_SSH_COMMAND`，Git SSH 会和其他宿主机 TCP 流量一样自动分流。
 
 策略规则只匹配宿主机本地进程，不接管 Docker 容器、虚拟机或路由器转发的流量。
-当前固定的 Xray v26.3.27 TUN 支持 TCP/UDP，但不支持 ICMP，因此不能用 `ping`
-判断隧道是否正常，请使用 `linux_setup.sh status` 或 HTTP/SSH 测试。
+当前固定的 Xray v26.3.27 TUN 支持 TCP/UDP，但不代理 ICMP；主机的 ping 回包会
+由上述连接标记规则保持正常路由，因此 ping 可用于检查主机可达性，但不能单独用来
+判断 Xray 隧道是否正常，请使用 `linux_setup.sh status` 或 HTTP/SSH 测试。
+
+如果远程 TUN 启用失败或网络中断，请通过 ECS Workbench/串口/云助手执行：
+
+```bash
+sudo systemctl disable --now xray-client-tun-routing.service xray-client.service
+sudo /usr/local/libexec/xray-client-tun-route down 2>/dev/null || true
+```
 
 切回普通 SOCKS5/HTTP 模式时，使用原参数重新安装但不要传 `--tun`；脚本会先撤销
 之前管理的 TUN 路由。彻底卸载可执行 `sudo ./client/linux_setup.sh clean`。
