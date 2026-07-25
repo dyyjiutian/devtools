@@ -1,7 +1,7 @@
 # 排查记录：VLESS + Reality 客户端 TLS 握手被 reset
 
 > 时间：2026-06-28 ｜ 节点：新加坡出口 ECS（Alibaba Cloud Linux 3，出口 IP `198.51.100.23`）
-> 结论先行：**根因是 Reality 伪装目标站 `dest=www.microsoft.com` 的 TLS 证书链变大（8273 字节），超过 Reality 中继偷证书握手的处理上限，导致所有 Reality 握手在服务端失败。与当晚装 codex / 跑 `terminal/bash/setup.sh` / 做开发完全无关，只是时间上的巧合。**
+> 结论先行：**根因是 Reality 伪装目标站 `dest=www.microsoft.com` 的 TLS 证书链变大（8273 字节），超过 Reality 中继偷证书握手的处理上限，导致所有 Reality 握手在服务端失败。与当晚装 codex / 跑 `shell/bash/setup.sh` / 做开发完全无关，只是时间上的巧合。**
 
 ---
 
@@ -159,14 +159,14 @@ sudo sed -i 's/www\.microsoft\.com/www.icloud.com/g' /root/.vpn_exit_config
 sudo systemctl restart xray
 ```
 
-仓库默认值也一并改掉，避免重装回退（`tools/vpn/exit/setup.sh`、`client/macos_setup.sh`、`client/linux_setup.sh`、`README.md`）。
+仓库默认值也一并改掉，避免重装回退（`network/vpn/exit/setup.sh`、`client/macos_setup.sh`、`client/linux_setup.sh`、`README.md`）。
 
 ### 客户端
 
 只需把 VLESS 链接里的 `sni=www.microsoft.com` 改为 `sni=www.icloud.com`，重连即可。`pbk` / `sid` / `uuid` / 端口都不变。可用：
 
 ```bash
-sudo ./tools/vpn/exit/manage.sh vless <user> <relay_ip>
+sudo ./network/vpn/exit/manage.sh vless <user> <relay_ip>
 ```
 
 ---

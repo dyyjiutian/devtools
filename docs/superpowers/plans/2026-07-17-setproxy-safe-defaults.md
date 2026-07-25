@@ -4,7 +4,7 @@
 
 **Goal:** Make Git SSH and Docker daemon proxying opt-in while managing the Linux dnf proxy safely on `setproxy on/off`.
 
-**Architecture:** `tools/vpn/client/bin/setproxy` remains the single command and state owner. A new dnf state file records the previous `[main] proxy` setting and the exact value written by setproxy; an embedded Python helper applies and conditionally restores that setting through `sudo`. The existing shell regression suite supplies fake executables and a temporary dnf configuration path.
+**Architecture:** `network/vpn/client/bin/setproxy` remains the single command and state owner. A new dnf state file records the previous `[main] proxy` setting and the exact value written by setproxy; an embedded Python helper applies and conditionally restores that setting through `sudo`. The existing shell regression suite supplies fake executables and a temporary dnf configuration path.
 
 **Tech Stack:** Bash, embedded Python 3, dnf INI configuration, shell regression tests.
 
@@ -21,8 +21,8 @@
 ### Task 1: Define regressions for opt-in integrations
 
 **Files:**
-- Modify: `tools/vpn/client/setproxy_test.sh:22-170, 210-280`
-- Test: `tools/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/client/setproxy_test.sh:22-170, 210-280`
+- Test: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: `setproxy on --emit`, `--git-ssh`, `--docker-daemon`, and `VPN_DNF_CONF`.
@@ -53,7 +53,7 @@ Then repeat `on`, replace the written proxy with `http://external:8080`, run `of
 
 - [x] **Step 2: Run the regression suite and verify it fails**
 
-Run: `bash tools/vpn/client/setproxy_test.sh`
+Run: `bash network/vpn/client/setproxy_test.sh`
 
 Expected: failure because the current default emits `GIT_SSH_COMMAND`, enables Docker without a flag, and has no dnf implementation.
 
@@ -63,15 +63,15 @@ Ensure the fake `sudo` continues to `exec "$@"`, and set `VPN_DNF_CONF` for ever
 
 - [x] **Step 4: Re-run the suite to confirm the intended red state**
 
-Run: `bash tools/vpn/client/setproxy_test.sh`
+Run: `bash network/vpn/client/setproxy_test.sh`
 
 Expected: the same targeted failure remains, with no host dnf configuration change.
 
 ### Task 2: Implement opt-in Git SSH and Docker daemon behaviour
 
 **Files:**
-- Modify: `tools/vpn/client/bin/setproxy:7-120, 260-305, 545-685`
-- Test: `tools/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/client/bin/setproxy:7-120, 260-305, 545-685`
+- Test: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: `CLI_GIT_SSH_PROXY`, new `CLI_DOCKER_DAEMON`, and existing Docker state functions.
@@ -105,15 +105,15 @@ Keep `configure_docker_proxy_off` in `do_off` so an existing state file is resto
 
 - [x] **Step 3: Run the regression suite and verify it passes this portion**
 
-Run: `bash tools/vpn/client/setproxy_test.sh`
+Run: `bash network/vpn/client/setproxy_test.sh`
 
 Expected: Git SSH and Docker assertions pass; dnf assertions remain the only failing behaviour until Task 3.
 
 ### Task 3: Add guarded dnf proxy lifecycle management
 
 **Files:**
-- Modify: `tools/vpn/client/bin/setproxy:140-150, 545-710`
-- Test: `tools/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/client/bin/setproxy:140-150, 545-710`
+- Test: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: `VPN_DNF_CONF` (default `/etc/dnf/dnf.conf`), `HTTP_HOST`, `HTTP_PORT`, `sudo`, and `dnf` availability.
@@ -144,15 +144,15 @@ Call `configure_dnf_proxy_on` after writing shell configuration and before retur
 
 - [x] **Step 5: Run complete verification**
 
-Run: `bash -n tools/vpn/client/bin/setproxy tools/vpn/client/install-setproxy.sh tools/vpn/client/setproxy_test.sh && bash tools/vpn/client/setproxy_test.sh`
+Run: `bash -n network/vpn/client/bin/setproxy network/vpn/client/install-setproxy.sh network/vpn/client/setproxy_test.sh && bash network/vpn/client/setproxy_test.sh`
 
 Expected: shell syntax succeeds and the test script ends with `PASS: setproxy regression checks`.
 
 ### Task 4: Update user-facing documentation
 
 **Files:**
-- Modify: `tools/vpn/README.md:268-287, 438-440`
-- Test: `tools/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/README.md:268-287, 438-440`
+- Test: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: the final CLI semantics from Tasks 2 and 3.
@@ -172,6 +172,6 @@ State that Linux hosts with dnf require sudo authentication because `setproxy on
 
 - [x] **Step 2: Run final verification**
 
-Run: `git diff --check && bash -n tools/vpn/client/bin/setproxy tools/vpn/client/install-setproxy.sh tools/vpn/client/setproxy_test.sh && bash tools/vpn/client/setproxy_test.sh`
+Run: `git diff --check && bash -n network/vpn/client/bin/setproxy network/vpn/client/install-setproxy.sh network/vpn/client/setproxy_test.sh && bash network/vpn/client/setproxy_test.sh`
 
 Expected: exit code 0 and the regression suite reports `PASS: setproxy regression checks`.

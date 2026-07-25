@@ -1,22 +1,23 @@
 # Terminal 配置指南
 
-本目录包含终端模拟器、Shell 插件、编辑器和工具的配置脚本。
+本目录包含终端模拟器和终端工具的配置脚本。Shell 配置在 `shell/`，编辑器配置在 `editors/`。
 
 ## 目录结构
 
 ```
 terminal/
-├── bash/             # 轻量级 Bash 插件方案
 ├── ghostty/          # Ghostty 终端模拟器
 ├── iterm2/           # iTerm2 配置（macOS）
-├── nvim/             # Neovim 配置
-├── oh-my-zsh/        # Oh My Zsh 方案（提示符 + 插件）
-├── starship/         # Starship 提示符配置
 ├── tmux/             # tmux 终端复用器配置
-├── vim/              # Vim 配置
-├── yazi/             # Yazi 文件管理器配置
-└── zsh/              # 轻量级 Zsh 插件方案（推荐）
+└── yazi/             # Yazi 文件管理器配置
 ```
+
+Shell 和提示符请分别查看：
+
+- `shell/bash/`：Bash 初始化。
+- `shell/zsh/`：轻量级 Zsh 初始化。
+- `shell/oh-my-zsh/`：Oh My Zsh 框架。
+- `shell/starship/`：Starship 提示符。
 
 ---
 
@@ -41,7 +42,7 @@ Zsh 下有两种方案，按需二选一。
 **执行脚本：**
 
 ```bash
-cd terminal/zsh
+cd shell/zsh
 ./setup.sh           # 完整安装并写入 ~/.zshrc
 ./setup.sh --dry-run # 预览将要执行的操作
 ```
@@ -91,7 +92,7 @@ source ~/.zshrc   # 或重新打开终端
 **执行脚本：**
 
 ```bash
-cd terminal/oh-my-zsh
+cd shell/oh-my-zsh
 ./setup.sh           # 安装并配置 Oh My Zsh
 ./setup.sh --dry-run # 预览操作
 ```
@@ -117,7 +118,7 @@ p10k configure    # 手动重新配置主题
 
 ## Bash 配置实践
 
-Bash 可通过 `terminal/bash/setup.sh` 自动安装常用工具并写入 `~/.bashrc`，以下为手动配置参考。
+Bash 可通过 `shell/bash/setup.sh` 自动安装常用工具并写入 `~/.bashrc`，以下为手动配置参考。
 
 ### 推荐工具
 
@@ -195,18 +196,18 @@ source ~/.bashrc
 Zsh 和 Bash 共用同一份 Starship 配置，位于：
 
 ```
-terminal/starship/starship.toml        # 主配置（自定义主题）
-terminal/starship/starship-tokyo.toml  # Tokyo Night 风格配置
+shell/starship/starship.toml        # 主配置（自定义主题）
+shell/starship/starship-tokyo.toml  # Tokyo Night 风格配置
 ```
 
 **部署配置：**
 
 ```bash
 # 主配置
-cp terminal/starship/starship.toml ~/.config/starship.toml
+cp shell/starship/starship.toml ~/.config/starship.toml
 
 # 或 Tokyo Night 风格
-cp terminal/starship/starship-tokyo.toml ~/.config/starship.toml
+cp shell/starship/starship-tokyo.toml ~/.config/starship.toml
 ```
 
 提示符包含：用户名 → 主机名（SSH 时）→ 目录 → Git 分支 / 状态，右侧显示语言版本和命令耗时。

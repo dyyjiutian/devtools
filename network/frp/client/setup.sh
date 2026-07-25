@@ -169,7 +169,7 @@ if [[ -z "$SERVER_IP" || -z "$TOKEN" ]]; then
     error "缺少必需参数: --server-ip 和 --token"
     echo ""
     echo "先从 Linux 服务端获取连接信息:"
-    echo "  sudo tools/frp/server/setup.sh --status"
+    echo "  sudo network/frp/server/setup.sh --status"
     echo ""
     echo "示例:"
     echo "  $0 --server-ip=172.18.11.150 --token=<token>"
@@ -248,7 +248,7 @@ write_config() {
     run mkdir -p "${CONFIG_DIR}"
 
     cat > "${CONFIG_DIR}/frpc.toml" <<TOML
-# FRP 客户端配置 - 由 tools/frp/client/setup.sh 生成
+# FRP 客户端配置 - 由 network/frp/client/setup.sh 生成
 # 客户端: ${CLIENT_NAME}
 
 serverAddr = "${SERVER_IP}"

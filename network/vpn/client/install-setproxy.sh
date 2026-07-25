@@ -2,7 +2,7 @@
 # 安装独立的 setproxy 与 speed_test 命令到 ~/.local/bin。
 #
 # bin/setproxy 是自包含脚本，安装后即使删除本仓库依然可用（与 git 子命令
-# 的安装方式一致，见 vcs/git/scripts/sub-command.sh）。
+# 的安装方式一致，见 tools/git/scripts/sub-command.sh）。
 #
 # 支持 macOS / Linux。卸载时会一并清理安装器和 setproxy 写入的配置块，
 # 但不会修改 ~/.ssh/config，也不会停止 V2RayXS / Xray 进程。

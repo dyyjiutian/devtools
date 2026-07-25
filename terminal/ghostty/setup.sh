@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Ghostty 配置安装脚本
-# 用于安装 Ghostty 终端，并可复用 terminal/starship 下的 Starship 配置
+# 用于安装 Ghostty 终端，并可复用 shell/starship 下的 Starship 配置
 #
 
 set -euo pipefail

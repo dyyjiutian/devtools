@@ -23,8 +23,8 @@
 ### Task 1: Add failing configuration and CLI regression coverage
 
 **Files:**
-- Create: `tools/vpn/client/linux_setup_test.sh`
-- Modify: `tools/vpn/client/linux_setup.sh`
+- Create: `network/vpn/client/linux_setup_test.sh`
+- Modify: `network/vpn/client/linux_setup.sh`
 
 **Interfaces:**
 - Consumes: `linux_setup.sh --help`, sourceable `write_client_config`, `TUN_MODE`.
@@ -45,7 +45,7 @@ assert_file_contains "$cfg" '"mark": 255'
 
 - [x] **Step 2: Run the new test and verify RED**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: FAIL because help has no `--tun`, sourcing executes the installer, and no TUN JSON is rendered.
 
@@ -63,15 +63,15 @@ Render a `tun` inbound with `name: xray0`, `MTU: 1500`, and HTTP/TLS/QUIC sniffi
 
 - [x] **Step 4: Run the new test and verify GREEN**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: configuration assertions pass.
 
 ### Task 2: Add the tested Linux policy-route helper
 
 **Files:**
-- Create: `tools/vpn/client/bin/xray-tun-route`
-- Modify: `tools/vpn/client/linux_setup_test.sh`
+- Create: `network/vpn/client/bin/xray-tun-route`
+- Modify: `network/vpn/client/linux_setup_test.sh`
 
 **Interfaces:**
 - Consumes: `XRAY_TUN_IFACE`, `XRAY_TUN_TABLE`, `XRAY_TUN_MARK`, `XRAY_TUN_BYPASS_UID`, `ip`, and `sysctl`.
@@ -92,7 +92,7 @@ Assert equivalent IPv6 operations and exact deletion operations for `down`. Run 
 
 - [x] **Step 2: Run helper tests and verify RED**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: FAIL because `bin/xray-tun-route` does not exist.
 
@@ -102,15 +102,15 @@ Implement strict action parsing, exact-rule cleanup before addition, IPv4 as req
 
 - [x] **Step 4: Run helper tests and verify GREEN**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: helper assertions pass without invoking the real `ip` command.
 
 ### Task 3: Bind TUN routing to installation and systemd lifecycle
 
 **Files:**
-- Modify: `tools/vpn/client/linux_setup.sh`
-- Modify: `tools/vpn/client/linux_setup_test.sh`
+- Modify: `network/vpn/client/linux_setup.sh`
+- Modify: `network/vpn/client/linux_setup_test.sh`
 
 **Interfaces:**
 - Consumes: repository helper `bin/xray-tun-route` and variables `XRAY_SYSTEMD_DIR`, `XRAY_TUN_HELPER_PATH`.
@@ -133,7 +133,7 @@ Assert the TUN Xray unit wants the route unit, while normal mode does not. With 
 
 - [x] **Step 2: Run the suite and verify RED**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: FAIL because TUN unit generation and cleanup functions are absent.
 
@@ -150,16 +150,16 @@ Install the helper with mode `0755`, generate the routing unit only in TUN mode,
 
 - [x] **Step 4: Run the suite and verify GREEN**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: all Linux setup regression checks pass.
 
 ### Task 4: Document and verify the complete change
 
 **Files:**
-- Modify: `tools/vpn/README.md`
-- Modify: `tools/vpn/client/linux_setup.sh`
-- Modify: `tools/vpn/client/linux_setup_test.sh`
+- Modify: `network/vpn/README.md`
+- Modify: `network/vpn/client/linux_setup.sh`
+- Modify: `network/vpn/client/linux_setup_test.sh`
 - Modify: `docs/superpowers/plans/2026-07-17-xray-linux-tun.md`
 
 **Interfaces:**
@@ -182,9 +182,9 @@ Run:
 
 ```bash
 git diff --check
-bash -n tools/vpn/client/linux_setup.sh tools/vpn/client/bin/xray-tun-route tools/vpn/client/linux_setup_test.sh
-bash tools/vpn/client/linux_setup_test.sh
-bash tools/vpn/client/setproxy_test.sh
+bash -n network/vpn/client/linux_setup.sh network/vpn/client/bin/xray-tun-route network/vpn/client/linux_setup_test.sh
+bash network/vpn/client/linux_setup_test.sh
+bash network/vpn/client/setproxy_test.sh
 ```
 
 Expected: all commands exit zero, Linux setup reports its PASS line, and setproxy reports `PASS: setproxy regression checks`.
@@ -196,9 +196,9 @@ Confirm `git status --short` still shows the two unrelated user-owned tests as u
 ### Task 5: Apply code-review hardening
 
 **Files:**
-- Modify: `tools/vpn/client/bin/xray-tun-route`
-- Modify: `tools/vpn/client/linux_setup.sh`
-- Modify: `tools/vpn/client/linux_setup_test.sh`
+- Modify: `network/vpn/client/bin/xray-tun-route`
+- Modify: `network/vpn/client/linux_setup.sh`
+- Modify: `network/vpn/client/linux_setup_test.sh`
 - Modify: `docs/superpowers/specs/2026-07-17-xray-linux-tun-design.md`
 
 **Interfaces:**
@@ -215,6 +215,6 @@ Use a systemd `DynamicUser` in TUN mode, persist its runtime UID for teardown, w
 
 - [x] **Step 3: Run the focused Linux TUN regression suite**
 
-Run: `bash tools/vpn/client/linux_setup_test.sh`
+Run: `bash network/vpn/client/linux_setup_test.sh`
 
 Expected: all seven Linux setup TUN regression sections pass.

@@ -306,7 +306,7 @@ export http_proxy=http://127.0.0.1:10809
 
 不想每次都敲完整路径 `./client/linux_setup.sh proxy ...`？可以安装一个自包含的
 `setproxy` 命令到 `~/.local/bin`，之后在**任意目录**下都能直接使用，且删除本
-仓库后依然可用（原理与 `vcs/git/bin` 下的 `git rb` 等子命令一致）：
+仓库后依然可用（原理与 `tools/git/bin` 下的 `git rb` 等子命令一致）：
 
 ```bash
 ./client/install-setproxy.sh          # 安装到 ~/.local/bin（自动加入 PATH）

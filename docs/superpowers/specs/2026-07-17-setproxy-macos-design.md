@@ -2,7 +2,7 @@
 
 ## 目标
 
-把 `tools/vpn/client/bin/setproxy` 作为 macOS 和 Linux 通用的终端代理开关，并适配两类本地 Xray 客户端：
+把 `network/vpn/client/bin/setproxy` 作为 macOS 和 Linux 通用的终端代理开关，并适配两类本地 Xray 客户端：
 
 - macOS V2RayXS：HTTP `8001`，SOCKS5 `1081`
 - 仓库命令行 Xray：HTTP `10809`，SOCKS5 `10808`

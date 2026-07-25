@@ -15,7 +15,7 @@
 3. 修改目标目录下更具体的 `AGENTS.md`、`CLAUDE.md` 或 README。
 4. `README.md`、`BAZEL.md` 及脚本自身的 `--help` 输出。
 
-`agent/codex/config/AGENTS.md` 当前只规定交互语言：用户使用中文时仅用中文回复，使用英文时仅用英文回复。不要让根目录文档覆盖该语言约定。
+`agents/codex/config/AGENTS.md` 当前只规定交互语言：用户使用中文时仅用中文回复，使用英文时仅用英文回复。不要让根目录文档覆盖该语言约定。
 
 ## 仓库结构
 
@@ -24,17 +24,20 @@
 | `setup.sh` | 根入口：交互式、全量或按模块编排初始化 | 新增模块时同步更新帮助、菜单、模块分派与 dry-run 行为 |
 | `os/` | macOS、Ubuntu/Debian、CentOS/RHEL 的系统初始化 | 可能安装系统包、写入系统配置或启用服务 |
 | `lang/` | Python、Go、Java、Rust 等语言运行时 | 保持各语言安装器独立，不把语言特有逻辑塞进根入口 |
-| `terminal/` | Bash/Zsh、tmux、Neovim、Vim、Ghostty、iTerm2、Yazi 等终端配置 | 配置文件与安装脚本分离；注意 shell 启动文件的幂等修改 |
-| `editors/` | Cursor、VS Code 等编辑器安装与配置备份/恢复 | 修改配置格式时同步检查对应 README |
-| `tools/` | Bazel、FRP、代理、VPN 等工具和基础设施脚本 | 网络、服务、防火墙和远程节点操作必须显式说明风险 |
-| `vcs/git/` | Git 全局配置、可移植子命令和 shell alias | 关注 `git rb`、`git review` 与 worktree 的交互 |
-| `agent/` | Claude、Codex、Cursor Agent、通知等 AI Agent 配置 | 配置同步必须保留用户未托管的内容和敏感信息 |
+| `shell/` | Bash、Zsh、Oh My Zsh、Starship 等 Shell 配置 | 注意 shell 启动文件的幂等修改 |
+| `terminal/` | Ghostty、iTerm2、tmux、Yazi 等终端工具 | 配置文件与安装脚本分离 |
+| `editors/` | Neovim、Vim、Cursor、VS Code 等编辑器 | 修改配置格式时同步检查对应 README |
+| `network/` | FRP、代理、VPN 等网络与基础设施脚本 | 网络、服务、防火墙和远程节点操作必须显式说明风险 |
+| `tools/` | Bazel、Git、SSH 等暂未继续细分的独立工具 | 有明确领域边界后再迁移到专门目录 |
+| `tools/git/` | Git 全局配置、可移植子命令和 shell alias | 关注 `git rb`、`git review` 与 worktree 的交互 |
+| `tools/ssh/` | SSH 客户端优化与 fssh 远程会话选择器 | 修改 SSH 配置前保留备份并说明远程影响 |
+| `agents/` | Claude、Codex、Cursor Agent 配置与最佳实践 | 配置同步必须保留用户未托管的内容和敏感信息 |
 | `cache/` | 安装脚本与二进制缓存，用于离线或加速安装 | 更新缓存版本时同步校验下载脚本、架构和测试 |
-| `mac/` | macOS 远程访问辅助脚本 | 涉及系统设置、屏幕共享和 SSH，变更前先读局部 README |
+| `os/macos/` | macOS 初始化、电源、Agent 通知和远程桌面 | 涉及系统设置、屏幕共享和 SSH，变更前先读局部 README |
 | `tests/`、`os/macos/*.bats` | Shell 回归测试 | 优先用临时目录和 fake 命令验证，不执行真实安装 |
 | `docs/superpowers/` | 设计文档和实现计划 | 设计与实现保持一致，不用计划文档替代代码验证 |
 
-根入口并不覆盖所有目录：`tools/`、`agent/`、`mac/remote/` 等通常需要直接运行各自的 `setup.sh` 或阅读对应 README。不要因为目录存在就假设它会被 `./setup.sh --all` 自动安装。
+根入口并不覆盖所有目录：`network/`、`tools/`、`agents/`、`os/macos/remote-desktop/` 等通常需要直接运行各自的 `setup.sh` 或阅读对应 README。不要因为目录存在就假设它会被 `./setup.sh --all` 自动安装。
 
 ## 设计与实现原则
 

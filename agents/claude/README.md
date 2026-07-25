@@ -15,7 +15,7 @@
 ## Claude Code 安装与配置
 
 ```bash
-cd agent/claude
+cd agents/claude
 
 ./setup.sh install           # 安装 Claude Code（npm）+ 自动安装插件
 ./setup.sh install-plugins   # 仅安装/更新插件
@@ -117,16 +117,15 @@ cd agent/claude
 
 ## Mac SSH 远程会话结束提示音
 
-远程通知能力已抽到通用目录 `agent/notify/`，用于 Claude、Codex 等 agent 共享同一个 Mac listener 和提示音。Claude Code 当前通过 `SessionEnd` hook 发送 `claude:session_end`。
+远程通知能力已抽到通用目录 `os/macos/agent-notify/`，用于 Claude、Codex 等 agent 共享同一个 Mac listener 和提示音。Claude Code 当前通过 `SessionEnd` hook 发送 `claude:session_end`。
 
 ```bash
-cd agent/notify
-./mac_ssh_notify.sh install
-./mac_ssh_notify.sh setup-remote user@your-linux-host
-./mac_ssh_notify.sh ssh-hint user@your-linux-host
+cd os/macos/agent-notify
+./agent-hooks-setup.sh install
+./agent-hooks-setup.sh hook add all user@your-linux-host
 ```
 
-详见 [agent/notify/README.md](../notify/README.md)。
+详见 [os/macos/agent-notify/README.md](../../os/macos/agent-notify/README.md)。
 
 ---
 

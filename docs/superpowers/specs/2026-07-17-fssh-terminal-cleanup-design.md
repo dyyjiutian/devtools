@@ -9,7 +9,7 @@ network connection, Ghostty can remain in the terminal's alternate screen.
 In that state, scrolling at the local shell is translated into Up and Down
 key input instead of moving through scrollback.
 
-`terminal/ssh/fssh.sh` already installs an exit trap that disables mouse,
+`tools/ssh/fssh.sh` already installs an exit trap that disables mouse,
 bracketed-paste, and extended-keyboard modes. However, commit `a1f4c82`
 removed the trap's `tput rmcup` call while changing unrelated host-listing
 code, so the trap no longer exits the alternate screen.

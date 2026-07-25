@@ -375,8 +375,9 @@ post_install_notes() {
   echo -e "    lang/go/setup.sh        # Go 环境"
   echo -e "    lang/java/setup.sh      # Java + SDKMan"
   echo -e "    lang/rust/setup.sh      # Rust 环境"
-  echo -e "    ai/coding/setup.sh      # Claude Code + Aider"
-  echo -e "    ai/local-llm/setup.sh   # Ollama 本地大模型"
+  echo -e "    agents/claude/setup.sh       # Claude Code"
+  echo -e "    agents/codex/setup.sh        # Codex CLI"
+  echo -e "    agents/cursor-agent/setup.sh # Cursor Agent CLI"
   echo -e ""
 }
 

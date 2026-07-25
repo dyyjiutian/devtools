@@ -24,7 +24,7 @@ The existing state file and merge/restore logic remains the authority for Docker
 
 ## Testing
 
-Extend `tools/vpn/client/setproxy_test.sh` to prove:
+Extend `network/vpn/client/setproxy_test.sh` to prove:
 
 - a default `on --emit` unsets rather than exports `GIT_SSH_COMMAND`;
 - `--git-ssh` still exports it, and `--no-git-ssh` wins when chosen;

@@ -2,7 +2,7 @@
 
 ## 目标
 
-将 `tools/vpn/client/bin/speed_test` 作为独立命令安装到 `~/.local/bin`，并使
+将 `network/vpn/client/bin/speed_test` 作为独立命令安装到 `~/.local/bin`，并使
 `setproxy` 在启用或关闭终端代理时同步管理已识别 Docker 守护进程的 HTTP 代理。
 所有 Docker/Colima 重启均由用户手动执行。
 
@@ -75,7 +75,7 @@ Docker Desktop 不写入 `daemon.json`，因为其忽略该文件的守护进程
 
 ## 测试
 
-扩展 `tools/vpn/client/setproxy_test.sh`，覆盖：
+扩展 `network/vpn/client/setproxy_test.sh`，覆盖：
 
 - `setproxy test --size` 的参数验证和传递给两项测速的字节范围；
 - 安装器同时安装可执行的 `speed_test`，并在卸载时删除；

@@ -1,6 +1,6 @@
 # Codex CLI 工具
 
-[OpenAI Codex CLI](https://developers.openai.com/codex) 的安装配置，以及与 `agent/claude` 对齐的多渠道快速切换方案。
+[OpenAI Codex CLI](https://developers.openai.com/codex) 的安装配置，以及与 `agents/claude` 对齐的多渠道快速切换方案。
 
 ---
 
@@ -15,7 +15,7 @@
 ## Codex CLI 安装与配置
 
 ```bash
-cd agent/codex
+cd agents/codex
 
 ./setup.sh install     # 安装 Codex CLI（npm install -g @openai/codex）
 ./setup.sh sync        # 同步 config.toml、敏感命令规则和 AGENTS.md
@@ -127,15 +127,15 @@ reasoning effort 可选：`minimal` / `low` / `medium` / `high` / `xhigh`。
 
 ## Mac SSH 远程会话结束提示音
 
-远程通知能力在通用目录 `agent/notify/`，供 Claude、Codex 等共享同一个 Mac listener 和提示音。
+远程通知能力在通用目录 `os/macos/agent-notify/`，供 Claude、Codex 等共享同一个 Mac listener 和提示音。
 
 ```bash
-cd agent/notify
-./mac_ssh_notify.sh install
-./mac_ssh_notify.sh setup-remote user@your-linux-host
+cd os/macos/agent-notify
+./agent-hooks-setup.sh install
+./agent-hooks-setup.sh hook add codex user@your-linux-host
 ```
 
-详见 [agent/notify/README.md](../notify/README.md)。
+详见 [os/macos/agent-notify/README.md](../../os/macos/agent-notify/README.md)。
 
 ---
 

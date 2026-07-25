@@ -21,7 +21,7 @@
 ## 快速开始
 
 ```bash
-cd agent/notify
+cd os/macos/agent-notify
 chmod +x agent-hooks-setup.sh agent-listener.sh
 ```
 

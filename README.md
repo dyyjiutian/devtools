@@ -7,32 +7,26 @@ Automated setup scripts and configurations for developer tools across macOS and 
 ```
 devtools/
 ├── os/
-│   ├── macos/setup.sh            # macOS system initialization
-│   └── linux/setup_centos.sh     # CentOS/RHEL system initialization
+│   ├── macos/                    # macOS 初始化、电源、通知、远程桌面
+│   └── linux/                    # Ubuntu/Debian/CentOS/RHEL 初始化
+├── lang/                         # Python / Go / Java / Rust 运行时
+├── shell/                        # Bash / Zsh / Oh My Zsh / Starship
 ├── terminal/
 │   ├── ghostty/                  # Ghostty terminal
-│   ├── bash/                     # Lightweight Bash plugins + Starship init
 │   ├── iterm2/                   # iTerm2 config and SSH login scripts
-│   ├── nvim/                     # Neovim (Lua + lazy.nvim)
-│   ├── oh-my-zsh/                # Oh My Zsh + powerlevel10k
-│   ├── starship/                 # Shared Starship prompt configs
 │   ├── tmux/                     # tmux configuration
-│   ├── vim/                      # Vim + vim-plug + coc.nvim
-│   ├── zsh/                      # Lightweight Zsh plugins + Starship init
 │   └── yazi/                     # yazi file manager setup
 ├── editors/
-│   └── cursor/                   # Cursor editor backup/restore
-├── tools/
-│   ├── bazel/                    # Bazelisk + buildifier + starpls
-│   ├── frp/                      # FRP reverse proxy for Mac SSH/VNC
-│   ├── proxy/                    # SNI proxy for GitHub/Docker Hub
-│   └── vpn/                      # Xray VLESS + Reality three-hop proxy
-├── vcs/git/
-│   ├── setup.sh                  # Git one-shot setup
-│   ├── bin/                      # Portable git subcommands: git-rb/bc/wc/review
-│   ├── man/man1/                 # man pages for the subcommands
-│   └── scripts/                  # sub-command.sh, config.sh, alias.sh
-└── agent/                        # AI agent setup and notifications
+│   ├── nvim/                     # Neovim (Lua + lazy.nvim)
+│   ├── vim/                      # Vim + vim-plug + coc.nvim
+│   ├── cursor/                   # Cursor editor backup/restore
+│   └── vscode/                   # VS Code setup
+├── network/                      # FRP / proxy / VPN infrastructure
+├── tools/                        # Bazel / Git / SSH standalone tools
+├── agents/                       # Claude / Codex / Cursor Agent
+├── cache/                        # Offline installation assets
+├── docs/                         # Design documents and implementation plans
+└── tests/                        # Shell regression tests
 ```
 
 ## OS Initialization
@@ -58,11 +52,11 @@ Installs: Homebrew, CLI tools (git, curl, wget, jq, tree, htop, gh, neovim), GUI
 
 Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSource.
 
-## Terminal
+## Shell and Terminal
 
 ### Ghostty (`terminal/ghostty/`)
 
-Modern terminal emulator with GPU acceleration (Metal on macOS). Starship prompt configs live in `terminal/starship/` and are reused by shell setup scripts.
+Modern terminal emulator with GPU acceleration (Metal on macOS). Starship prompt configs live in `shell/starship/` and are reused by shell setup scripts.
 
 ```bash
 ./terminal/ghostty/setup.sh            # Full installation
@@ -73,32 +67,32 @@ Modern terminal emulator with GPU acceleration (Metal on macOS). Starship prompt
 
 See [`terminal/ghostty/README.md`](terminal/ghostty/README.md) for keybindings and configuration details.
 
-### Oh My Zsh (`terminal/oh-my-zsh/`)
+### Oh My Zsh (`shell/oh-my-zsh/`)
 
 Configures powerlevel10k theme, zsh-autosuggestions, and zsh-syntax-highlighting.
 
 ```bash
-./terminal/oh-my-zsh/setup.sh
+./shell/oh-my-zsh/setup.sh
 ```
 
-### Neovim (`terminal/nvim/`)
+### Neovim (`editors/nvim/`)
 
 Lua-based Neovim configuration using lazy.nvim with LSP, Telescope, nvim-tree, git integration, and Tree-sitter.
 
 ```bash
-./terminal/nvim/setup.sh             # Full installation
-./terminal/nvim/setup.sh --backup    # Backup existing config
-./terminal/nvim/setup.sh --update    # Update plugins only
+./editors/nvim/setup.sh             # Full installation
+./editors/nvim/setup.sh --backup    # Backup existing config
+./editors/nvim/setup.sh --update    # Update plugins only
 ```
 
-See [`terminal/nvim/README.md`](terminal/nvim/README.md) for key mappings and plugin list.
+See [`editors/nvim/README.md`](editors/nvim/README.md) for key mappings and plugin list.
 
-### Vim (`terminal/vim/`)
+### Vim (`editors/vim/`)
 
 Vim configuration with vim-plug and coc.nvim language servers (Python, Go, Java, Shell, JSON, YAML). Leader key: `,`.
 
 ```bash
-./terminal/vim/setup.sh
+./editors/vim/setup.sh
 ```
 
 ### tmux (`terminal/tmux/`)
@@ -132,7 +126,7 @@ bash editors/cursor/setup.sh --backup  --dir ~/dotfiles/cursor
 
 See [`editors/cursor/config/README.md`](editors/cursor/config/README.md) for custom keybindings.
 
-## Tools
+## Build and Network Tools
 
 ### Bazel (`tools/bazel/`)
 
@@ -146,16 +140,16 @@ Installs [Bazelisk](https://github.com/bazelbuild/bazelisk), [buildifier](https:
 
 See [`tools/bazel/README.md`](tools/bazel/README.md) for version management and editor integration.
 
-### FRP Remote Access (`tools/frp/`)
+### FRP Remote Access (`network/frp/`)
 
 FRP reverse proxy on Linux (frps) + macOS client (frpc) to SSH and VNC into Mac machines via the Linux server's IP.
 
 ```bash
 # 1. Deploy server (Linux)
-sudo ./tools/frp/server/setup.sh
+sudo ./network/frp/server/setup.sh
 
 # 2. Deploy client (macOS) — get token from server --status output
-./tools/frp/client/setup.sh \
+./network/frp/client/setup.sh \
   --server-ip=<LINUX_IP> --token=<TOKEN> --client-name=$(hostname -s)
 
 # Connect
@@ -163,75 +157,78 @@ ssh -p 6000 <mac_user>@<LINUX_IP>
 open vnc://<LINUX_IP>:6001
 ```
 
-See [`tools/frp/README.md`](tools/frp/README.md) for multi-Mac port allocation and troubleshooting.
+See [`network/frp/README.md`](network/frp/README.md) for multi-Mac port allocation and troubleshooting.
 
-### SNI Proxy (`tools/proxy/`)
+### SNI Proxy (`network/proxy/`)
 
 Nginx-based SNI transparent proxy on a Singapore ECS to accelerate GitHub and Docker Hub access from China — no proxy client needed, just a `hosts` entry.
 
 ```bash
-sudo ./tools/proxy/server/setup.sh          # Deploy server
-sudo ./tools/proxy/client/configure.sh <ECS_IP>  # Configure client
+sudo ./network/proxy/server/setup.sh          # Deploy server
+sudo ./network/proxy/client/configure.sh <ECS_IP>  # Configure client
 ```
 
-See [`tools/proxy/README.md`](tools/proxy/README.md) for full setup and extending to more domains.
+See [`network/proxy/README.md`](network/proxy/README.md) for full setup and extending to more domains.
 
-### Xray VLESS + Reality Proxy (`tools/vpn/`)
+### Xray VLESS + Reality Proxy (`network/vpn/`)
 
 Three-hop proxy chain (domestic client → Hangzhou relay ECS → Singapore exit ECS) using the Xray VLESS + Reality protocol. Designed to bypass GFW detection when accessing AI services. Supports Linux, macOS (script + system proxy toggle), and iOS (Shadowrocket).
 
 ```bash
 # 1. Deploy exit node (Singapore ECS)
-sudo ./tools/vpn/exit/setup.sh
+sudo ./network/vpn/exit/setup.sh
 
 # 2. Deploy relay node (Hangzhou ECS)
-sudo ./tools/vpn/relay/setup.sh
+sudo ./network/vpn/relay/setup.sh
 
-# 3. Install client (domestic machine)
-./tools/vpn/client/setup.sh \
+# 3. Install client (Linux domestic machine)
+sudo ./network/vpn/client/linux_setup.sh install \
   --relay-ip=<RELAY_IP> --uuid=<UUID> \
   --public-key=<PUB_KEY> --short-id=<SHORT_ID>
 
-# macOS: toggle system-wide proxy
-./tools/vpn/client/proxy-on.sh
-./tools/vpn/client/proxy-off.sh
+# macOS: install Xray and manage the system proxy
+./network/vpn/client/macos_setup.sh install \
+  --relay-ip=<RELAY_IP> --uuid=<UUID> \
+  --public-key=<PUB_KEY> --short-id=<SHORT_ID>
+./network/vpn/client/macos_setup.sh proxy on
+./network/vpn/client/macos_setup.sh proxy off
 ```
 
-See [`tools/vpn/README.md`](tools/vpn/README.md) for GUI client setup (V2RayXS, Shadowrocket) and troubleshooting.
+See [`network/vpn/README.md`](network/vpn/README.md) for GUI client setup (V2RayXS, Shadowrocket) and troubleshooting.
 
 ## Git Utilities
 
-See [`vcs/git/README.md`](vcs/git/README.md) for full documentation.
+See [`tools/git/README.md`](tools/git/README.md) for full documentation.
 
-### One-Shot Setup (`vcs/git/setup.sh`)
+### One-Shot Setup (`tools/git/setup.sh`)
 
 Installs git-delta and GitHub CLI (`gh`; then run `gh auth login` to authenticate), installs the `git rb` / `git bc` / `git wc` / `git review` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
 
 ```bash
-bash vcs/git/setup.sh           # Full setup
-bash vcs/git/setup.sh --dry-run # Preview only
-bash vcs/git/setup.sh --skip-delta
+bash tools/git/setup.sh           # Full setup
+bash tools/git/setup.sh --dry-run # Preview only
+bash tools/git/setup.sh --skip-delta
 ```
 
-### Global Configuration (`vcs/git/scripts/config.sh`)
+### Global Configuration (`tools/git/scripts/config.sh`)
 
 Interactive setup for `user.name`, `user.email`, 15+ recommended global git settings, and status/pull/fetch/checkout performance tweaks. Also configures [git-delta](https://github.com/dandavison/delta) as the diff pager if it is installed.
 
 ```bash
-bash vcs/git/scripts/config.sh           # Interactive setup
-bash vcs/git/scripts/config.sh --dry-run # Preview only
+bash tools/git/scripts/config.sh           # Interactive setup
+bash tools/git/scripts/config.sh --dry-run # Preview only
 ```
 
-### Git Subcommand Installer (`vcs/git/scripts/sub-command.sh`)
+### Git Subcommand Installer (`tools/git/scripts/sub-command.sh`)
 
 Installs `git rb` / `git bc` / `git wc` / `git review` and their man pages to `~/.local/bin`. Runnable on its own with `--dry-run` / `--help`.
 
 ```bash
-bash vcs/git/scripts/sub-command.sh           # Install
-bash vcs/git/scripts/sub-command.sh --dry-run # Preview only
+bash tools/git/scripts/sub-command.sh           # Install
+bash tools/git/scripts/sub-command.sh --dry-run # Preview only
 ```
 
-### Portable Git Subcommands (`vcs/git/bin/`)
+### Portable Git Subcommands (`tools/git/bin/`)
 
 Installed to `~/.local/bin` by setup, so they keep working even if this repo is removed. All support `--help` and auto-detect the default branch via `origin/HEAD`.
 
@@ -251,13 +248,13 @@ Installed to `~/.local/bin` by setup, so they keep working even if this repo is 
 | GitLab | URL contains `gitlab` | `git push -o merge_request.create` (no extra CLI needed) |
 | Gerrit | Otherwise | `git push origin HEAD:refs/for/<default>` |
 
-### Shell Alias (`vcs/git/scripts/alias.sh`)
+### Shell Alias (`tools/git/scripts/alias.sh`)
 
 Injects only `gitroot` into `~/.zshrc` or `~/.bashrc`. The rebase / clean / review workflows are git subcommands (above) rather than aliases; `gitroot` stays an alias because `cd` must run in the active shell process.
 
 ```bash
-bash vcs/git/scripts/alias.sh         # Install
-bash vcs/git/scripts/alias.sh --clean # Remove
+bash tools/git/scripts/alias.sh         # Install
+bash tools/git/scripts/alias.sh --clean # Remove
 ```
 
 | Command | Description |
@@ -266,7 +263,7 @@ bash vcs/git/scripts/alias.sh --clean # Remove
 
 ### Delta — Enhanced Diff Pager
 
-`vcs/git/setup.sh` installs `git-delta` when a supported package manager is available. After running setup, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
+`tools/git/setup.sh` installs `git-delta` when a supported package manager is available. After running setup, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
 
 ```bash
 brew install git-delta   # or install via os/macos/setup.sh
@@ -274,27 +271,28 @@ brew install git-delta   # or install via os/macos/setup.sh
 
 ## AI Agent
 
-### Claude Code (`agent/claude/`)
+### Claude Code (`agents/claude/`)
 
-Install and configure [Claude Code](https://claude.ai/code) CLI tool. See [agent/claude/README.md](agent/claude/README.md) for full docs.
+Install and configure [Claude Code](https://claude.ai/code) CLI tool. See [agents/claude/README.md](agents/claude/README.md) for full docs.
 
 ```bash
-./agent/claude/setup.sh install      # Install Claude Code
-./agent/claude/setup.sh configure    # Interactive configuration
-./agent/claude/setup.sh uninstall    # Uninstall Claude Code
+./agents/claude/setup.sh install      # Install Claude Code
+./agents/claude/setup.sh configure    # Interactive configuration
+./agents/claude/setup.sh uninstall    # Uninstall Claude Code
 ```
 
 Configure API key and models:
 ```bash
-./agent/claude/setup.sh configure --api-key "sk-ant-..." --model "claude-sonnet-4-6"
+./agents/claude/setup.sh configure --api-key "sk-ant-..." --model "claude-sonnet-4-6"
 ```
 
-Mac SSH remote session end notification (plays system sound when an agent event fires on remote Linux):
+Mac Agent session notifications use the shared listener and hooks:
 ```bash
-./agent/notify/mac_ssh_notify.sh install
-./agent/notify/mac_ssh_notify.sh setup-remote user@linux-host
-./agent/notify/mac_ssh_notify.sh ssh-hint user@linux-host
+./os/macos/agent-notify/agent-hooks-setup.sh install
+./os/macos/agent-notify/agent-hooks-setup.sh hook add all
 ```
+
+Codex and Cursor Agent setup scripts are available under agents/codex/ and agents/cursor-agent/.
 
 ## Quick Start on a New Machine
 
@@ -308,10 +306,10 @@ git clone <repo-url> ~/devtools
 ./os/linux/setup_centos.sh   # CentOS/RHEL
 
 # 3. Configure git globals, delta, and aliases
-bash ~/devtools/vcs/git/setup.sh
+bash ~/devtools/tools/git/setup.sh
 source ~/.zshrc
 
 # 4. Set up your preferred terminal/editor
-./terminal/ghostty/setup.sh  # or ./terminal/nvim/setup.sh, etc.
+./terminal/ghostty/setup.sh  # or ./editors/nvim/setup.sh, etc.
 bash editors/cursor/setup.sh --restore
 ```

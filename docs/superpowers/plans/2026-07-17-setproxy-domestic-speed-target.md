@@ -21,8 +21,8 @@
 ### Task 1: 固定国内测速为 TUNA 10 MB Range
 
 **Files:**
-- Modify: `tools/vpn/client/setproxy_test.sh`
-- Modify: `tools/vpn/client/bin/setproxy`
+- Modify: `network/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/client/bin/setproxy`
 
 **Interfaces:**
 - Consumes: `speed_test label proxy_arg url [range_header]`
@@ -45,7 +45,7 @@ fi
 
 - [x] **Step 2: 运行测试确认按预期失败**
 
-Run: `bash tools/vpn/client/setproxy_test.sh`
+Run: `bash network/vpn/client/setproxy_test.sh`
 
 Expected: FAIL，提示未使用 TUNA 10 MB Range。
 
@@ -77,8 +77,8 @@ speed_test "国内(直连)   清华 TUNA 10MB :" "" \
 Run:
 
 ```bash
-bash tools/vpn/client/setproxy_test.sh
-bash -n tools/vpn/client/bin/setproxy tools/vpn/client/install-setproxy.sh tools/vpn/client/setproxy_test.sh
+bash network/vpn/client/setproxy_test.sh
+bash -n network/vpn/client/bin/setproxy network/vpn/client/install-setproxy.sh network/vpn/client/setproxy_test.sh
 git diff --check
 ```
 
@@ -89,8 +89,8 @@ Expected: 回归测试 `7/7` 通过，语法及 diff 检查退出码为 0。
 Run:
 
 ```bash
-bash tools/vpn/client/install-setproxy.sh
-cmp -s tools/vpn/client/bin/setproxy "$HOME/.local/bin/setproxy"
+bash network/vpn/client/install-setproxy.sh
+cmp -s network/vpn/client/bin/setproxy "$HOME/.local/bin/setproxy"
 "$HOME/.local/bin/setproxy" test
 ```
 
@@ -99,6 +99,6 @@ Expected: 国内项显示 `清华 TUNA 10MB` 且下载大小为 `10000000 bytes`
 - [x] **Step 6: 提交**
 
 ```bash
-git add tools/vpn/client/bin/setproxy tools/vpn/client/setproxy_test.sh
+git add network/vpn/client/bin/setproxy network/vpn/client/setproxy_test.sh
 git commit -m "fix: use comparable domestic speed target"
 ```

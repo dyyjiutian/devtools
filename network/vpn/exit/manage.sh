@@ -403,7 +403,7 @@ cmd_install_cron() {
 
     if [[ -f "$legacy_cron" ]]; then
         rm -f "$legacy_cron"
-        warn "已移除旧版 cron: ${legacy_cron}（路径 tools/vpn2/exit 已废弃）"
+        warn "已移除旧版 cron: ${legacy_cron}（路径 network/vpn2/exit 已废弃）"
     fi
 
     cat > "$cron_file" <<EOF

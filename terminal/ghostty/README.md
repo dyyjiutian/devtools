@@ -1,6 +1,6 @@
 # Ghostty 配置
 
-现代化的 Ghostty 终端配置方案。Starship 提示符模板已抽到 `terminal/starship/`，本脚本可复用该通用配置。
+现代化的 Ghostty 终端配置方案。Starship 提示符模板已抽到 `shell/starship/`，本脚本可复用该通用配置。
 
 ## 特性
 
@@ -55,7 +55,7 @@ cd terminal/ghostty
 
 ### Starship 配置
 
-Starship 配置模板位于 `terminal/starship/starship.toml`。运行本脚本且未指定 `--skip-starship` 时，会复制该模板到 `~/.config/starship.toml`。
+Starship 配置模板位于 `shell/starship/starship.toml`。运行本脚本且未指定 `--skip-starship` 时，会复制该模板到 `~/.config/starship.toml`。
 
 #### 自定义
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # 清理旧 VPN 方案（mihomo + WireGuard + gost + tproxy iptables 规则）
-# 用法：sudo ./vpn/cleanup_vpn1.sh
+# 用法：sudo ./network/vpn/cleanup_vpn1.sh
 # =============================================================================
 
 set -euo pipefail
@@ -118,7 +118,7 @@ echo ""
 success "旧 VPN 方案清理完成！"
 echo ""
 echo -e "${BOLD}━━━ 下一步 ━━━${RESET}"
-echo "  部署新方案请按 vpn/README.md 操作："
-echo "  1. 新加坡出口节点: sudo ./vpn/exit/setup.sh"
-echo "  2. 杭州中继节点:   sudo ./vpn/relay/setup.sh"
-echo "  3. 本机客户端:     sudo ./vpn/client/setup.sh --uuid=... --public-key=... --short-id=..."
+echo "  部署新方案请按 network/vpn/README.md 操作："
+echo "  1. 新加坡出口节点: sudo ./network/vpn/exit/setup.sh"
+echo "  2. 杭州中继节点:   sudo ./network/vpn/relay/setup.sh"
+echo "  3. Linux 客户端:   sudo ./network/vpn/client/linux_setup.sh install --uuid=... --public-key=... --short-id=..."

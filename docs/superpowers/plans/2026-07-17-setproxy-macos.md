@@ -22,7 +22,7 @@
 ### Task 1: Add failing setproxy and installer regression tests
 
 **Files:**
-- Create: `tools/vpn/client/setproxy_test.sh`
+- Create: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: `bin/setproxy` and `install-setproxy.sh`.
@@ -34,7 +34,7 @@
 ### Task 2: Implement proxy resolution and Git SSH export
 
 **Files:**
-- Modify: `tools/vpn/client/bin/setproxy`
+- Modify: `network/vpn/client/bin/setproxy`
 
 **Interfaces:**
 - Consumes: host/port CLI options, VPN environment overrides, persisted config, listening ports.
@@ -51,7 +51,7 @@
 ### Task 3: Complete installer lifecycle
 
 **Files:**
-- Modify: `tools/vpn/client/install-setproxy.sh`
+- Modify: `network/vpn/client/install-setproxy.sh`
 
 **Interfaces:**
 - Consumes: HOME and detected shell rc.

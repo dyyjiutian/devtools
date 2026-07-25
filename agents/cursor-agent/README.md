@@ -15,7 +15,7 @@
 ## 安装与配置
 
 ```bash
-cd agent/cursor-agent
+cd agents/cursor-agent
 
 ./setup.sh install   # 安装 Cursor Agent CLI（官方 install 脚本）
 ./setup.sh sync      # 同步权限策略到 ~/.cursor/cli-config.json
@@ -69,4 +69,4 @@ cd agent/cursor-agent
 - [Cursor CLI 文档](https://cursor.com/docs/cli/overview)
 - [Permissions 参考](https://cursor.com/docs/cli/reference/permissions)
 - [Configuration 参考](https://cursor.com/docs/cli/reference/configuration)
-- 会话结束提示音见 [agent/notify/README.md](../notify/README.md)
+- 会话结束提示音见 [os/macos/agent-notify/README.md](../../os/macos/agent-notify/README.md)

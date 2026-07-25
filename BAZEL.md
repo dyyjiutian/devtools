@@ -67,7 +67,7 @@ bazel build //:devtools_distribution
 
 ```
 //                      # Root BUILD file
-├── agent/              # Agent configuration (Claude)
+├── agents/              # Agent configuration (Claude)
 ├── editors/            # Editor configurations (Cursor)
 ├── os/                 # OS setup scripts (macOS, Linux)
 ├── terminal/           # Terminal configurations

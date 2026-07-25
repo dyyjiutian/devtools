@@ -26,7 +26,7 @@ Modern Neovim configuration with Lua-based setup using [lazy.nvim](https://githu
 
 ```bash
 # Run the setup script
-cd terminal/nvim
+cd editors/nvim
 ./setup.sh
 ```
 

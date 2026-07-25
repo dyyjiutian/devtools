@@ -21,8 +21,8 @@
 ### Task 1: Add failing fake-firewall regression tests
 
 **Files:**
-- Modify: `tools/vpn/client/linux_setup_test.sh:70-215`
-- Modify: `tools/vpn/client/linux_setup_test.sh:292-307`
+- Modify: `network/vpn/client/linux_setup_test.sh:70-215`
+- Modify: `network/vpn/client/linux_setup_test.sh:292-307`
 
 **Interfaces:**
 - Consumes: existing `run_tun_helper`, fake `ip`, fake `sysctl`, and temporary state files.
@@ -49,7 +49,7 @@ Make the fake nft command fail detection and assert iptables plus ip6tables are 
 Run:
 
 ```bash
-bash tools/vpn/client/linux_setup_test.sh
+bash network/vpn/client/linux_setup_test.sh
 ```
 
 Expected: FAIL at the first new firewall assertion because the current helper has no firewall adapter.
@@ -57,8 +57,8 @@ Expected: FAIL at the first new firewall assertion because the current helper ha
 ### Task 2: Implement the firewall adapter in the TUN helper
 
 **Files:**
-- Modify: `tools/vpn/client/bin/xray-tun-route:4-20`
-- Modify: `tools/vpn/client/bin/xray-tun-route:120-240`
+- Modify: `network/vpn/client/bin/xray-tun-route:4-20`
+- Modify: `network/vpn/client/bin/xray-tun-route:120-240`
 
 **Interfaces:**
 - Consumes: `NFT_BIN`, `IPTABLES_BIN`, `IP6TABLES_BIN`, existing `XRAY_TUN_MARK`, and helper state directory.
@@ -101,8 +101,8 @@ Make `firewall_down` tolerate missing state, already-deleted objects, and a stop
 ### Task 3: Integrate firewall protection transactionally with policy routing
 
 **Files:**
-- Modify: `tools/vpn/client/bin/xray-tun-route:212-239`
-- Modify: `tools/vpn/client/linux_setup_test.sh:150-215`
+- Modify: `network/vpn/client/bin/xray-tun-route:212-239`
+- Modify: `network/vpn/client/linux_setup_test.sh:150-215`
 
 **Interfaces:**
 - Consumes: firewall adapter from Task 2 and existing `routes_up`, `routes_down`, `up_family`, `down_family`.
@@ -125,7 +125,7 @@ In `routes_down`, delete IPv4/IPv6 policy routes first while the mark rule still
 Run:
 
 ```bash
-bash tools/vpn/client/linux_setup_test.sh
+bash network/vpn/client/linux_setup_test.sh
 ```
 
 Expected: all existing and new fake-firewall assertions pass.
@@ -133,8 +133,8 @@ Expected: all existing and new fake-firewall assertions pass.
 ### Task 4: Update operator documentation and validation commands
 
 **Files:**
-- Modify: `tools/vpn/README.md:232-249`
-- Modify: `tools/vpn/client/linux_setup.sh:60-100`
+- Modify: `network/vpn/README.md:232-249`
+- Modify: `network/vpn/client/linux_setup.sh:60-100`
 
 **Interfaces:**
 - Consumes: implemented firewall backend behavior and existing status/clean commands.
@@ -164,9 +164,9 @@ Extend helper `status` output to show the selected firewall backend and owned pr
 - [x] **Step 1: Run shell syntax checks**
 
 ```bash
-bash -n tools/vpn/client/linux_setup.sh
-bash -n tools/vpn/client/bin/xray-tun-route
-bash -n tools/vpn/client/linux_setup_test.sh
+bash -n network/vpn/client/linux_setup.sh
+bash -n network/vpn/client/bin/xray-tun-route
+bash -n network/vpn/client/linux_setup_test.sh
 ```
 
 Expected: all commands exit 0.
@@ -174,7 +174,7 @@ Expected: all commands exit 0.
 - [x] **Step 2: Run the complete Linux VPN regression test**
 
 ```bash
-bash tools/vpn/client/linux_setup_test.sh
+bash network/vpn/client/linux_setup_test.sh
 ```
 
 Expected: `PASS: linux_setup TUN regression checks`.
@@ -192,9 +192,9 @@ Confirm only the TUN helper, its tests, and the scoped documentation/plan/spec f
 - [x] **Step 4: Commit the implementation**
 
 ```bash
-git add tools/vpn/client/bin/xray-tun-route \
-  tools/vpn/client/linux_setup_test.sh \
-  tools/vpn/README.md \
-  tools/vpn/client/linux_setup.sh
+git add network/vpn/client/bin/xray-tun-route \
+  network/vpn/client/linux_setup_test.sh \
+  network/vpn/README.md \
+  network/vpn/client/linux_setup.sh
 git commit -m "fix: preserve inbound traffic in linux tun mode"
 ```

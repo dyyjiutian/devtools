@@ -113,7 +113,7 @@ download_linux() {
       "${BINARIES_DIR}/starship-${arch}.tar.gz"
   done
 
-  # Xray-core（tools/vpn/client/linux_setup.sh）
+  # Xray-core（network/vpn/client/linux_setup.sh）
   for arch in 64 arm64-v8a arm32-v7a; do
     download \
       "https://github.com/XTLS/Xray-core/releases/download/v${xray_version}/Xray-linux-${arch}.zip" \

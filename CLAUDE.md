@@ -10,26 +10,18 @@ This repository contains automated setup scripts for developer tools across diff
 
 ```
 os/
-├── macos/setup.sh          # macOS system initialization
-└── linux/setup_centos.sh   # CentOS/RHEL system initialization
+├── macos/                  # macOS initialization, power, notifications, remote desktop
+└── linux/                  # Ubuntu/Debian/CentOS/RHEL initialization
 
-terminal/
-├── iterm2/                 # iTerm2 configuration and SSH login scripts
-├── oh-my-zsh/              # Oh My Zsh configuration (theme, plugins)
-├── tmux/                   # tmux 3.7b installer + config (extended-keys)
-└── vim/                    # Vim configuration with vim-plug and coc.nvim
-
-editors/
-└── cursor/                 # Cursor editor backup/restore scripts
-
-vcs/git/
-├── setup.sh                # Git one-shot setup
-├── bin/                    # Portable git subcommands: git-rb/bc/wc/review
-├── man/man1/               # man pages for the subcommands
-└── scripts/                # Each maps to one setup.sh step
-    ├── sub-command.sh      # Installs the git subcommands + man pages
-    ├── config.sh           # Interactive git global configurator + perf tweaks
-    └── alias.sh            # Shell alias installer (gitroot only)
+lang/                       # Python / Go / Java / Rust runtimes
+shell/                      # Bash / Zsh / Oh My Zsh / Starship
+terminal/                   # Ghostty / iTerm2 / tmux / Yazi
+editors/                    # Neovim / Vim / Cursor / VS Code
+network/                    # FRP / proxy / VPN infrastructure
+tools/                      # Bazel / Git / SSH standalone tools
+agents/                     # Claude / Codex / Cursor Agent configuration
+cache/                      # Offline installation assets
+tests/                      # Shell regression tests
 ```
 
 ## OS Initialization Scripts
@@ -55,12 +47,12 @@ Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSourc
 
 ## Terminal Configuration
 
-**Oh My Zsh** (`terminal/oh-my-zsh/`):
+**Oh My Zsh** (`shell/oh-my-zsh/`):
 - `setup.sh` - Configures powerlevel10k theme, installs plugins (zsh-autosuggestions, zsh-syntax-highlighting), disables auto-updates
 - `.p10k.zsh` - Powerlevel10k theme configuration backup
 - Automatically installs Meslo Nerd Font via Homebrew
 
-**Vim** (`terminal/vim/`):
+**Vim** (`editors/vim/`):
 - `setup.sh` - Installs vim-plug, plugins, and coc.nvim language servers
 - `vimrc` - Complete vim configuration with NERDTree, fzf, coc.nvim, vim-fugitive
 - Language servers: Python (pyright), Go, Java, Shell, JSON, YAML
@@ -84,20 +76,20 @@ Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSourc
 
 ## Git Utilities
 
-**Global Configuration** (`vcs/git/scripts/config.sh`):
+**Global Configuration** (`tools/git/scripts/config.sh`):
 ```bash
 ./config.sh          # Interactive setup for user.name, user.email, and recommended settings
 ./config.sh --dry-run # Preview without applying
 ```
 Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential.helper, plus status/pull/fetch/checkout performance tweaks, and 15+ other recommended configs.
 
-**Git Subcommand Installer** (`vcs/git/scripts/sub-command.sh`):
+**Git Subcommand Installer** (`tools/git/scripts/sub-command.sh`):
 ```bash
 ./sub-command.sh          # Install git rb/bc/wc/review + man pages to ~/.local/bin
 ./sub-command.sh --dry-run
 ```
 
-**Portable Git Subcommands** (`vcs/git/bin/`, installed to `~/.local/bin` by `setup.sh`):
+**Portable Git Subcommands** (`tools/git/bin/`, installed to `~/.local/bin` by `setup.sh`):
 - `git rb [branch]` - fetch and rebase onto the remote default (or given) branch
 - `git bc [branch] [--dry-run]` - delete local branches merged into the target branch
 - `git wc [branch] [--dry-run]` - remove merged linked worktrees and their branches
@@ -105,7 +97,7 @@ Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential
 
 These are self-contained scripts (not gitconfig aliases), so they survive removal of this repo. All support `--help` and auto-detect the default branch via `origin/HEAD`.
 
-**Shell Alias** (`vcs/git/scripts/alias.sh`):
+**Shell Alias** (`tools/git/scripts/alias.sh`):
 ```bash
 ./alias.sh         # Install gitroot to ~/.zshrc or ~/.bashrc
 ./alias.sh --clean # Remove it

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add an opt-in `--tun` mode to `tools/vpn/client/linux_setup.sh` for Linux hosts while preserving the existing SOCKS/HTTP installation as the default. TUN mode must keep the existing China-direct/foreign-proxy Xray routing policy and must restore normal host routing when disabled or removed.
+Add an opt-in `--tun` mode to `network/vpn/client/linux_setup.sh` for Linux hosts while preserving the existing SOCKS/HTTP installation as the default. TUN mode must keep the existing China-direct/foreign-proxy Xray routing policy and must restore normal host routing when disabled or removed.
 
 ## Command Behaviour
 
@@ -33,10 +33,10 @@ The route helper performs idempotent `up` and `down` operations. It waits for `x
 
 ## Files
 
-- `tools/vpn/client/linux_setup.sh`: parse `--tun`, render the TUN-aware Xray and systemd configurations, install/remove routing support, and report status.
-- `tools/vpn/client/bin/xray-tun-route`: idempotent Linux policy-route helper with `up`, `down`, and `status` actions.
-- `tools/vpn/client/linux_setup_test.sh`: isolated shell regression coverage using temporary output directories and a fake `ip` command.
-- `tools/vpn/README.md`: Linux TUN installation, behaviour, limitations, and rollback documentation.
+- `network/vpn/client/linux_setup.sh`: parse `--tun`, render the TUN-aware Xray and systemd configurations, install/remove routing support, and report status.
+- `network/vpn/client/bin/xray-tun-route`: idempotent Linux policy-route helper with `up`, `down`, and `status` actions.
+- `network/vpn/client/linux_setup_test.sh`: isolated shell regression coverage using temporary output directories and a fake `ip` command.
+- `network/vpn/README.md`: Linux TUN installation, behaviour, limitations, and rollback documentation.
 
 ## Verification
 

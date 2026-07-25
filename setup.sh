@@ -31,25 +31,24 @@ ${BOLD}选项:${NC}
   --all                   全量安装（无交互）
   --modules <list>        选择性安装，逗号分隔
                           可选值: os,python,go,java,rust,nodejs,
-                                  ai-coding,local-llm,ai-testing,
+                                  claude,codex,cursor-agent,
                                   vscode,terminal,git
   --dry-run               预览，不实际安装
 
 ${BOLD}目录结构:${NC}
   os/                     OS 初始化（macOS / Ubuntu / CentOS）
-  lang/                   语言运行时（Python / Go / Java / Rust / Node.js）
-  ai/coding/              AI 编码工具（Claude Code / Aider）
-  ai/local-llm/           本地大模型（Ollama）
-  ai/testing/             AI 测试工具
-  editors/cursor/         Cursor 编辑器配置
-  editors/vscode/         VS Code + AI 扩展
-  terminal/               终端配置（Oh My Zsh / tmux / Neovim）
-  vcs/git/                Git 配置与别名
+  lang/                   语言运行时（Python / Go / Java / Rust）
+  shell/                  Shell 与 Prompt 配置
+  terminal/               终端模拟器与终端工具
+  editors/                Vim / Neovim / Cursor / VS Code
+  agents/                 Claude / Codex / Cursor Agent 配置
+  network/                FRP / Proxy / VPN 网络工具
+  tools/                  Bazel / Git / SSH 独立工具
 
 ${BOLD}示例:${NC}
   $(basename "$0")                          # 交互式安装
   $(basename "$0") --all                    # 全量安装
-  $(basename "$0") --modules python,go,ai-coding
+  $(basename "$0") --modules python,go,claude
   $(basename "$0") --modules python --dry-run
 
 EOF
@@ -159,16 +158,16 @@ install_nodejs() {
   esac
 }
 
-install_ai_coding() {
-  run_script "$REPO_ROOT/ai/coding/setup.sh"
+install_claude() {
+  run_script "$REPO_ROOT/agents/claude/setup.sh" install
 }
 
-install_local_llm() {
-  run_script "$REPO_ROOT/ai/local-llm/setup.sh"
+install_codex() {
+  run_script "$REPO_ROOT/agents/codex/setup.sh" install
 }
 
-install_ai_testing() {
-  run_script "$REPO_ROOT/ai/testing/setup.sh"
+install_cursor_agent() {
+  run_script "$REPO_ROOT/agents/cursor-agent/setup.sh" install
 }
 
 install_vscode() {
@@ -178,21 +177,21 @@ install_vscode() {
 install_terminal() {
   step "终端配置"
   info "可用的终端配置脚本："
-  info "  terminal/oh-my-zsh/setup.sh    Oh My Zsh + powerlevel10k"
-  info "  terminal/nvim/setup.sh         Neovim + lazy.nvim + LSP"
-  info "  terminal/vim/setup.sh          Vim + coc.nvim"
+  info "  shell/oh-my-zsh/setup.sh    Oh My Zsh + powerlevel10k"
+  info "  editors/nvim/setup.sh         Neovim + lazy.nvim + LSP"
+  info "  editors/vim/setup.sh          Vim + coc.nvim"
   info "  terminal/ghostty/setup.sh      Ghostty 终端（macOS）"
   echo ""
   if [[ "$DRY_RUN" != true ]]; then
     read -r -p "运行 Oh My Zsh 配置？[y/N] " ans
-    [[ "$ans" =~ ^[Yy]$ ]] && run_script "$REPO_ROOT/terminal/oh-my-zsh/setup.sh"
+    [[ "$ans" =~ ^[Yy]$ ]] && run_script "$REPO_ROOT/shell/oh-my-zsh/setup.sh"
     read -r -p "运行 Neovim 配置？[y/N] " ans
-    [[ "$ans" =~ ^[Yy]$ ]] && run_script "$REPO_ROOT/terminal/nvim/setup.sh"
+    [[ "$ans" =~ ^[Yy]$ ]] && run_script "$REPO_ROOT/editors/nvim/setup.sh"
   fi
 }
 
 install_git_config() {
-  run_script "$REPO_ROOT/vcs/git/scripts/config.sh"
+  run_script "$REPO_ROOT/tools/git/scripts/config.sh"
 }
 
 # ─── 交互式菜单 ──────────────────────────────────────────────────────────────
@@ -221,9 +220,9 @@ show_menu() {
   echo -e "    ${CYAN}[6]${NC} Node.js        nvm + LTS（如尚未安装）"
   echo -e ""
   echo -e "  ${BOLD}AI 工具${NC}"
-  echo -e "    ${CYAN}[7]${NC} AI 编码工具    Claude Code + Aider"
-  echo -e "    ${CYAN}[8]${NC} 本地大模型     Ollama（离线 LLM，支持 mistral/codellama 等）"
-  echo -e "    ${CYAN}[9]${NC} AI 测试工具    pytest + hypothesis + gotestsum + cargo-nextest"
+  echo -e "    ${CYAN}[7]${NC} Claude Code    Agent CLI 安装与配置"
+  echo -e "    ${CYAN}[8]${NC} Codex CLI      Agent CLI 安装与配置"
+  echo -e "    ${CYAN}[9]${NC} Cursor Agent   Agent CLI 安装与配置"
   echo -e ""
   echo -e "  ${BOLD}编辑器${NC}"
   echo -e "    ${CYAN}[v]${NC} VS Code        安装 + AI 扩展（Continue.dev / Copilot）"
@@ -259,9 +258,9 @@ run_interactive() {
       4) install_java ;;
       5) install_rust ;;
       6) install_nodejs ;;
-      7) install_ai_coding ;;
-      8) install_local_llm ;;
-      9) install_ai_testing ;;
+      7) install_claude ;;
+      8) install_codex ;;
+      9) install_cursor_agent ;;
       v|V) install_vscode ;;
       t|T) install_terminal ;;
       g|G) install_git_config ;;
@@ -277,9 +276,9 @@ run_all() {
   install_go
   install_java
   install_rust
-  install_ai_coding
-  install_local_llm
-  install_ai_testing
+  install_claude
+  install_codex
+  install_cursor_agent
   install_vscode
 }
 
@@ -295,9 +294,9 @@ run_modules() {
       java)        install_java ;;
       rust)        install_rust ;;
       nodejs)      install_nodejs ;;
-      ai-coding)   install_ai_coding ;;
-      local-llm)   install_local_llm ;;
-      ai-testing)  install_ai_testing ;;
+      claude)      install_claude ;;
+      codex)       install_codex ;;
+      cursor-agent) install_cursor_agent ;;
       vscode)      install_vscode ;;
       terminal)    install_terminal ;;
       git)         install_git_config ;;
@@ -338,8 +337,9 @@ main() {
   echo -e "\n${GREEN}${BOLD}✓ 完成！${NC}\n"
   echo -e "  如需查看各组件详细帮助："
   echo -e "    lang/python/setup.sh --help"
-  echo -e "    ai/coding/setup.sh --help"
-  echo -e "    ai/local-llm/setup.sh --help"
+  echo -e "    agents/claude/setup.sh --help"
+  echo -e "    agents/codex/setup.sh --help"
+  echo -e "    agents/cursor-agent/setup.sh --help"
   echo -e ""
 }
 

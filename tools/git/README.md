@@ -5,7 +5,7 @@ Git 开发环境的一键配置与可移植子命令。推荐用 `setup.sh` 一�
 ## 目录结构
 
 ```
-vcs/git/
+tools/git/
 ├── setup.sh            # 一键配置入口
 ├── bin/                # 可移植的 git 子命令（安装到 ~/.local/bin）
 │   ├── git-rb          #   git rb     — fetch + rebase 到远端目标分支
@@ -149,7 +149,7 @@ brew install git-delta          # macOS（或通过 os/macos/setup.sh 一并安�
 git clone <repo-url> ~/devtools
 
 # 2. 一键配置 Git（delta + git config + 子命令 + gitroot + status/pull 优化）
-bash ~/devtools/vcs/git/setup.sh
+bash ~/devtools/tools/git/setup.sh
 source ~/.zshrc   # 或 source ~/.bashrc
 
 # 3. 验证

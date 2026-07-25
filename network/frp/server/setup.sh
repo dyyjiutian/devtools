@@ -138,7 +138,7 @@ if [[ "$ACTION" == "status" ]]; then
             echo -e "${BOLD}━━━ Mac 客户端命令 ━━━${RESET}"
             # shellcheck source=/dev/null
             source "${CONFIG_DIR}/.server_info"
-            echo "  cd tools/frp/client"
+            echo "  cd network/frp/client"
             echo "  ./setup.sh --server-ip=${SERVER_IP} --token=${TOKEN} --client-name=\$(hostname -s)"
         fi
     fi
@@ -252,7 +252,7 @@ write_config() {
     run chmod 700 "${CONFIG_DIR}"
 
     cat > "${CONFIG_DIR}/frps.toml" <<TOML
-# FRP 服务端配置 - 由 tools/frp/server/setup.sh 生成
+# FRP 服务端配置 - 由 network/frp/server/setup.sh 生成
 
 bindPort = ${BIND_PORT}
 
@@ -372,7 +372,7 @@ echo -e "  ${BOLD}映射端口${RESET}  : ${REMOTE_PORT_START}-${REMOTE_PORT_END
 echo ""
 echo -e "${BOLD}在 Mac 上运行客户端:${RESET}"
 echo ""
-echo -e "  cd tools/frp/client"
+echo -e "  cd network/frp/client"
 echo -e "  ./setup.sh \\"
 echo -e "    --server-ip=${SERVER_IP} \\"
 echo -e "    --token=${TOKEN} \\"

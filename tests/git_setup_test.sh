@@ -29,7 +29,7 @@ output=$(PATH="$TMP_DIR" SETUP_NO_MAIN=1 /bin/bash -c '
   source "$setup"
   DRY_RUN=true
   install_gh
-' _ "$ROOT/vcs/git/setup.sh" 2>&1) ||
+' _ "$ROOT/tools/git/setup.sh" 2>&1) ||
   fail "GitHub CLI dry-run failed: $output"
 
 assert_contains "$output" "cli.github.com/packages/rpm/gh-cli.repo"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mac/remote/setup.sh — MacBook 盒盖 / 无显示器场景下的 VNC 虚拟屏配置
+# os/macos/remote-desktop/setup.sh — MacBook 盒盖 / 无显示器场景下的 VNC 虚拟屏配置
 #
 # 用途：安装虚拟显示器软件，创建虚拟屏，配合屏幕共享实现盒盖远程桌面。
 #
@@ -22,7 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-NOSLEEP_SCRIPT="${REPO_ROOT}/os/macos/nosleep.sh"
+NOSLEEP_SCRIPT="${REPO_ROOT}/os/macos/power/nosleep.sh"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; RESET='\033[0m'
@@ -328,7 +328,7 @@ ${BOLD}示例:${RESET}
   # 重启后 VNC 挂了
   ./setup.sh repair
 
-详见: mac/remote/README.md
+详见: os/macos/remote-desktop/README.md
 EOF
 }
 

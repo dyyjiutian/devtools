@@ -42,7 +42,7 @@ printf '#!/usr/bin/env bash\necho cached-starship\n' > "$TMP_DIR/starship-payloa
 chmod +x "$TMP_DIR/starship-payload/starship"
 tar -czf "$TMP_DIR/cache/binaries/starship-x86_64-unknown-linux-musl.tar.gz"   -C "$TMP_DIR/starship-payload" starship
 
-CURL_FAILURE_MARKER="$TMP_DIR/curl-called" PATH="$TMP_DIR/bin:/usr/bin:/bin" HOME="$TMP_DIR/home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/terminal/bash/setup.sh" > "$TMP_DIR/starship.log" 2>&1 ||
+CURL_FAILURE_MARKER="$TMP_DIR/curl-called" PATH="$TMP_DIR/bin:/usr/bin:/bin" HOME="$TMP_DIR/home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/shell/bash/setup.sh" > "$TMP_DIR/starship.log" 2>&1 ||
   fail "Starship cache install failed; output: $(cat "$TMP_DIR/starship.log")"
 assert_file "$TMP_DIR/home/.local/bin/starship"
 [[ ! -e "$TMP_DIR/curl-called" ]] || fail "online installer was called despite a valid cache"
@@ -89,7 +89,7 @@ printf '#!/usr/bin/env bash\nif [[ "$1" == "clone" ]]; then touch "$FZF_CLONE_MA
 printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP_DIR/fzf-bin/zoxide"
 chmod +x "$TMP_DIR/fzf-home/.fzf/install" "$TMP_DIR/fzf-bin/git" "$TMP_DIR/fzf-bin/zoxide"
 
-FZF_INSTALL_MARKER="$TMP_DIR/fzf-install-called" FZF_CLONE_MARKER="$TMP_DIR/fzf-clone-called" PATH="$TMP_DIR/fzf-bin:/usr/bin:/bin" HOME="$TMP_DIR/fzf-home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/terminal/bash/setup.sh" > "$TMP_DIR/fzf.log" 2>&1 ||
+FZF_INSTALL_MARKER="$TMP_DIR/fzf-install-called" FZF_CLONE_MARKER="$TMP_DIR/fzf-clone-called" PATH="$TMP_DIR/fzf-bin:/usr/bin:/bin" HOME="$TMP_DIR/fzf-home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/shell/bash/setup.sh" > "$TMP_DIR/fzf.log" 2>&1 ||
   fail "fzf retry failed; output: $(cat "$TMP_DIR/fzf.log")"
 assert_file "$TMP_DIR/fzf-install-called"
 [[ ! -e "$TMP_DIR/fzf-clone-called" ]] || fail "git clone was called for an existing fzf checkout"
@@ -101,7 +101,7 @@ printf '#!/usr/bin/env bash\nif [[ "$1" == "clone" ]]; then dest="${@: -1}"; if 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP_DIR/fzf-incomplete-bin/zoxide"
 chmod +x "$TMP_DIR/fzf-incomplete-bin/git" "$TMP_DIR/fzf-incomplete-bin/zoxide"
 
-FZF_INSTALL_MARKER="$TMP_DIR/fzf-incomplete-install-called" FZF_CLONE_MARKER="$TMP_DIR/fzf-incomplete-clone-failed" PATH="$TMP_DIR/fzf-incomplete-bin:/usr/bin:/bin" HOME="$TMP_DIR/fzf-incomplete-home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/terminal/bash/setup.sh" > "$TMP_DIR/fzf-incomplete.log" 2>&1 ||
+FZF_INSTALL_MARKER="$TMP_DIR/fzf-incomplete-install-called" FZF_CLONE_MARKER="$TMP_DIR/fzf-incomplete-clone-failed" PATH="$TMP_DIR/fzf-incomplete-bin:/usr/bin:/bin" HOME="$TMP_DIR/fzf-incomplete-home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" bash "$ROOT/shell/bash/setup.sh" > "$TMP_DIR/fzf-incomplete.log" 2>&1 ||
   fail "incomplete fzf retry failed; output: $(cat "$TMP_DIR/fzf-incomplete.log")"
 assert_file "$TMP_DIR/fzf-incomplete-install-called"
 [[ ! -e "$TMP_DIR/fzf-incomplete-clone-failed" ]] || fail "incomplete fzf directory was not moved before cloning"

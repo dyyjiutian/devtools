@@ -26,7 +26,7 @@
 ### 1. Linux 服务端
 
 ```bash
-cd tools/frp/server
+cd network/frp/server
 sudo ./setup.sh
 ```
 
@@ -52,7 +52,7 @@ sudo ./setup.sh --status
 然后运行：
 
 ```bash
-cd tools/frp/client
+cd network/frp/client
 ./setup.sh \
   --server-ip=<Linux_IP> \
   --token=<从服务端获取的token> \

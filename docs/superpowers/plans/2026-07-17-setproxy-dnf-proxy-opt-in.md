@@ -21,8 +21,8 @@
 ### Task 1: Add failing opt-in regression coverage
 
 **Files:**
-- Modify: `tools/vpn/client/setproxy_test.sh:217-330`
-- Test: `tools/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/client/setproxy_test.sh:217-330`
+- Test: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: `setproxy on`, `setproxy on --dnf-proxy`, `setproxy off`, `VPN_DNF_CONF`.
@@ -51,15 +51,15 @@ Add a Darwin invocation with `--dnf-proxy` and assert stderr contains `当前系
 
 - [x] **Step 3: Run the suite and verify the intended failure**
 
-Run: `bash tools/vpn/client/setproxy_test.sh`
+Run: `bash network/vpn/client/setproxy_test.sh`
 
 Expected: FAIL because the current implementation still changes dnf without a flag and rejects `--dnf-proxy` as unknown.
 
 ### Task 2: Implement the invocation-scoped dnf option
 
 **Files:**
-- Modify: `tools/vpn/client/bin/setproxy:25-130, 860-875`
-- Test: `tools/vpn/client/setproxy_test.sh`
+- Modify: `network/vpn/client/bin/setproxy:25-130, 860-875`
+- Test: `network/vpn/client/setproxy_test.sh`
 
 **Interfaces:**
 - Consumes: new boolean `DNF_PROXY=false` and existing `dnf_available`/`configure_dnf_proxy_on`.
@@ -102,14 +102,14 @@ Keep `configure_dnf_proxy_off` unchanged in `do_off`.
 
 - [x] **Step 3: Run syntax and regression checks**
 
-Run: `bash -n tools/vpn/client/bin/setproxy tools/vpn/client/setproxy_test.sh && bash tools/vpn/client/setproxy_test.sh`
+Run: `bash -n network/vpn/client/bin/setproxy network/vpn/client/setproxy_test.sh && bash network/vpn/client/setproxy_test.sh`
 
 Expected: exit code 0 and `PASS: setproxy regression checks`.
 
 ### Task 3: Update documentation and publish the PR revision
 
 **Files:**
-- Modify: `tools/vpn/README.md:277-300, 444-450`
+- Modify: `network/vpn/README.md:277-300, 444-450`
 - Create: `docs/superpowers/plans/2026-07-17-setproxy-dnf-proxy-opt-in.md`
 
 **Interfaces:**
@@ -128,7 +128,7 @@ State that bare `setproxy on` does not change dnf and bare `setproxy off` restor
 
 - [x] **Step 2: Run final verification**
 
-Run: `git diff --check && bash -n tools/vpn/client/bin/setproxy tools/vpn/client/install-setproxy.sh tools/vpn/client/setproxy_test.sh && bash tools/vpn/client/setproxy_test.sh`
+Run: `git diff --check && bash -n network/vpn/client/bin/setproxy network/vpn/client/install-setproxy.sh network/vpn/client/setproxy_test.sh && bash network/vpn/client/setproxy_test.sh`
 
 Expected: exit code 0 and `PASS: setproxy regression checks`.
 

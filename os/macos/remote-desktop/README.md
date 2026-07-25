@@ -20,7 +20,7 @@ MacBook 合盖当服务器时，SSH（远程登录，端口 22）通常正常，
 ### 一键配置
 
 ```bash
-cd mac/remote
+cd os/macos/remote-desktop
 chmod +x setup.sh
 
 # 安装 + 配置虚拟屏 + 防睡 + 重启 VNC
@@ -144,7 +144,7 @@ SSH 足够当服务器使用，可忽略虚拟屏：
 
 ```bash
 ssh user@192.168.x.x
-# 配合 ../../os/macos/nosleep.sh start 防止睡眠
+# 配合 ../../os/macos/power/nosleep.sh start 防止睡眠
 ```
 
 ---
@@ -250,8 +250,8 @@ nc -zv 127.0.0.1 5900
 
 | 路径 | 说明 |
 |------|------|
-| `mac/remote/setup.sh` | 本目录：虚拟屏 + VNC 配置 |
-| `os/macos/nosleep.sh` | 防睡（合盖保持 SSH / 网络） |
+| `os/macos/remote-desktop/setup.sh` | 本目录：虚拟屏 + VNC 配置 |
+| `os/macos/power/nosleep.sh` | 防睡（合盖保持 SSH / 网络） |
 | `os/macos/setup.sh` | macOS 通用初始化 |
 
 ---

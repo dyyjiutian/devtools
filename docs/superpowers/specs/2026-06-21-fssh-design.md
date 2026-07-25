@@ -10,7 +10,7 @@ A bash script `fssh` that integrates fzf + SSH + tmux for remote development in 
 ## Directory Structure
 
 ```
-terminal/ssh/
+tools/ssh/
 ├── fssh          # main script (no extension, directly executable)
 └── setup.sh      # SSH client config optimization script
 ```
