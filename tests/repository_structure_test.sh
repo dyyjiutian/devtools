@@ -8,7 +8,7 @@ required_dirs=(
   agents agents/claude agents/codex agents/cursor-agent
   cache
   editors editors/cursor editors/nvim editors/vim editors/vscode
-  lang lang/go lang/java lang/python lang/rust
+  languages languages/go languages/java languages/python languages/rust
   network network/frp network/frp/client network/frp/server
   network/proxy network/proxy/client network/proxy/server
   network/vpn network/vpn/client network/vpn/exit network/vpn/relay

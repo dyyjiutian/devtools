@@ -122,7 +122,7 @@ configure_go_env() {
     touch "$rc_file"
   fi
 
-  local marker='# Go env (added by devtools/lang/go/setup.sh)'
+  local marker='# Go env (added by devtools/languages/go/setup.sh)'
   if grep -qF "$marker" "$rc_file" 2>/dev/null; then
     info "Go 环境变量已在 $rc_file 中，跳过"
     return 0
@@ -135,7 +135,7 @@ configure_go_env() {
 
   cat >> "$rc_file" <<'RCBLOCK'
 
-# Go env (added by devtools/lang/go/setup.sh)
+# Go env (added by devtools/languages/go/setup.sh)
 if [[ -d /usr/local/go/bin ]]; then
   export PATH="/usr/local/go/bin:$PATH"
 fi

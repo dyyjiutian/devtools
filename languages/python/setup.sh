@@ -119,7 +119,7 @@ configure_pyenv_shell() {
     rc_file="$HOME/.bashrc"
   fi
 
-  local marker='# pyenv init (added by devtools/lang/python/setup.sh)'
+  local marker='# pyenv init (added by devtools/languages/python/setup.sh)'
   if grep -qF "$marker" "$rc_file" 2>/dev/null; then
     info "pyenv 初始化已在 $rc_file 中，跳过"
     return 0
@@ -128,7 +128,7 @@ configure_pyenv_shell() {
   info "将 pyenv 初始化写入 $rc_file..."
   cat >> "$rc_file" <<'RCBLOCK'
 
-# pyenv init (added by devtools/lang/python/setup.sh)
+# pyenv init (added by devtools/languages/python/setup.sh)
 export PYENV_ROOT="$HOME/.pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 if command -v pyenv &>/dev/null; then

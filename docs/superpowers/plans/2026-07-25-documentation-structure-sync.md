@@ -10,7 +10,7 @@
 
 ## Global constraints
 
-- Preserve the current top-level directories: agents, cache, docs, editors, lang, network, os, shell, terminal, tests, tools.
+- Preserve the current top-level directories: agents, cache, docs, editors, languages, network, os, shell, terminal, tests, tools.
 - Use current paths: agents, shell, editors, network, os/macos/agent-notify, os/macos/power, os/macos/remote-desktop, tools/git, and tools/ssh.
 - Do not change installer behavior except for correcting moved-path references.
 - Add READMEs only to user-facing, executable, platform, category, or module directories.
@@ -25,7 +25,7 @@ Files:
 - Create: tests/repository_structure_test.sh
 
 Required README directories:
-agents, agents/claude, agents/codex, agents/cursor-agent, cache, editors, editors/cursor, editors/nvim, editors/vim, editors/vscode, lang, lang/go, lang/java, lang/python, lang/rust, network, network/frp, network/frp/client, network/frp/server, network/proxy, network/proxy/client, network/proxy/server, network/vpn, network/vpn/client, network/vpn/exit, network/vpn/relay, os, os/linux, os/macos, os/macos/agent-notify, os/macos/power, os/macos/remote-desktop, shell, shell/bash, shell/oh-my-zsh, shell/starship, shell/zsh, terminal, terminal/ghostty, terminal/iterm2, terminal/tmux, terminal/yazi, tests, tools, tools/bazel, tools/git, tools/ssh.
+agents, agents/claude, agents/codex, agents/cursor-agent, cache, editors, editors/cursor, editors/nvim, editors/vim, editors/vscode, languages, languages/go, languages/java, languages/python, languages/rust, network, network/frp, network/frp/client, network/frp/server, network/proxy, network/proxy/client, network/proxy/server, network/vpn, network/vpn/client, network/vpn/exit, network/vpn/relay, os, os/linux, os/macos, os/macos/agent-notify, os/macos/power, os/macos/remote-desktop, shell, shell/bash, shell/oh-my-zsh, shell/starship, shell/zsh, terminal, terminal/ghostty, terminal/iterm2, terminal/tmux, terminal/yazi, tests, tools, tools/bazel, tools/git, tools/ssh.
 
 Test behavior:
 - Fail if any required directory lacks README.md.

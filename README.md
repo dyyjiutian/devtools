@@ -9,7 +9,7 @@ devtools/
 ├── os/
 │   ├── macos/                    # macOS 初始化、电源、通知、远程桌面
 │   └── linux/                    # Ubuntu/Debian/CentOS/RHEL 初始化
-├── lang/                         # Python / Go / Java / Rust 运行时
+├── languages/                    # Python / Go / Java / Rust 运行时
 ├── shell/                        # Bash / Zsh / Oh My Zsh / Starship
 ├── terminal/
 │   ├── ghostty/                  # Ghostty terminal

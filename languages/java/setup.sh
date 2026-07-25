@@ -105,7 +105,7 @@ configure_sdkman_shell() {
     touch "$rc_file"
   fi
 
-  local marker='# SDKMan init (added by devtools/lang/java/setup.sh)'
+  local marker='# SDKMan init (added by devtools/languages/java/setup.sh)'
   if grep -qF "$marker" "$rc_file" 2>/dev/null; then
     info "SDKMan 初始化已在 $rc_file 中，跳过"
     return 0
@@ -118,7 +118,7 @@ configure_sdkman_shell() {
 
   cat >> "$rc_file" <<'RCBLOCK'
 
-# SDKMan init (added by devtools/lang/java/setup.sh)
+# SDKMan init (added by devtools/languages/java/setup.sh)
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]] && source "$SDKMAN_DIR/bin/sdkman-init.sh"
 RCBLOCK

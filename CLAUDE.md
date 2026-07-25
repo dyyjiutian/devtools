@@ -13,7 +13,7 @@ os/
 ├── macos/                  # macOS initialization, power, notifications, remote desktop
 └── linux/                  # Ubuntu/Debian/CentOS/RHEL initialization
 
-lang/                       # Python / Go / Java / Rust runtimes
+languages/                       # Python / Go / Java / Rust runtimes
 shell/                      # Bash / Zsh / Oh My Zsh / Starship
 terminal/                   # Ghostty / iTerm2 / tmux / Yazi
 editors/                    # Neovim / Vim / Cursor / VS Code

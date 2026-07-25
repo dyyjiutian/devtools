@@ -109,7 +109,7 @@ configure_cargo_env() {
     touch "$rc_file"
   fi
 
-  local marker='# Rust/Cargo env (added by devtools/lang/rust/setup.sh)'
+  local marker='# Rust/Cargo env (added by devtools/languages/rust/setup.sh)'
   if grep -qF "$marker" "$rc_file" 2>/dev/null; then
     info "Cargo 环境变量已在 $rc_file 中，跳过"
     return 0
@@ -122,7 +122,7 @@ configure_cargo_env() {
 
   cat >> "$rc_file" <<'RCBLOCK'
 
-# Rust/Cargo env (added by devtools/lang/rust/setup.sh)
+# Rust/Cargo env (added by devtools/languages/rust/setup.sh)
 [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
 RCBLOCK
 

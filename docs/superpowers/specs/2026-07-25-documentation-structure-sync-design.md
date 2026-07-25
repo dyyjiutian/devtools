@@ -12,7 +12,7 @@ The current layout is intentionally preserved:
 
 - `agents/` contains Agent-specific CLI configuration and future best practices.
 - `editors/` contains Vim, Neovim, Cursor, and VS Code assets.
-- `lang/` contains language runtime setup scripts.
+- `languages/` contains language runtime setup scripts.
 - `network/` contains FRP, proxy, and VPN infrastructure.
 - `os/` contains platform initialization and macOS-specific services.
 - `shell/` contains Bash, Zsh, Oh My Zsh, and Starship configuration.

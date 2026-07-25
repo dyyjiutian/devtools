@@ -23,7 +23,7 @@
 |---|---|---|
 | `setup.sh` | 根入口：交互式、全量或按模块编排初始化 | 新增模块时同步更新帮助、菜单、模块分派与 dry-run 行为 |
 | `os/` | macOS、Ubuntu/Debian、CentOS/RHEL 的系统初始化 | 可能安装系统包、写入系统配置或启用服务 |
-| `lang/` | Python、Go、Java、Rust 等语言运行时 | 保持各语言安装器独立，不把语言特有逻辑塞进根入口 |
+| `languages/` | Python、Go、Java、Rust 等语言运行时 | 保持各语言安装器独立，不把语言特有逻辑塞进根入口 |
 | `shell/` | Bash、Zsh、Oh My Zsh、Starship 等 Shell 配置 | 注意 shell 启动文件的幂等修改 |
 | `terminal/` | Ghostty、iTerm2、tmux、Yazi 等终端工具 | 配置文件与安装脚本分离 |
 | `editors/` | Neovim、Vim、Cursor、VS Code 等编辑器 | 修改配置格式时同步检查对应 README |
@@ -94,8 +94,8 @@ git status --short
 ```bash
 bash setup.sh --help
 bash setup.sh --modules python --dry-run
-bash lang/python/setup.sh --help
-bash lang/python/setup.sh --dry-run
+bash languages/python/setup.sh --help
+bash languages/python/setup.sh --dry-run
 ```
 
 不要为了验证语法而运行真实安装，不要在没有明确目标主机、端口和回滚方案时执行 VPN、代理、FRP 或远程部署脚本。
@@ -107,7 +107,7 @@ bash lang/python/setup.sh --dry-run
 ```bash
 # Shell 语法
 bash -n setup.sh
-bash -n lang/python/setup.sh
+bash -n languages/python/setup.sh
 
 # Linux 回归测试
 bash tests/linux_setup_scripts_test.sh

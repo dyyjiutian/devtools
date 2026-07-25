@@ -37,7 +37,7 @@ ${BOLD}选项:${NC}
 
 ${BOLD}目录结构:${NC}
   os/                     OS 初始化（macOS / Ubuntu / CentOS）
-  lang/                   语言运行时（Python / Go / Java / Rust）
+  languages/              语言运行时（Python / Go / Java / Rust）
   shell/                  Shell 与 Prompt 配置
   terminal/               终端模拟器与终端工具
   editors/                Vim / Neovim / Cursor / VS Code
@@ -117,19 +117,19 @@ install_os() {
 }
 
 install_python() {
-  run_script "$REPO_ROOT/lang/python/setup.sh"
+  run_script "$REPO_ROOT/languages/python/setup.sh"
 }
 
 install_go() {
-  run_script "$REPO_ROOT/lang/go/setup.sh"
+  run_script "$REPO_ROOT/languages/go/setup.sh"
 }
 
 install_java() {
-  run_script "$REPO_ROOT/lang/java/setup.sh"
+  run_script "$REPO_ROOT/languages/java/setup.sh"
 }
 
 install_rust() {
-  run_script "$REPO_ROOT/lang/rust/setup.sh"
+  run_script "$REPO_ROOT/languages/rust/setup.sh"
 }
 
 install_nodejs() {
@@ -336,7 +336,7 @@ main() {
 
   echo -e "\n${GREEN}${BOLD}✓ 完成！${NC}\n"
   echo -e "  如需查看各组件详细帮助："
-  echo -e "    lang/python/setup.sh --help"
+  echo -e "    languages/python/setup.sh --help"
   echo -e "    agents/claude/setup.sh --help"
   echo -e "    agents/codex/setup.sh --help"
   echo -e "    agents/cursor-agent/setup.sh --help"
