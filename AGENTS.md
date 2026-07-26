@@ -32,6 +32,7 @@
 | `tools/git/` | Git 全局配置、可移植子命令和 shell alias | 关注 `git rb`、`git review` 与 worktree 的交互 |
 | `tools/ssh/` | SSH 客户端优化与 fssh 远程会话选择器 | 修改 SSH 配置前保留备份并说明远程影响 |
 | `agents/` | Claude、Codex、Cursor Agent 配置与最佳实践 | 配置同步必须保留用户未托管的内容和敏感信息 |
+| `agents/cookbook/` | 个人习惯与经验配方（skills 等），供 Agent 消费 | 与运行时安装器分离；`setup.sh sync` 链到 `~/.cursor/skills` 等，勿提交密钥与本机路径 |
 | `cache/` | 安装脚本与二进制缓存，用于离线或加速安装 | 更新缓存版本时同步校验下载脚本、架构和测试 |
 | `os/macos/` | macOS 初始化、电源、Agent 通知和远程桌面 | 涉及系统设置、屏幕共享和 SSH，变更前先读局部 README |
 | `tests/`、`os/macos/*.bats` | Shell 回归测试 | 优先用临时目录和 fake 命令验证，不执行真实安装 |

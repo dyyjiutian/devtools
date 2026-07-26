@@ -19,7 +19,7 @@ terminal/                   # Ghostty / iTerm2 / tmux / Yazi
 editors/                    # Neovim / Vim / Cursor / VS Code
 network/                    # FRP / proxy / VPN infrastructure
 tools/                      # Bazel / Git / SSH standalone tools
-agents/                     # Claude / Codex / Cursor Agent configuration
+agents/                     # Claude / Codex / Cursor Agent / cookbook recipes
 cache/                      # Offline installation assets
 tests/                      # Shell regression tests
 ```
