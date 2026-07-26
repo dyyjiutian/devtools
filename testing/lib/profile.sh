@@ -25,7 +25,8 @@ _devtools_link_host_tools() {
   for tool in "${tools[@]}"; do
     real="$(command -v "$tool" 2>/dev/null || true)"
     if [[ -n "$real" && -x "$real" ]]; then
-      ln -sfd "$real" "$fake_bin/$tool"
+      # Portable: macOS BSD ln has no GNU -d; -sf is enough for force symlink.
+      ln -sf "$real" "$fake_bin/$tool"
     fi
   done
 }

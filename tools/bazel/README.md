@@ -85,33 +85,36 @@ USE_BAZEL_VERSION=8.0.0 bazel version
 
 ## Shell 补全
 
-补全脚本下载自 Bazel GitHub（版本对应 `--bazel-version`），存放于 `~/.config/bazel/`。
+补全脚本存放于 `~/.config/bazel/`：
+
+- **Bash**：优先用 `bazel completion bash` 生成（Bazel 9+），失败时回退到 GitHub 脚本
+- **Zsh**：使用官方 `_bazel`，并追加 `_bazel "$@"` 入口，修复 zsh autoload 下「首次 Tab 无候选」的问题
 
 ### Bash
 
-`~/.bashrc` 中写入：
+`~/.bashrc` 中由脚本写入托管块：
 
 ```bash
-# Bazel bash completion
-[ -f "~/.config/bazel/bazel-complete.bash" ] && source "~/.config/bazel/bazel-complete.bash"
+# >>> bazel-completion BEGIN >>>
+[ -f ~/.config/bazel/bazel-complete.bash ] && . ~/.config/bazel/bazel-complete.bash
+# <<< bazel-completion END <<<
 ```
 
 ### Zsh
 
-`~/.zshrc` 中写入：
+`~/.zshrc` 中由脚本写入托管块（含 fpath、补全 cache、`compinit`）：
 
 ```zsh
-# Bazel zsh completion
-if [[ -d "~/.config/bazel" ]]; then
-  fpath=("~/.config/bazel" $fpath)
-fi
+# >>> bazel-completion BEGIN >>>
+fpath=(~/.config/bazel $fpath)
+mkdir -p ~/.cache/bazel-completion
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path ~/.cache/bazel-completion
 autoload -Uz compinit && compinit -C
+# <<< bazel-completion END <<<
 ```
 
-在 macOS 上通过 Homebrew 安装的 bazelisk 还会将 `_bazel` 放入
-`/opt/homebrew/share/zsh/site-functions/`，两者同时生效互不干扰。
-
-补全配置后，输入 `bazel ` 按 Tab 即可获得命令补全。
+配置后新开终端，或 `source ~/.zshrc`，输入 `bazel ` 按 Tab 即可补全子命令与选项。
 
 ## Linux 说明
 
@@ -155,3 +158,35 @@ bazel clean                     # 清理构建产物
 buildifier BUILD.bazel          # 格式化单个文件
 find . -name "*.bazel" -o -name "*.bzl" | xargs buildifier  # 批量格式化
 ```
+
+## Issues 
+
+### 2026-07-26 — macOS zsh 下 `bazel` Tab 无命令/选项补全
+
+**问题表象**
+
+- 已通过 Homebrew 安装 bazelisk，`~/.zshrc` 也写入了 fpath / `compinit`，但输入 `bazel ` 按 Tab 仍无子命令或选项提示。
+- 偶发表现为：第一次 Tab 完全无反应，多按几次后才偶尔出现候选。
+
+**根因**
+
+- 官方 zsh 补全文件 `_bazel`（`#compdef bazel`）在 zsh autoload 语义下，**整文件即为函数体**。
+- 文件内部又定义了 `_bazel() { ... }`，却未在末尾调用 `_bazel "$@"`。
+- 首次 Tab 只执行顶层加载（定义内部函数），不产生补全候选；第二次及以后才走到真正的补全逻辑。
+- Homebrew 自带的 `_bazel` 与上游一致，同样缺少该入口调用。
+
+**解法**
+
+- `setup.sh` 将 `_bazel` 安装到 `~/.config/bazel/` 后，追加：
+
+  ```zsh
+  _bazel "$@"
+  ```
+
+- 同时用 BEGIN/END 托管块更新 `~/.zshrc`（fpath 前置、启用 completion cache、`compinit -C`），bash 侧优先用 `bazel completion bash` 生成脚本。
+- 已有环境可重新执行：
+
+  ```bash
+  ./setup.sh --skip-bazelisk --skip-buildifier --skip-starpls --skip-bazelrc
+  source ~/.zshrc
+  ```

@@ -98,6 +98,51 @@ append_if_absent() {
   fi
 }
 
+# 按 BEGIN/END 标记写入或替换托管块（幂等更新）
+upsert_marked_block() {
+  local file="$1"
+  local begin_marker="$2"
+  local end_marker="$3"
+  local content="$4"
+
+  if [[ "$DRY_RUN" == true ]]; then
+    if grep -qF "$begin_marker" "$file" 2>/dev/null; then
+      info "[dry-run] 将更新 ${file} 中的 '${begin_marker}' 块"
+    else
+      info "[dry-run] 将写入 ${file}："
+      echo "$content" | sed 's/^/  /'
+    fi
+    return 0
+  fi
+
+  [[ -f "$file" ]] || touch "$file"
+
+  if ! grep -qF "$begin_marker" "$file" 2>/dev/null; then
+    printf '\n%s\n' "$content" >> "$file"
+    success "已写入 ${file}"
+    return 0
+  fi
+
+  local tmp replacement_file
+  tmp="$(mktemp)"
+  replacement_file="$(mktemp)"
+  printf '%s\n' "$content" >"$replacement_file"
+  awk -v begin="$begin_marker" -v end="$end_marker" -v repfile="$replacement_file" '
+    $0 == begin {
+      while ((getline line < repfile) > 0) print line
+      close(repfile)
+      skip=1
+      next
+    }
+    skip && $0 == end { skip=0; next }
+    skip { next }
+    { print }
+  ' "$file" >"$tmp"
+  mv "$tmp" "$file"
+  rm -f "$replacement_file"
+  success "已更新 ${file} 中的补全配置"
+}
+
 # ─── OS / 架构检测 ───────────────────────────────────────────────────────────
 detect_os() {
   local kernel
@@ -333,91 +378,169 @@ install_starpls() {
 
 # ─── Shell 补全配置 ──────────────────────────────────────────────────────────
 BAZEL_COMPLETION_DIR="$HOME/.config/bazel"
+BAZEL_COMPLETION_CACHE_DIR="$HOME/.cache/bazel-completion"
 
-# 下载补全脚本
-download_completion_scripts() {
+# zsh 的 #compdef 脚本在 autoload 时整文件即函数体；上游 _bazel 定义了
+# _bazel() 却未在末尾调用，导致首次 Tab 只完成加载、不产生候选。补上入口调用。
+ensure_zsh_completion_entrypoint() {
+  local zsh_dest="$1"
+  [[ -f "$zsh_dest" ]] || return 0
+
+  if tail -n 5 "$zsh_dest" | grep -qE '^_bazel "\$@"$'; then
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] 将为 ${zsh_dest} 追加 _bazel \"\$@\" 入口"
+    return 0
+  fi
+
+  printf '\n# Ensure first Tab works under zsh autoload semantics.\n_bazel "$@"\n' >>"$zsh_dest"
+  success "已修复 zsh 补全入口（首次 Tab 即可补全）"
+}
+
+install_bash_completion_script() {
+  local bash_dest="${BAZEL_COMPLETION_DIR}/bazel-complete.bash"
   local version="$BAZEL_VERSION"
   local base_url="https://raw.githubusercontent.com/bazelbuild/bazel/${version}/scripts"
 
-  if [[ "$DRY_RUN" != true ]]; then
-    mkdir -p "$BAZEL_COMPLETION_DIR"
-  else
-    info "[dry-run] mkdir -p ${BAZEL_COMPLETION_DIR}"
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] 生成/下载 bash 补全至 ${bash_dest}"
+    return 0
   fi
 
-  # bash 补全
-  local bash_dest="${BAZEL_COMPLETION_DIR}/bazel-complete.bash"
-  if [[ -f "$bash_dest" ]]; then
-    success "bash 补全脚本已存在（${bash_dest}），跳过下载"
+  # Bazel 9+：bazel completion bash（与当前二进制一致，优先）
+  if is_installed bazel && bazel completion bash >"$bash_dest" 2>/dev/null; then
+    success "bash 补全已由 bazel completion bash 生成：${bash_dest}"
+    return 0
+  fi
+
+  info "正在下载 bash 补全脚本（bazel ${version}）..."
+  if curl -fsSL "${base_url}/bazel-complete.bash" -o "$bash_dest" 2>/dev/null; then
+    success "bash 补全脚本已下载至 ${bash_dest}"
   else
-    info "正在下载 bash 补全脚本（bazel ${version}）..."
-    if [[ "$DRY_RUN" == true ]]; then
-      info "[dry-run] curl -fsSL ${base_url}/bazel-complete.bash -o ${bash_dest}"
-    else
-      if curl -fsSL "${base_url}/bazel-complete.bash" -o "$bash_dest" 2>/dev/null; then
-        success "bash 补全脚本已下载至 ${bash_dest}"
-      else
-        warn "bash 补全脚本下载失败（版本 ${version} 可能不存在），尝试 master 分支"
-        curl -fsSL "https://raw.githubusercontent.com/bazelbuild/bazel/master/scripts/bazel-complete.bash" \
-          -o "$bash_dest" || warn "bash 补全脚本下载失败，跳过"
-      fi
+    warn "bash 补全脚本下载失败（版本 ${version} 可能不存在），尝试 master 分支"
+    curl -fsSL "https://raw.githubusercontent.com/bazelbuild/bazel/master/scripts/bazel-complete.bash" \
+      -o "$bash_dest" || warn "bash 补全脚本下载失败，跳过"
+  fi
+}
+
+install_zsh_completion_script() {
+  local zsh_dest="${BAZEL_COMPLETION_DIR}/_bazel"
+  local version="$BAZEL_VERSION"
+  local base_url="https://raw.githubusercontent.com/bazelbuild/bazel/${version}/scripts"
+  local brew_zsh=""
+
+  if [[ "$OS" == "macos" ]]; then
+    if [[ -f /opt/homebrew/share/zsh/site-functions/_bazel ]]; then
+      brew_zsh="/opt/homebrew/share/zsh/site-functions/_bazel"
+    elif [[ -f /usr/local/share/zsh/site-functions/_bazel ]]; then
+      brew_zsh="/usr/local/share/zsh/site-functions/_bazel"
     fi
   fi
 
-  # zsh 补全（macOS brew 已有，但仍下载到统一目录作备份）
-  local zsh_dest="${BAZEL_COMPLETION_DIR}/_bazel"
-  if [[ -f "$zsh_dest" ]]; then
-    success "zsh 补全脚本已存在（${zsh_dest}），跳过下载"
+  if [[ "$DRY_RUN" == true ]]; then
+    info "[dry-run] 安装 zsh 补全至 ${zsh_dest}"
+    return 0
+  fi
+
+  if [[ -n "$brew_zsh" ]]; then
+    cp "$brew_zsh" "$zsh_dest"
+    success "已从 Homebrew 复制 zsh 补全至 ${zsh_dest}"
+  elif [[ -f "$zsh_dest" ]]; then
+    success "zsh 补全脚本已存在（${zsh_dest}）"
   else
     info "正在下载 zsh 补全脚本（bazel ${version}）..."
-    if [[ "$DRY_RUN" == true ]]; then
-      info "[dry-run] curl -fsSL ${base_url}/zsh_completion/_bazel -o ${zsh_dest}"
+    if curl -fsSL "${base_url}/zsh_completion/_bazel" -o "$zsh_dest" 2>/dev/null; then
+      success "zsh 补全脚本已下载至 ${zsh_dest}"
     else
-      if curl -fsSL "${base_url}/zsh_completion/_bazel" -o "$zsh_dest" 2>/dev/null; then
-        success "zsh 补全脚本已下载至 ${zsh_dest}"
-      else
-        warn "zsh 补全脚本下载失败（版本 ${version} 可能不存在），尝试 master 分支"
-        curl -fsSL "https://raw.githubusercontent.com/bazelbuild/bazel/master/scripts/zsh_completion/_bazel" \
-          -o "$zsh_dest" || warn "zsh 补全脚本下载失败，跳过"
-      fi
+      warn "zsh 补全脚本下载失败（版本 ${version} 可能不存在），尝试 master 分支"
+      curl -fsSL "https://raw.githubusercontent.com/bazelbuild/bazel/master/scripts/zsh_completion/_bazel" \
+        -o "$zsh_dest" || warn "zsh 补全脚本下载失败，跳过"
     fi
   fi
+
+  ensure_zsh_completion_entrypoint "$zsh_dest"
+}
+
+download_completion_scripts() {
+  step "安装 Shell 补全脚本"
+
+  if [[ "$DRY_RUN" != true ]]; then
+    mkdir -p "$BAZEL_COMPLETION_DIR" "$BAZEL_COMPLETION_CACHE_DIR"
+  else
+    info "[dry-run] mkdir -p ${BAZEL_COMPLETION_DIR} ${BAZEL_COMPLETION_CACHE_DIR}"
+  fi
+
+  install_bash_completion_script
+  install_zsh_completion_script
 }
 
 setup_bash_completion() {
   step "Bash 补全配置"
 
   local bashrc="$HOME/.bashrc"
-  local marker="# Bazel bash completion"
-  local block="${marker}
-[ -f \"${BAZEL_COMPLETION_DIR}/bazel-complete.bash\" ] && source \"${BAZEL_COMPLETION_DIR}/bazel-complete.bash\""
+  local begin="# >>> bazel-completion BEGIN >>>"
+  local end="# <<< bazel-completion END <<<"
+  local block="${begin}
+# Bazel bash completion（由 tools/bazel/setup.sh 管理）
+[ -f \"${BAZEL_COMPLETION_DIR}/bazel-complete.bash\" ] && . \"${BAZEL_COMPLETION_DIR}/bazel-complete.bash\"
+${end}"
 
-  # 确保 ~/.bashrc 存在
-  [[ -f "$bashrc" ]] || touch "$bashrc"
+  # 清理旧版单行 marker 块（若存在）
+  if [[ "$DRY_RUN" != true ]] && grep -qF "# Bazel bash completion" "$bashrc" 2>/dev/null; then
+    if ! grep -qF "$begin" "$bashrc" 2>/dev/null; then
+      local tmp
+      tmp="$(mktemp)"
+      awk '
+        /^# Bazel bash completion$/ { skip=1; next }
+        skip && /^\[ -f .*bazel-complete\.bash/ { skip=0; next }
+        skip { next }
+        { print }
+      ' "$bashrc" >"$tmp" && mv "$tmp" "$bashrc"
+    fi
+  fi
 
-  append_if_absent "$bashrc" "$marker" "$block"
+  upsert_marked_block "$bashrc" "$begin" "$end" "$block"
 }
 
 setup_zsh_completion() {
   step "Zsh 补全配置"
 
   local zshrc="$HOME/.zshrc"
-  local marker="# Bazel zsh completion"
-
-  # macOS + brew：bazelisk 通过 brew 安装时 _bazel 已在 /opt/homebrew/share/zsh/site-functions/
-  # 同时也将 ~/.config/bazel 加入 fpath，作为跨平台统一方式
-  local block="${marker}
+  local begin="# >>> bazel-completion BEGIN >>>"
+  local end="# <<< bazel-completion END <<<"
+  # fpath 前置 + 官方推荐 cache；compinit -C 刷新 dump 以识别 _bazel
+  local block="${begin}
+# Bazel zsh completion（由 tools/bazel/setup.sh 管理）
 if [[ -d \"${BAZEL_COMPLETION_DIR}\" ]]; then
   fpath=(\"${BAZEL_COMPLETION_DIR}\" \$fpath)
 fi
-autoload -Uz compinit && compinit -C"
+mkdir -p \"${BAZEL_COMPLETION_CACHE_DIR}\"
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path \"${BAZEL_COMPLETION_CACHE_DIR}\"
+autoload -Uz compinit && compinit -C
+${end}"
 
-  # macOS brew 路径额外提示
   if [[ "$OS" == "macos" ]] && [[ -d /opt/homebrew/share/zsh/site-functions ]]; then
-    info "检测到 Homebrew zsh site-functions，_bazel 补全已由 brew 安装"
+    info "检测到 Homebrew zsh site-functions；优先使用 ${BAZEL_COMPLETION_DIR}/_bazel（已修复首次 Tab）"
   fi
 
-  append_if_absent "$zshrc" "$marker" "$block"
+  # 清理旧版未加 BEGIN/END 的块
+  if [[ "$DRY_RUN" != true ]] && grep -qF "# Bazel zsh completion" "$zshrc" 2>/dev/null; then
+    if ! grep -qF "$begin" "$zshrc" 2>/dev/null; then
+      local tmp
+      tmp="$(mktemp)"
+      awk '
+        /^# Bazel zsh completion$/ { skip=1; next }
+        skip && /^autoload -Uz compinit && compinit -C$/ { skip=0; next }
+        skip { next }
+        { print }
+      ' "$zshrc" >"$tmp" && mv "$tmp" "$zshrc"
+    fi
+  fi
+
+  upsert_marked_block "$zshrc" "$begin" "$end" "$block"
 }
 
 setup_completion() {
@@ -454,10 +577,11 @@ post_install_notes() {
   echo -e "    在 Cursor/VSCode 中安装 Bazel 扩展后，配置 settings.json："
   echo -e "      ${BOLD}\"bazel.lsp.command\": \"starpls\"${NC}"
   echo -e ""
-  echo -e "  ${YELLOW}Shell 补全${NC}: 补全脚本已写入 ${BAZEL_COMPLETION_DIR}/"
+  echo -e "  ${YELLOW}Shell 补全${NC}: 脚本在 ${BAZEL_COMPLETION_DIR}/（zsh 已修复首次 Tab）"
   echo -e "    立即生效："
   echo -e "      ${BOLD}source ~/.bashrc${NC}   # bash"
   echo -e "      ${BOLD}source ~/.zshrc${NC}    # zsh"
+  echo -e "    验证: 输入 ${BOLD}bazel ${NC}后按 Tab，应列出 build/test/run 等命令"
   echo -e ""
   echo -e "  ${YELLOW}验证安装${NC}:"
   echo -e "    bazel version     # 查看当前使用的 Bazel 版本"
