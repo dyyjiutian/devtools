@@ -15,7 +15,8 @@
 3. 安装 vim-plug 及所有插件
 4. 安装 coc.nvim 语言服务器（Python、Go、Java、Shell、JSON、YAML）
 
-> macOS 通过 Homebrew 安装依赖，Linux 支持 apt-get 和 yum。
+> macOS 通过 Homebrew 安装依赖；Linux 支持 apt-get / dnf / yum。
+> 在 Alinux、RHEL 等仓库没有 `fzf` / `ripgrep` 时，会自动从 GitHub 下载二进制到 `~/.local/bin`（优先使用仓库 `cache/binaries/`）。
 
 ## 插件列表
 

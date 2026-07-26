@@ -1,0 +1,9 @@
+FROM almalinux:9
+
+# AlmaLinux minimal images already ship curl-minimal / coreutils-single.
+# Only pull packages that are not already satisfied to avoid dnf conflicts.
+RUN dnf install -y git \
+    && dnf clean all
+
+WORKDIR /workspace
+CMD ["bash"]

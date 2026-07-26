@@ -413,4 +413,6 @@ main() {
     echo
 }
 
-main
+if [[ "${SETUP_NO_MAIN:-false}" != "true" && "${SETUP_NO_MAIN:-false}" != "1" ]]; then
+    main
+fi

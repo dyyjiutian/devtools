@@ -1,0 +1,33 @@
+load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "tmux_srcs",
+    srcs = [
+        "setup.sh",
+        "tmux.conf",
+        "README.md",
+    ],
+)
+
+exports_files([
+    "setup.sh",
+    "tests/tmux_suite.sh",
+])
+
+devtools_module_tests(
+    name = "tmux",
+    suite = ":tests/tmux_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":tmux_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_centos",
+        "macos",
+    ],
+    docker_profiles = [
+        "linux_ubuntu",
+        "linux_centos",
+    ],
+)

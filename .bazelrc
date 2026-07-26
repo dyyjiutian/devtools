@@ -1,0 +1,21 @@
+# DevTools Bazel configuration
+
+# Keep test output readable locally
+test --test_output=errors
+test --test_summary=detailed
+
+# L2 Docker tests are opt-in (require local Docker daemon)
+test --test_tag_filters=-requires-docker
+
+# Convenience: bazel test --config=docker //tools/git/...
+# Run outside the sandbox so the Docker socket and host docker group are visible.
+test:docker --test_tag_filters=requires-docker
+test:docker --spawn_strategy=local
+test:docker --strategy=TestRunner=standalone
+test:docker --test_env=HOME
+test:docker --test_env=USER
+test:docker --test_env=DOCKER_HOST=unix:///var/run/docker.sock
+
+# Cache
+build --disk_cache=~/.cache/bazel-disk-cache
+test --disk_cache=~/.cache/bazel-disk-cache

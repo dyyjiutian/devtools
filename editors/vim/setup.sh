@@ -21,7 +21,8 @@ Vim Setup Script - 一键配置 Vim 开发环境
 该脚本会执行以下配置:
   1. 安装系统依赖 (vim, node, ctags, fzf, ripgrep)
      - macOS 通过 Homebrew 安装
-     - Linux 通过 apt-get 或 yum 安装
+     - Linux 通过 apt-get / dnf / yum 安装；fzf、ripgrep 在仓库缺失时
+       自动回退到 GitHub 二进制（优先 cache/，安装到 ~/.local/bin）
   2. 检测 Vim 版本 (coc.nvim 需要 Vim 8.1.1719+)
   3. 备份已有的 ~/.vimrc (如果存在)
   4. 将本目录的 vimrc 软链接到 ~/.vimrc
@@ -182,18 +183,185 @@ install_deps_macos() {
     done
 }
 
+# Install a package via the detected Linux package manager; return non-zero on miss.
+_linux_pkg_install() {
+    local pkg="$1"
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y "$pkg"
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y "$pkg"
+    elif command -v yum &>/dev/null; then
+        sudo yum install -y "$pkg"
+    else
+        return 1
+    fi
+}
+
+_ensure_local_bin() {
+    mkdir -p "$HOME/.local/bin"
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+}
+
+# fzf is often missing from RHEL/Alinux repos; fall back to GitHub release / git clone.
+_install_fzf_linux() {
+    if command -v fzf &>/dev/null; then
+        success "fzf already installed: $(command -v fzf)"
+        return 0
+    fi
+
+    info "Installing fzf..."
+    if _linux_pkg_install fzf >/dev/null 2>&1 && command -v fzf &>/dev/null; then
+        success "fzf installed via package manager"
+        return 0
+    fi
+
+    local fzf_version="0.72.0"
+    local fzf_arch
+    case "$(uname -m)" in
+        aarch64|arm64) fzf_arch="linux_arm64" ;;
+        *)             fzf_arch="linux_amd64" ;;
+    esac
+    local fzf_filename="fzf-${fzf_version}-${fzf_arch}.tar.gz"
+    local cache_dir="${DEVTOOLS_CACHE_DIR:-$SCRIPT_DIR/../../cache}"
+    local cached="${cache_dir}/binaries/${fzf_filename}"
+    local url="https://github.com/junegunn/fzf/releases/download/v${fzf_version}/${fzf_filename}"
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+
+    if [[ -f "$cached" ]]; then
+        info "Using local cache: binaries/${fzf_filename}"
+        cp "$cached" "$tmpdir/fzf.tar.gz"
+    elif curl -fL --retry 3 -o "$tmpdir/fzf.tar.gz" "$url"; then
+        :
+    else
+        warn "fzf binary download failed; trying git clone fallback"
+        rm -rf "$tmpdir"
+        local fzf_dir="$HOME/.fzf"
+        if [[ ! -f "$fzf_dir/install" ]]; then
+            if [[ -d "$fzf_dir" ]]; then
+                mv "$fzf_dir" "${fzf_dir}.backup.$(date +%Y%m%d%H%M%S)"
+            fi
+            git clone --depth 1 https://github.com/junegunn/fzf.git "$fzf_dir"
+        fi
+        "$fzf_dir/install" --bin
+        if command -v fzf &>/dev/null || [[ -x "$fzf_dir/bin/fzf" ]]; then
+            _ensure_local_bin
+            if [[ -x "$fzf_dir/bin/fzf" && ! -x "$HOME/.local/bin/fzf" ]]; then
+                ln -sf "$fzf_dir/bin/fzf" "$HOME/.local/bin/fzf"
+            fi
+            success "fzf installed via git clone"
+            return 0
+        fi
+        warn "fzf install failed; FZF features (,p /,g) need a manual install"
+        return 1
+    fi
+
+    if tar -xzf "$tmpdir/fzf.tar.gz" -C "$tmpdir" fzf 2>/dev/null; then
+        _ensure_local_bin
+        install -m 755 "$tmpdir/fzf" "$HOME/.local/bin/fzf"
+        success "fzf installed to ~/.local/bin/fzf"
+        rm -rf "$tmpdir"
+        return 0
+    fi
+
+    rm -rf "$tmpdir"
+    warn "fzf install failed; FZF features (,p /,g) need a manual install"
+    return 1
+}
+
+# ripgrep (rg) is often missing from RHEL/Alinux repos; fall back to GitHub release.
+_install_ripgrep_linux() {
+    if command -v rg &>/dev/null; then
+        success "ripgrep already installed: $(command -v rg)"
+        return 0
+    fi
+
+    info "Installing ripgrep..."
+    if _linux_pkg_install ripgrep >/dev/null 2>&1 && command -v rg &>/dev/null; then
+        success "ripgrep installed via package manager"
+        return 0
+    fi
+
+    local rg_version="14.1.1"
+    local rg_arch
+    case "$(uname -m)" in
+        aarch64|arm64) rg_arch="aarch64-unknown-linux-musl" ;;
+        *)             rg_arch="x86_64-unknown-linux-musl" ;;
+    esac
+    local rg_dirname="ripgrep-${rg_version}-${rg_arch}"
+    local rg_filename="${rg_dirname}.tar.gz"
+    local cache_dir="${DEVTOOLS_CACHE_DIR:-$SCRIPT_DIR/../../cache}"
+    local cached="${cache_dir}/binaries/${rg_filename}"
+    local url="https://github.com/BurntSushi/ripgrep/releases/download/${rg_version}/${rg_filename}"
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+
+    if [[ -f "$cached" ]]; then
+        info "Using local cache: binaries/${rg_filename}"
+        cp "$cached" "$tmpdir/rg.tar.gz"
+    elif ! curl -fL --retry 3 -o "$tmpdir/rg.tar.gz" "$url"; then
+        rm -rf "$tmpdir"
+        warn "ripgrep download failed; install manually: https://github.com/BurntSushi/ripgrep/releases"
+        return 1
+    fi
+
+    if tar -xzf "$tmpdir/rg.tar.gz" -C "$tmpdir" 2>/dev/null && [[ -x "$tmpdir/$rg_dirname/rg" ]]; then
+        _ensure_local_bin
+        install -m 755 "$tmpdir/$rg_dirname/rg" "$HOME/.local/bin/rg"
+        success "ripgrep installed to ~/.local/bin/rg"
+        rm -rf "$tmpdir"
+        return 0
+    fi
+
+    rm -rf "$tmpdir"
+    warn "ripgrep install failed; install manually: https://github.com/BurntSushi/ripgrep/releases"
+    return 1
+}
+
 install_deps_linux() {
     info "Installing dependencies via package manager..."
 
     if command -v apt-get &>/dev/null; then
         sudo apt-get update
-        sudo apt-get install -y vim nodejs npm universal-ctags fzf ripgrep curl git
-    elif command -v yum &>/dev/null; then
-        sudo yum install -y vim nodejs npm ctags fzf ripgrep curl git
-    else
+    elif ! command -v dnf &>/dev/null && ! command -v yum &>/dev/null; then
         error "Unsupported package manager. Install manually: vim, nodejs, npm, ctags, fzf, ripgrep"
         exit 1
     fi
+
+    # Install packages individually so missing names (common on Alinux/RHEL) do not abort.
+    local pkg
+    if command -v apt-get &>/dev/null; then
+        for pkg in vim nodejs npm universal-ctags curl git; do
+            if _linux_pkg_install "$pkg" 2>/dev/null; then
+                success "$pkg installed/present"
+            else
+                warn "Failed to install $pkg via apt-get"
+            fi
+        done
+    else
+        for pkg in vim-enhanced vim nodejs npm ctags curl git; do
+            # vim-enhanced provides /usr/bin/vim on RHEL-family; plain "vim" may be absent.
+            if [[ "$pkg" == "vim" ]] && command -v vim &>/dev/null; then
+                success "vim already installed"
+                continue
+            fi
+            if [[ "$pkg" == "vim-enhanced" ]] && command -v vim &>/dev/null; then
+                success "vim already installed"
+                continue
+            fi
+            if _linux_pkg_install "$pkg" 2>/dev/null; then
+                success "$pkg installed/present"
+            else
+                warn "Package not available via dnf/yum: $pkg"
+            fi
+        done
+    fi
+
+    _install_fzf_linux || true
+    _install_ripgrep_linux || true
 }
 
 # --- Check Vim version ---

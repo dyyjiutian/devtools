@@ -1,0 +1,31 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "lib/run_module_test.sh",
+    "docker/run_in_docker.sh",
+])
+
+filegroup(
+    name = "run_module_test",
+    srcs = ["lib/run_module_test.sh"],
+)
+
+filegroup(
+    name = "run_in_docker",
+    srcs = ["docker/run_in_docker.sh"],
+)
+
+filegroup(
+    name = "lib_files",
+    srcs = glob(["lib/**"]),
+)
+
+filegroup(
+    name = "docker_files",
+    srcs = glob(["docker/**"]),
+)
+
+filegroup(
+    name = "profiles",
+    srcs = glob(["profiles/**"], allow_empty = True),
+)
