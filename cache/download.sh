@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 预下载所有离线安装包到 cache 目录
 # 用法: ./download.sh [macos|linux|all]  （默认 all）
+#
+# Linux 二进制版本优先从 os/linux/packages.centos.list 读取，避免双处维护。
 
 set -euo pipefail
 
@@ -8,6 +10,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="${SCRIPT_DIR}/scripts"
 BINARIES_DIR="${SCRIPT_DIR}/binaries"
 FONTS_DIR="${SCRIPT_DIR}/fonts"
+PACKAGES_CENTOS_LIST="${SCRIPT_DIR}/../os/linux/packages.centos.list"
+
+# shellcheck source=../os/lib/packages_list.sh
+source "${SCRIPT_DIR}/../os/lib/packages_list.sh"
 
 mkdir -p "$SCRIPTS_DIR" "$BINARIES_DIR" "$FONTS_DIR"
 
@@ -41,6 +47,17 @@ download() {
   fi
 }
 
+pkg_version() {
+  local name="$1" fallback="$2"
+  local ver
+  if [[ -f "$PACKAGES_CENTOS_LIST" ]] && ver="$(packages_list_get_version "$PACKAGES_CENTOS_LIST" "$name" 2>/dev/null)"; then
+    echo "$ver"
+  else
+    warn "无法从 packages.centos.list 读取 ${name}，使用回退版本 ${fallback}"
+    echo "$fallback"
+  fi
+}
+
 download_macos() {
   echo -e "\n${BOLD}▶ macOS 所需文件${NC}"
   download \
@@ -61,22 +78,30 @@ download_linux() {
   download \
     "https://download.docker.com/linux/centos/docker-ce.repo" \
     "${SCRIPTS_DIR}/docker-ce.repo"
+  local node_version
+  node_version="$(pkg_version node 20)"
   download \
-    "https://rpm.nodesource.com/setup_20.x" \
-    "${SCRIPTS_DIR}/nodesource-setup-20.x"
+    "https://rpm.nodesource.com/setup_${node_version}.x" \
+    "${SCRIPTS_DIR}/nodesource-setup-${node_version}.x"
   download \
     "https://github.com/XTLS/Xray-install/raw/main/install-release.sh" \
     "${SCRIPTS_DIR}/install-release.sh"
 
-  # 二进制包版本
-  local yazi_version="0.3.3"
-  local lazygit_version="0.44.1"
-  local fzf_version="0.72.0"
-  local zoxide_version="0.9.4"
+  # 二进制包版本（来自 packages.centos.list；未列出的保持本地默认）
+  local yazi_version lazygit_version fzf_version zoxide_version nerd_fonts_version tmux_version
+  local bat_version rg_version
+  yazi_version="$(pkg_version yazi 0.3.3)"
+  lazygit_version="$(pkg_version lazygit 0.44.1)"
+  fzf_version="$(pkg_version fzf 0.72.0)"
+  zoxide_version="$(pkg_version zoxide 0.9.4)"
+  nerd_fonts_version="$(pkg_version nerd-fonts 3.3.0)"
+  tmux_version="$(pkg_version tmux 3.7b)"
+  bat_version="$(pkg_version bat 0.25.0)"
+  rg_version="$(pkg_version rg 14.1.1)"
   local starship_version="1.25.1"
-  local nerd_fonts_version="3.3.0"
   local xray_version="26.3.27"
-  local tmux_version="3.7b"
+
+  info "版本: yazi=${yazi_version} lazygit=${lazygit_version} fzf=${fzf_version} zoxide=${zoxide_version} bat=${bat_version} rg=${rg_version} nerd-fonts=${nerd_fonts_version} tmux=${tmux_version}"
 
   # yazi (x86_64 / arm64) — musl 静态编译版，兼容 CentOS/RHEL 8（glibc 2.28）
   for arch in x86_64 aarch64; do
@@ -106,6 +131,20 @@ download_linux() {
       "${BINARIES_DIR}/zoxide-${zoxide_version}-${arch}.tar.gz"
   done
 
+  # bat (x86_64 / arm64)
+  for arch in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+    download \
+      "https://github.com/sharkdp/bat/releases/download/v${bat_version}/bat-v${bat_version}-${arch}.tar.gz" \
+      "${BINARIES_DIR}/bat-v${bat_version}-${arch}.tar.gz"
+  done
+
+  # ripgrep / rg (x86_64 / arm64)
+  for arch in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+    download \
+      "https://github.com/BurntSushi/ripgrep/releases/download/${rg_version}/ripgrep-${rg_version}-${arch}.tar.gz" \
+      "${BINARIES_DIR}/ripgrep-${rg_version}-${arch}.tar.gz"
+  done
+
   # Starship (x86_64 / arm64) — musl 静态编译版，适合兼容性较差的 ECS 系统
   for arch in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
     download \
@@ -128,7 +167,7 @@ download_linux() {
   # Nerd Fonts Symbols Only — 架构无关，yazi/终端图标字体
   download \
     "https://github.com/ryanoasis/nerd-fonts/releases/download/v${nerd_fonts_version}/NerdFontsSymbolsOnly.tar.xz" \
-    "${SCRIPT_DIR}/fonts/NerdFontsSymbolsOnly.tar.xz"
+    "${FONTS_DIR}/NerdFontsSymbolsOnly.tar.xz"
 }
 
 target="${1:-all}"

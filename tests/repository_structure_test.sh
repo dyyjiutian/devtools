@@ -12,7 +12,7 @@ required_dirs=(
   network network/frp network/frp/client network/frp/server
   network/proxy network/proxy/client network/proxy/server
   network/vpn network/vpn/client network/vpn/exit network/vpn/relay
-  os os/linux os/macos os/macos/agent-notify os/macos/power os/macos/remote-desktop
+  os os/lib os/linux os/macos os/macos/agent-notify os/macos/power os/macos/remote-desktop
   shell shell/bash shell/oh-my-zsh shell/starship shell/zsh
   terminal terminal/ghostty terminal/iterm2 terminal/tmux terminal/yazi
   tests

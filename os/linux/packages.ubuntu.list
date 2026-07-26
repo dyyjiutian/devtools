@@ -1,0 +1,30 @@
+# Ubuntu/Debian common packages — installed by os/linux/setup_ubuntu.sh (part 2)
+# Columns: name  version  source  kind  tags
+#
+# kind:  cli | tui | gui
+# tags:  comma-separated purposes
+#   productivity  效率提升
+#   diagnostic    问题诊断
+#   dev           开发环境
+#   ops           运维 / 基础设施
+#   shell         Shell / 终端体验
+#
+# Sources: apt | apt-repo | docker-ce | nodesource | github | module | script
+
+# CLI
+git               latest      apt         cli   dev
+git-lfs           latest      apt         cli   dev
+jq                latest      apt         cli   productivity,dev
+bat               latest      apt         cli   productivity
+rg                latest      apt         cli   productivity,diagnostic
+docker            latest      docker-ce   cli   ops,dev
+node              20          nodesource  cli   dev
+cloc              latest      apt         cli   diagnostic,dev
+gh                latest      apt-repo    cli   dev
+zoxide            latest      script      cli   productivity
+
+# TUI
+tmux              3.7b        module      tui   productivity,shell
+fzf               latest      apt         tui   productivity
+yazi              0.3.3       github      tui   productivity
+lazygit           0.44.1      github      tui   dev

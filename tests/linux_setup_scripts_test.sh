@@ -112,4 +112,90 @@ find "$TMP_DIR/fzf-incomplete-home" -maxdepth 1 -type d -name '.fzf.backup.*' | 
 assert_not_contains "$ROOT/cache/scripts/nodesource-setup-20.x" '! [ -f /etc/redhat-release ] && ! grep -q "Amazon Linux" /etc/system-release'
 assert_contains "$ROOT/cache/scripts/nodesource-setup-20.x" 'command -v rpm'
 
+# packages.list parser and OS setup dry-run (no real install)
+bash -n "$ROOT/os/lib/packages_list.sh" || fail "bash -n os/lib/packages_list.sh"
+bash -n "$ROOT/os/linux/setup_ubuntu.sh" || fail "bash -n setup_ubuntu.sh"
+bash -n "$ROOT/os/linux/setup_centos.sh" || fail "bash -n setup_centos.sh"
+bash -n "$ROOT/os/macos/setup.sh" || fail "bash -n os/macos/setup.sh"
+bash -n "$ROOT/cache/download.sh" || fail "bash -n cache/download.sh"
+
+assert_file "$ROOT/os/macos/packages.list"
+assert_file "$ROOT/os/linux/packages.ubuntu.list"
+assert_file "$ROOT/os/linux/packages.centos.list"
+
+# shellcheck disable=SC1091
+source "$ROOT/os/lib/packages_list.sh"
+yazi_ver="$(packages_list_get_version "$ROOT/os/linux/packages.centos.list" yazi)" ||
+  fail "packages_list_get_version yazi"
+[[ "$yazi_ver" == "0.3.3" ]] || fail "expected yazi 0.3.3, got $yazi_ver"
+tmux_ver="$(packages_list_get_version "$ROOT/os/linux/packages.centos.list" tmux)" ||
+  fail "packages_list_get_version tmux"
+[[ "$tmux_ver" == "3.7b" ]] || fail "expected tmux 3.7b, got $tmux_ver"
+packages_list_has "$ROOT/os/macos/packages.list" git || fail "macos packages.list missing git"
+packages_list_has "$ROOT/os/linux/packages.ubuntu.list" docker || fail "ubuntu list missing docker"
+
+centos_dry="$TMP_DIR/centos-dry.log"
+bash "$ROOT/os/linux/setup_centos.sh" --dry-run --packages-only >"$centos_dry" 2>&1 ||
+  fail "setup_centos --dry-run failed: $(cat "$centos_dry")"
+assert_contains "$centos_dry" "[dry-run] docker"
+assert_contains "$centos_dry" "[dry-run] yazi"
+assert_contains "$centos_dry" "packages.centos.list"
+
+ubuntu_dry="$TMP_DIR/ubuntu-dry.log"
+bash "$ROOT/os/linux/setup_ubuntu.sh" --dry-run --packages-only >"$ubuntu_dry" 2>&1 ||
+  fail "setup_ubuntu --dry-run failed: $(cat "$ubuntu_dry")"
+assert_contains "$ubuntu_dry" "[dry-run] docker"
+assert_contains "$ubuntu_dry" "[dry-run] lazygit"
+
+packages_list_has "$ROOT/os/linux/packages.centos.list" jq || fail "centos list missing jq"
+packages_list_has "$ROOT/os/linux/packages.centos.list" bat || fail "centos list missing bat"
+packages_list_has "$ROOT/os/linux/packages.centos.list" rg || fail "centos list missing rg"
+packages_list_has "$ROOT/os/linux/packages.ubuntu.list" bat || fail "ubuntu list missing bat"
+packages_list_has "$ROOT/os/macos/packages.list" rg || fail "macos list missing rg"
+[[ "$(packages_list_brew_formula rg)" == "ripgrep" ]] || fail "rg brew formula mapping"
+[[ "$(packages_list_sys_pkg rg)" == "ripgrep" ]] || fail "rg sys pkg mapping"
+
+centos_check="$TMP_DIR/centos-check.log"
+bash "$ROOT/os/linux/setup_centos.sh" --check >"$centos_check" 2>&1 ||
+  fail "setup_centos --check failed: $(cat "$centos_check")"
+assert_contains "$centos_check" "NAME"
+assert_contains "$centos_check" "KIND"
+assert_contains "$centos_check" "TAGS"
+assert_contains "$centos_check" "jq"
+assert_contains "$centos_check" "bat"
+assert_contains "$centos_check" "rg"
+assert_contains "$centos_check" "summary:"
+
+centos_kind="$TMP_DIR/centos-kind.log"
+bash "$ROOT/os/linux/setup_centos.sh" --check --kind tui >"$centos_kind" 2>&1 ||
+  fail "setup_centos --check --kind tui failed: $(cat "$centos_kind")"
+assert_contains "$centos_kind" "tmux"
+assert_contains "$centos_kind" "yazi"
+assert_not_contains "$centos_kind" "docker"
+
+centos_tag="$TMP_DIR/centos-tag.log"
+bash "$ROOT/os/linux/setup_centos.sh" --check --tag diagnostic >"$centos_tag" 2>&1 ||
+  fail "setup_centos --check --tag diagnostic failed: $(cat "$centos_tag")"
+assert_contains "$centos_tag" "rg"
+assert_contains "$centos_tag" "cloc"
+assert_not_contains "$centos_tag" "lazygit"
+
+centos_install_one="$TMP_DIR/centos-install-one.log"
+bash "$ROOT/os/linux/setup_centos.sh" --install bat --dry-run >"$centos_install_one" 2>&1 ||
+  fail "setup_centos --install bat --dry-run failed: $(cat "$centos_install_one")"
+assert_contains "$centos_install_one" "[dry-run] bat"
+assert_not_contains "$centos_install_one" "[dry-run] docker"
+
+ubuntu_check="$TMP_DIR/ubuntu-check.log"
+bash "$ROOT/os/linux/setup_ubuntu.sh" --check >"$ubuntu_check" 2>&1 ||
+  fail "setup_ubuntu --check failed: $(cat "$ubuntu_check")"
+assert_contains "$ubuntu_check" "summary:"
+grep -Eq 'installed|missing' "$ubuntu_check" || fail "ubuntu --check missing status column"
+
+ubuntu_filter_dry="$TMP_DIR/ubuntu-filter-dry.log"
+bash "$ROOT/os/linux/setup_ubuntu.sh" --dry-run --packages-only --kind tui >"$ubuntu_filter_dry" 2>&1 ||
+  fail "setup_ubuntu --kind tui dry-run failed: $(cat "$ubuntu_filter_dry")"
+assert_contains "$ubuntu_filter_dry" "[dry-run] tmux"
+assert_not_contains "$ubuntu_filter_dry" "[dry-run] docker"
+
 echo "PASS: Linux setup cache and ECS repository regression tests"

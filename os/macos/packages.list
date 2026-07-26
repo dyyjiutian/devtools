@@ -1,0 +1,41 @@
+# macOS common packages — installed by os/macos/setup.sh (part 2)
+# Columns: name  version  source  kind  tags
+#
+# kind:  cli | tui | gui
+# tags:  comma-separated purposes
+#   productivity  效率提升
+#   diagnostic    问题诊断
+#   dev           开发环境
+#   ops           运维 / 基础设施
+#   shell         Shell / 终端体验
+#
+# Sources: brew | brew-cask | nvm | script
+
+# CLI
+git               latest      brew        cli   dev
+curl              latest      brew        cli   ops,diagnostic
+wget              latest      brew        cli   ops
+jq                latest      brew        cli   productivity,dev
+bat               latest      brew        cli   productivity
+rg                latest      brew        cli   productivity,diagnostic
+tree              latest      brew        cli   diagnostic
+gh                latest      brew        cli   dev
+cloc              latest      brew        cli   diagnostic,dev
+zoxide            latest      brew        cli   productivity
+git-delta         latest      brew        cli   dev
+node              lts         nvm         cli   dev
+oh-my-zsh         latest      script      cli   shell
+
+# TUI
+htop              latest      brew        tui   diagnostic
+neovim            latest      brew        tui   dev
+tmux              latest      brew        tui   productivity,shell
+fzf               latest      brew        tui   productivity
+yazi              latest      brew        tui   productivity
+lazygit           latest      brew        tui   dev
+
+# GUI
+iterm2            latest      brew-cask   gui   shell
+visual-studio-code latest     brew-cask   gui   dev
+docker            latest      brew-cask   gui   ops,dev
+obsidian          latest      brew-cask   gui   productivity

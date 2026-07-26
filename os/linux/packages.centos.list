@@ -1,0 +1,29 @@
+# CentOS/RHEL common packages — installed by os/linux/setup_centos.sh (part 2)
+# Columns: name  version  source  kind  tags
+#
+# kind:  cli | tui | gui
+# tags:  comma-separated purposes
+#   productivity  效率提升
+#   diagnostic    问题诊断
+#   dev           开发环境
+#   ops           运维 / 基础设施
+#   shell         Shell / 终端体验
+#
+# Sources: dnf | docker-ce | nodesource | github | module | font
+
+# CLI
+git               latest      dnf         cli   dev
+jq                latest      dnf         cli   productivity,dev
+bat               0.25.0      github      cli   productivity
+rg                14.1.1      github      cli   productivity,diagnostic
+docker            latest      docker-ce   cli   ops,dev
+node              20          nodesource  cli   dev
+cloc              latest      dnf         cli   diagnostic,dev
+zoxide            0.9.4       github      cli   productivity
+
+# TUI
+tmux              3.7b        module      tui   productivity,shell
+fzf               0.72.0      github      tui   productivity
+yazi              0.3.3       github      tui   productivity
+lazygit           0.44.1      github      tui   dev
+nerd-fonts        3.3.0       font        tui   shell

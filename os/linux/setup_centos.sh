@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # CentOS 初始化安装脚本
-# 用途：自动安装常用开发工具和软件
+# Part 1: OS 基础配置（系统信息、包管理器、基础依赖）
+# Part 2: 按 packages.centos.list 安装常见软件
 
 set -euo pipefail
 
@@ -26,12 +27,13 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
-# ─── 本地缓存配置 ────────────────────────────────────────────────────────────
-# 若 cache/ 目录中存在对应文件，优先使用本地缓存，否则从官方 URL 下载。
-# 运行 `cache/download.sh linux` 可预先下载所有文件。
+# ─── 路径与缓存 ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
+PACKAGES_LIST="${SCRIPT_DIR}/packages.centos.list"
+# shellcheck source=../lib/packages_list.sh
+source "${SCRIPT_DIR}/../lib/packages_list.sh"
 
 # 本地缓存优先下载：有缓存用缓存，否则从官方 URL 下载
 # 用法: fetch <cache相对路径> <官方URL> <输出文件>
@@ -105,48 +107,41 @@ ${BOLD}用法:${NC}
   $(basename "$0") [选项]
 
 ${BOLD}说明:${NC}
-  CentOS 初始化脚本，自动检测系统信息并安装常用开发工具和软件。
+  CentOS 初始化脚本，分两段执行：
+    1. OS 基础配置（系统信息、包管理器、基础依赖）
+    2. 按 packages.centos.list 安装常见软件
 
 ${BOLD}选项:${NC}
   -h, --help          显示此帮助信息并退出
   --info-only         仅显示系统信息，不执行安装
-  --skip-docker       跳过 Docker CE 安装
-  --skip-git          跳过 Git 安装
-  --skip-node         跳过 Node.js / npm 安装
-  --skip-cloc         跳过 cloc 安装
-  --skip-tools        跳过终端工具安装 (tmux, fzf, yazi, zoxide, lazygit)
-  --skip-fonts        跳过 Nerd Fonts 安装 (yazi 图标字体)
+  --check             检查 packages.centos.list 中各软件是否已安装
+  --install <name>    仅安装清单中的指定软件（如 bat、rg、jq）
+  --kind <cli|tui|gui>
+                      按界面类型筛选（可与 --check / 安装联用）
+  --tag <tag>         按用途筛选：productivity|diagnostic|dev|ops|shell
+  --dry-run           预览将执行的步骤，不实际安装
+  --base-only         仅执行 OS 基础配置
+  --packages-only     跳过基础配置，仅按清单安装
+  --skip-docker       跳过 Docker CE
+  --skip-git          跳过 Git
+  --skip-node         跳过 Node.js / npm
+  --skip-cloc         跳过 cloc
+  --skip-tools        跳过终端工具 (tmux, fzf, yazi, zoxide, lazygit)
+  --skip-fonts        跳过 Nerd Fonts
 
-${BOLD}安装的软件:${NC}
-  Docker CE:
-    docker-ce        - Docker 社区版
-    docker-ce-cli    - Docker 命令行工具
-    containerd.io    - 容器运行时
-
-  Git:
-    git              - 版本控制工具
-
-  Node.js:
-    nodejs (LTS)     - Node.js LTS 版本
-    npm              - Node 包管理器
-
-  cloc:
-    cloc             - 代码行数统计工具
-
-  终端增强工具:
-    tmux 3.7b        - 终端复用器（源码安装到 /usr/local，支持 extended-keys）
-    fzf              - 模糊搜索工具
-    yazi             - 终端文件管理器
-    zoxide           - 快速目录跳转工具
-    lazygit          - 终端 Git TUI 客户端
-
-  Nerd Fonts:
-    NerdFontsSymbolsOnly  - yazi/终端图标字体 (安装到 /usr/share/fonts/nerd-fonts/)
+${BOLD}清单文件:${NC}
+  ${PACKAGES_LIST}
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
   $(basename "$0") --info-only     # 仅查看系统信息
-  $(basename "$0") --skip-docker   # 跳过 Docker 安装
+  $(basename "$0") --check         # 检查清单安装状态
+  $(basename "$0") --check --kind tui
+  $(basename "$0") --check --tag diagnostic
+  $(basename "$0") --install bat   # 只安装 bat
+  $(basename "$0") --tag productivity --packages-only
+  $(basename "$0") --dry-run       # 预览
+  $(basename "$0") --skip-docker   # 跳过 Docker
 
 EOF
 }
@@ -155,7 +150,6 @@ EOF
 detect_system_info() {
   step "系统基本信息"
 
-  # 系统版本
   local os_id os_version os_pretty_name
   if [[ -f /etc/os-release ]]; then
     os_id=$(grep '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
@@ -167,20 +161,16 @@ detect_system_info() {
     os_pretty_name="unknown"
   fi
 
-  # 检查是否为 CentOS/RHEL
   if [[ "$os_id" != "centos" && "$os_id" != "rhel" && "$os_id" != "rocky" && "$os_id" != "almalinux" && "$os_id" != "alinux" && "$os_id" != "anolis" ]]; then
     warn "此脚本主要针对 CentOS/RHEL 系列，当前系统: ${os_id}"
   fi
 
-  # 架构
   local arch
   arch=$(uname -m)
 
-  # CPU 核心数
   local cpu_cores
   cpu_cores=$(nproc 2>/dev/null || echo "unknown")
 
-  # 内存
   local mem_total mem_gb
   if [[ -f /proc/meminfo ]]; then
     mem_total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
@@ -189,16 +179,13 @@ detect_system_info() {
     mem_gb="unknown"
   fi
 
-  # 磁盘空间
   local disk_info
   disk_info=$(df -h / | awk 'NR==2 {printf "总计 %s，已用 %s，可用 %s", $2, $3, $4}')
 
-  # 主机名 & 用户
   local hostname username
   hostname=$(hostname 2>/dev/null || echo "unknown")
   username=$(whoami)
 
-  # 内核版本
   local kernel
   kernel=$(uname -r)
 
@@ -215,12 +202,10 @@ detect_system_info() {
   echo -e ""
 }
 
-# ─── 检查命令是否存在 ────────────────────────────────────────────────────────────
 is_installed() {
   command -v "$1" &>/dev/null
 }
 
-# ─── 检测包管理器 ────────────────────────────────────────────────────────────────
 detect_pkg_manager() {
   if command -v dnf &>/dev/null; then
     echo "dnf"
@@ -232,7 +217,6 @@ detect_pkg_manager() {
   fi
 }
 
-# ─── 检查是否为 root 用户 ────────────────────────────────────────────────────────
 check_root() {
   if [[ $EUID -ne 0 ]]; then
     if is_installed sudo; then
@@ -244,7 +228,6 @@ check_root() {
   fi
 }
 
-# ─── 使用 sudo 或直接执行 ────────────────────────────────────────────────────────
 run_cmd() {
   if [[ $EUID -eq 0 ]]; then
     "$@"
@@ -253,9 +236,47 @@ run_cmd() {
   fi
 }
 
-# ─── 安装 Docker CE ──────────────────────────────────────────────────────────────
+# ─── Part 1: OS 基础配置 ─────────────────────────────────────────────────────────
+install_base_deps() {
+  step "基础依赖安装（OS 基础）"
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] 安装 curl wget ca-certificates yum-utils ..."
+    return 0
+  fi
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+  info "包管理器: ${pkg_manager}"
+  run_cmd "$pkg_manager" install -y curl wget ca-certificates yum-utils \
+    device-mapper-persistent-data lvm2 2>/dev/null || \
+    run_cmd "$pkg_manager" install -y curl wget ca-certificates yum-utils
+  success "基础依赖安装完成"
+}
+
+configure_os_base() {
+  step "Part 1: OS 基础配置"
+  check_root
+  install_base_deps
+}
+
+# ─── Part 2: packages.list 适配器 ────────────────────────────────────────────────
+should_skip_package() {
+  local name="$1"
+  case "$name" in
+    docker) [[ "${SKIP_DOCKER:-false}" == true ]] && return 0 ;;
+    git) [[ "${SKIP_GIT:-false}" == true ]] && return 0 ;;
+    node) [[ "${SKIP_NODE:-false}" == true ]] && return 0 ;;
+    cloc) [[ "${SKIP_CLOC:-false}" == true ]] && return 0 ;;
+    tmux|fzf|yazi|zoxide|lazygit)
+      [[ "${SKIP_TOOLS:-false}" == true ]] && return 0
+      ;;
+    nerd-fonts) [[ "${SKIP_FONTS:-false}" == true ]] && return 0 ;;
+  esac
+  return 1
+}
+
 install_docker() {
-  step "Docker CE 安装"
+  step "Docker CE"
 
   if is_installed docker; then
     success "Docker 已安装：$(docker --version)"
@@ -276,11 +297,6 @@ install_docker() {
   local pkg_manager
   pkg_manager=$(detect_pkg_manager)
 
-  # 安装必要的依赖
-  info "安装依赖包..."
-  run_cmd "$pkg_manager" install -y yum-utils device-mapper-persistent-data lvm2
-
-  # 添加 Docker 官方仓库
   info "添加 Docker 官方仓库..."
   local tmp_repo
   tmp_repo=$(mktemp --suffix=.repo)
@@ -292,7 +308,6 @@ install_docker() {
   rm -f "$tmp_repo"
   rm -f "$rendered_repo"
 
-  # 安装 Docker
   info "安装 Docker CE..."
   if is_alibaba_linux_4; then
     run_cmd "$pkg_manager" install -y --nobest docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
@@ -300,12 +315,10 @@ install_docker() {
     run_cmd "$pkg_manager" install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   fi
 
-  # 启动并启用 Docker
   info "启动 Docker 服务..."
   run_cmd systemctl start docker
   run_cmd systemctl enable docker
 
-  # 验证安装
   if is_installed docker; then
     success "Docker 安装完成：$(docker --version)"
   else
@@ -313,7 +326,6 @@ install_docker() {
     return 1
   fi
 
-  # 将当前用户加入 docker 组（可选，需要重新登录生效）
   if [[ $EUID -ne 0 ]]; then
     info "将当前用户加入 docker 组..."
     run_cmd usermod -aG docker "$USER"
@@ -321,33 +333,33 @@ install_docker() {
   fi
 }
 
-# ─── 安装 Git ────────────────────────────────────────────────────────────────────
-install_git() {
-  step "Git 安装"
+package_is_installed() {
+  packages_list_default_is_installed "$1"
+}
 
-  if is_installed git; then
-    success "Git 已安装：$(git --version)"
-    return
+install_dnf_pkg() {
+  local name="$1"
+  local pkg
+  pkg="$(packages_list_sys_pkg "$name")"
+  if packages_list_default_is_installed "$name"; then
+    success "${name} 已安装"
+    return 0
   fi
-
-  info "正在安装 Git..."
-
   local pkg_manager
   pkg_manager=$(detect_pkg_manager)
-
-  run_cmd "$pkg_manager" install -y git
-
-  if is_installed git; then
-    success "Git 安装完成：$(git --version)"
+  info "正在安装 ${name}（${pkg_manager} ${pkg}）..."
+  run_cmd "$pkg_manager" install -y "$pkg"
+  if packages_list_default_is_installed "$name"; then
+    success "${name} 安装完成"
   else
-    error "Git 安装失败"
+    error "${name} 安装失败"
     return 1
   fi
 }
 
-# ─── 安装 Node.js / npm ──────────────────────────────────────────────────────────
 install_node() {
-  step "Node.js / npm 安装"
+  local node_version="$1"
+  step "Node.js / npm（NodeSource ${node_version}.x）"
 
   if is_installed node && is_installed npm; then
     success "Node.js 已安装：$(node --version)"
@@ -355,25 +367,10 @@ install_node() {
     return
   fi
 
-  info "正在安装 Node.js LTS..."
+  info "正在安装 Node.js ${node_version}.x LTS..."
 
   local pkg_manager
   pkg_manager=$(detect_pkg_manager)
-
-  # 方法一：使用 NodeSource 仓库（推荐）
-  info "添加 NodeSource 仓库..."
-
-  # 检测系统版本以确定正确的 NodeSource URL
-  local distro_major_version
-  if [[ -f /etc/os-release ]]; then
-    distro_major_version=$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"' | cut -d'.' -f1)
-  else
-    distro_major_version="7"
-  fi
-
-  # 使用 NodeSource 安装脚本
-  local node_version="20"  # LTS 版本
-  info "安装 Node.js ${node_version}.x LTS..."
 
   local tmp_node
   tmp_node=$(mktemp)
@@ -381,10 +378,8 @@ install_node() {
   run_cmd bash "$tmp_node"
   rm -f "$tmp_node"
 
-  # 安装 Node.js
   run_cmd "$pkg_manager" install -y nodejs
 
-  # 验证安装
   if is_installed node && is_installed npm; then
     success "Node.js 安装完成：$(node --version)"
     success "npm 安装完成：$(npm --version)"
@@ -393,14 +388,12 @@ install_node() {
     return 1
   fi
 
-  # 配置 npm 全局安装目录（可选，避免权限问题）
   local npm_global_dir="$HOME/.npm-global"
   if [[ ! -d "$npm_global_dir" ]]; then
     info "配置 npm 全局安装目录..."
     mkdir -p "$npm_global_dir"
     npm config set prefix "$npm_global_dir"
 
-    # 添加到 PATH
     local profile_file
     if [[ -f "$HOME/.bashrc" ]]; then
       profile_file="$HOME/.bashrc"
@@ -410,7 +403,7 @@ install_node() {
       profile_file="$HOME/.bashrc"
     fi
 
-    if ! grep -q 'NPM_GLOBAL' "$profile_file" 2>/dev/null; then
+    if ! grep -q 'NPM_GLOBAL\|npm-global' "$profile_file" 2>/dev/null; then
       echo "" >> "$profile_file"
       echo "# npm global directory" >> "$profile_file"
       echo "export PATH=\"\$HOME/.npm-global/bin:\$PATH\"" >> "$profile_file"
@@ -420,41 +413,10 @@ install_node() {
   fi
 }
 
-# ─── 安装 cloc ────────────────────────────────────────────────────────────────
-install_cloc() {
-  step "cloc 安装"
-
-  if is_installed cloc; then
-    success "cloc 已安装：$(cloc --version | head -1)"
-    return
-  fi
-
-  info "正在安装 cloc..."
-
-  local pkg_manager
-  pkg_manager=$(detect_pkg_manager)
-
-  run_cmd "$pkg_manager" install -y cloc
-
-  if is_installed cloc; then
-    success "cloc 安装完成：$(cloc --version | head -1)"
-  else
-    error "cloc 安装失败"
-    return 1
-  fi
-}
-
-# ─── 安装终端增强工具 (tmux, fzf, yazi, zoxide, lazygit) ─────────────────────────
-install_tools() {
-  step "终端增强工具安装 (tmux, fzf, yazi, zoxide, lazygit)"
-
-  local pkg_manager
-  pkg_manager=$(detect_pkg_manager)
-
-  # tmux 3.7b（发行版包常为 2.7，缺 extended-keys；统一源码安装）
+install_tmux_module() {
   local tmux_setup="${SCRIPT_DIR}/../../terminal/tmux/setup.sh"
   if [[ -f "$tmux_setup" ]]; then
-    info "通过 terminal/tmux/setup.sh 安装 tmux 3.7b..."
+    info "通过 terminal/tmux/setup.sh 安装 tmux..."
     if TMUX_PREFIX=/usr/local DEVTOOLS_CACHE_DIR="$CACHE_DIR" \
         bash "$tmux_setup" --install-bin-only; then
       hash -r 2>/dev/null || true
@@ -465,142 +427,228 @@ install_tools() {
   else
     warn "找不到 $tmux_setup，跳过 tmux"
   fi
-
-  # fzf
-  if is_installed fzf; then
-    success "fzf 已安装"
-  else
-    info "正在安装 fzf..."
-    if run_cmd "$pkg_manager" install -y fzf 2>/dev/null; then
-      success "fzf 安装完成"
-    else
-      local fzf_version="0.72.0"
-      local fzf_arch
-      case "$(uname -m)" in
-        aarch64) fzf_arch="linux_arm64" ;;
-        *)       fzf_arch="linux_amd64" ;;
-      esac
-      local fzf_filename="fzf-${fzf_version}-${fzf_arch}.tar.gz"
-      local tmpdir; tmpdir=$(mktemp -d)
-      if fetch "binaries/${fzf_filename}" \
-           "https://github.com/junegunn/fzf/releases/download/v${fzf_version}/${fzf_filename}" \
-           "$tmpdir/fzf.tar.gz" && \
-         tar -xzf "$tmpdir/fzf.tar.gz" -C "$tmpdir" fzf 2>/dev/null; then
-        run_cmd mv "$tmpdir/fzf" /usr/local/bin/fzf
-        run_cmd chmod +x /usr/local/bin/fzf
-        success "fzf 安装完成"
-      else
-        warn "fzf 安装失败，请手动安装"
-      fi
-      rm -rf "$tmpdir"
-    fi
-  fi
-
-  # yazi
-  if is_installed yazi; then
-    success "yazi 已安装"
-  else
-    info "正在安装 yazi..."
-    # 检查是否有预编译版本
-    local arch
-    arch=$(uname -m)
-    local yazi_arch="$arch"
-    [[ "$arch" == "x86_64" ]] && yazi_arch="x86_64"
-
-    # 尝试下载最新版本
-    local yazi_version="0.3.3"
-    # 使用 musl 静态编译版本，不依赖系统 glibc，兼容 CentOS/RHEL 8（glibc 2.28）
-    local yazi_filename="yazi-${yazi_arch}-unknown-linux-musl.zip"
-
-    info "下载 yazi v${yazi_version}..."
-    local tmpdir
-    tmpdir=$(mktemp -d)
-    fetch "binaries/${yazi_filename}" \
-      "https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/${yazi_filename}" \
-      "$tmpdir/yazi.zip" 2>/dev/null
-    if [[ -f "$tmpdir/yazi.zip" ]]; then
-      if ! command -v unzip &>/dev/null; then
-        run_cmd "$pkg_manager" install -y unzip
-      fi
-      unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
-      local yazi_bin="$tmpdir/yazi-${yazi_arch}-unknown-linux-musl/yazi"
-      if [[ -f "$yazi_bin" ]]; then
-        run_cmd mv "$yazi_bin" /usr/local/bin/yazi
-        run_cmd chmod +x /usr/local/bin/yazi
-        success "yazi 安装完成"
-      else
-        warn "yazi 解压失败"
-      fi
-      rm -rf "$tmpdir"
-    else
-      warn "yazi 下载失败，请手动安装"
-    fi
-  fi
-
-  # zoxide
-  if is_installed zoxide; then
-    success "zoxide 已安装"
-  else
-    info "正在安装 zoxide..."
-    local zoxide_version="0.9.4"
-    local zoxide_arch
-    case "$(uname -m)" in
-      aarch64) zoxide_arch="aarch64-unknown-linux-musl" ;;
-      *)       zoxide_arch="x86_64-unknown-linux-musl" ;;
-    esac
-    local zoxide_filename="zoxide-${zoxide_version}-${zoxide_arch}.tar.gz"
-    local tmpdir; tmpdir=$(mktemp -d)
-    if fetch "binaries/${zoxide_filename}" \
-         "https://github.com/ajeetdsouza/zoxide/releases/download/v${zoxide_version}/${zoxide_filename}" \
-         "$tmpdir/zoxide.tar.gz" && \
-       tar -xzf "$tmpdir/zoxide.tar.gz" -C "$tmpdir" zoxide 2>/dev/null; then
-      run_cmd mv "$tmpdir/zoxide" /usr/local/bin/zoxide
-      run_cmd chmod +x /usr/local/bin/zoxide
-      success "zoxide 安装完成"
-    else
-      warn "zoxide 安装失败，请手动安装"
-    fi
-    rm -rf "$tmpdir"
-  fi
-
-  # lazygit
-  if is_installed lazygit; then
-    success "lazygit 已安装：$(lazygit --version | head -1)"
-  else
-    info "正在安装 lazygit..."
-    # 下载预编译版本
-    local lazygit_version="0.44.1"
-    local arch
-    arch=$(uname -m)
-    local lazygit_arch="$arch"
-    [[ "$arch" == "x86_64" ]] && lazygit_arch="x86_64"
-    [[ "$arch" == "aarch64" ]] && lazygit_arch="arm64"
-
-    local lazygit_filename="lazygit_${lazygit_version}_Linux_${lazygit_arch}.tar.gz"
-
-    local tmpdir
-    tmpdir=$(mktemp -d)
-    fetch "binaries/${lazygit_filename}" \
-      "https://github.com/jesseduffield/lazygit/releases/download/v${lazygit_version}/${lazygit_filename}" \
-      "$tmpdir/lazygit.tar.gz" 2>/dev/null
-    if [[ -f "$tmpdir/lazygit.tar.gz" ]]; then
-      if tar -xzf "$tmpdir/lazygit.tar.gz" -C "$tmpdir" lazygit 2>/dev/null; then
-        run_cmd mv "$tmpdir/lazygit" /usr/local/bin/lazygit
-        run_cmd chmod +x /usr/local/bin/lazygit
-        success "lazygit 安装完成：$(lazygit --version | head -1)"
-      else
-        warn "lazygit 解压失败"
-      fi
-    else
-      warn "lazygit 下载失败，请手动安装"
-    fi
-    rm -rf "$tmpdir"
-  fi
 }
 
-# ─── 安装 Nerd Fonts (yazi 图标字体) ────────────────────────────────────────────
+install_fzf_github() {
+  local fzf_version="$1"
+  if is_installed fzf; then
+    success "fzf 已安装"
+    return 0
+  fi
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+  info "正在安装 fzf..."
+  if run_cmd "$pkg_manager" install -y fzf 2>/dev/null; then
+    success "fzf 安装完成"
+    return 0
+  fi
+
+  local fzf_arch
+  case "$(uname -m)" in
+    aarch64) fzf_arch="linux_arm64" ;;
+    *)       fzf_arch="linux_amd64" ;;
+  esac
+  local fzf_filename="fzf-${fzf_version}-${fzf_arch}.tar.gz"
+  local tmpdir; tmpdir=$(mktemp -d)
+  if fetch "binaries/${fzf_filename}" \
+       "https://github.com/junegunn/fzf/releases/download/v${fzf_version}/${fzf_filename}" \
+       "$tmpdir/fzf.tar.gz" && \
+     tar -xzf "$tmpdir/fzf.tar.gz" -C "$tmpdir" fzf 2>/dev/null; then
+    run_cmd mv "$tmpdir/fzf" /usr/local/bin/fzf
+    run_cmd chmod +x /usr/local/bin/fzf
+    success "fzf 安装完成"
+  else
+    warn "fzf 安装失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_yazi_github() {
+  local yazi_version="$1"
+  if is_installed yazi; then
+    success "yazi 已安装"
+    return 0
+  fi
+
+  info "正在安装 yazi v${yazi_version}..."
+  local arch
+  arch=$(uname -m)
+  local yazi_arch="$arch"
+  [[ "$arch" == "x86_64" ]] && yazi_arch="x86_64"
+  local yazi_filename="yazi-${yazi_arch}-unknown-linux-musl.zip"
+
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  fetch "binaries/${yazi_filename}" \
+    "https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/${yazi_filename}" \
+    "$tmpdir/yazi.zip" 2>/dev/null
+  if [[ -f "$tmpdir/yazi.zip" ]]; then
+    local pkg_manager
+    pkg_manager=$(detect_pkg_manager)
+    if ! command -v unzip &>/dev/null; then
+      run_cmd "$pkg_manager" install -y unzip
+    fi
+    unzip -q "$tmpdir/yazi.zip" -d "$tmpdir"
+    local yazi_bin="$tmpdir/yazi-${yazi_arch}-unknown-linux-musl/yazi"
+    if [[ -f "$yazi_bin" ]]; then
+      run_cmd mv "$yazi_bin" /usr/local/bin/yazi
+      run_cmd chmod +x /usr/local/bin/yazi
+      success "yazi 安装完成"
+    else
+      warn "yazi 解压失败"
+    fi
+  else
+    warn "yazi 下载失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_zoxide_github() {
+  local zoxide_version="$1"
+  if is_installed zoxide; then
+    success "zoxide 已安装"
+    return 0
+  fi
+
+  info "正在安装 zoxide v${zoxide_version}..."
+  local zoxide_arch
+  case "$(uname -m)" in
+    aarch64) zoxide_arch="aarch64-unknown-linux-musl" ;;
+    *)       zoxide_arch="x86_64-unknown-linux-musl" ;;
+  esac
+  local zoxide_filename="zoxide-${zoxide_version}-${zoxide_arch}.tar.gz"
+  local tmpdir; tmpdir=$(mktemp -d)
+  if fetch "binaries/${zoxide_filename}" \
+       "https://github.com/ajeetdsouza/zoxide/releases/download/v${zoxide_version}/${zoxide_filename}" \
+       "$tmpdir/zoxide.tar.gz" && \
+     tar -xzf "$tmpdir/zoxide.tar.gz" -C "$tmpdir" zoxide 2>/dev/null; then
+    run_cmd mv "$tmpdir/zoxide" /usr/local/bin/zoxide
+    run_cmd chmod +x /usr/local/bin/zoxide
+    success "zoxide 安装完成"
+  else
+    warn "zoxide 安装失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_lazygit_github() {
+  local lazygit_version="$1"
+  if is_installed lazygit; then
+    success "lazygit 已安装：$(lazygit --version | head -1)"
+    return 0
+  fi
+
+  info "正在安装 lazygit v${lazygit_version}..."
+  local arch
+  arch=$(uname -m)
+  local lazygit_arch="$arch"
+  [[ "$arch" == "x86_64" ]] && lazygit_arch="x86_64"
+  [[ "$arch" == "aarch64" ]] && lazygit_arch="arm64"
+
+  local lazygit_filename="lazygit_${lazygit_version}_Linux_${lazygit_arch}.tar.gz"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  fetch "binaries/${lazygit_filename}" \
+    "https://github.com/jesseduffield/lazygit/releases/download/v${lazygit_version}/${lazygit_filename}" \
+    "$tmpdir/lazygit.tar.gz" 2>/dev/null
+  if [[ -f "$tmpdir/lazygit.tar.gz" ]]; then
+    if tar -xzf "$tmpdir/lazygit.tar.gz" -C "$tmpdir" lazygit 2>/dev/null; then
+      run_cmd mv "$tmpdir/lazygit" /usr/local/bin/lazygit
+      run_cmd chmod +x /usr/local/bin/lazygit
+      success "lazygit 安装完成：$(lazygit --version | head -1)"
+    else
+      warn "lazygit 解压失败"
+    fi
+  else
+    warn "lazygit 下载失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_bat_github() {
+  local bat_version="$1"
+  if packages_list_default_is_installed bat; then
+    success "bat 已安装"
+    return 0
+  fi
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+  info "正在安装 bat v${bat_version}..."
+  if run_cmd "$pkg_manager" install -y bat 2>/dev/null && packages_list_default_is_installed bat; then
+    success "bat 安装完成（包管理器）"
+    return 0
+  fi
+
+  local arch target
+  case "$(uname -m)" in
+    aarch64) target="aarch64-unknown-linux-musl" ;;
+    *)       target="x86_64-unknown-linux-musl" ;;
+  esac
+  local filename="bat-v${bat_version}-${target}.tar.gz"
+  local tmpdir; tmpdir=$(mktemp -d)
+  if fetch "binaries/${filename}" \
+       "https://github.com/sharkdp/bat/releases/download/v${bat_version}/${filename}" \
+       "$tmpdir/bat.tar.gz" && \
+     tar -xzf "$tmpdir/bat.tar.gz" -C "$tmpdir" 2>/dev/null; then
+    local bat_bin
+    bat_bin="$(find "$tmpdir" -type f -name bat | head -1)"
+    if [[ -n "$bat_bin" ]]; then
+      run_cmd install -m 755 "$bat_bin" /usr/local/bin/bat
+      success "bat 安装完成"
+    else
+      warn "bat 解压失败"
+    fi
+  else
+    warn "bat 下载失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_rg_github() {
+  local rg_version="$1"
+  if packages_list_default_is_installed rg; then
+    success "rg 已安装"
+    return 0
+  fi
+
+  local pkg_manager
+  pkg_manager=$(detect_pkg_manager)
+  info "正在安装 ripgrep (rg) v${rg_version}..."
+  if run_cmd "$pkg_manager" install -y ripgrep 2>/dev/null && packages_list_default_is_installed rg; then
+    success "rg 安装完成（包管理器）"
+    return 0
+  fi
+
+  local target
+  case "$(uname -m)" in
+    aarch64) target="aarch64-unknown-linux-musl" ;;
+    *)       target="x86_64-unknown-linux-musl" ;;
+  esac
+  local filename="ripgrep-${rg_version}-${target}.tar.gz"
+  local tmpdir; tmpdir=$(mktemp -d)
+  if fetch "binaries/${filename}" \
+       "https://github.com/BurntSushi/ripgrep/releases/download/${rg_version}/${filename}" \
+       "$tmpdir/rg.tar.gz" && \
+     tar -xzf "$tmpdir/rg.tar.gz" -C "$tmpdir" 2>/dev/null; then
+    local rg_bin
+    rg_bin="$(find "$tmpdir" -type f -name rg | head -1)"
+    if [[ -n "$rg_bin" ]]; then
+      run_cmd install -m 755 "$rg_bin" /usr/local/bin/rg
+      success "rg 安装完成"
+    else
+      warn "rg 解压失败"
+    fi
+  else
+    warn "rg 下载失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
 install_nerd_fonts() {
-  step "Nerd Fonts 安装 (yazi 图标字体)"
+  local nerd_version="$1"
+  step "Nerd Fonts（yazi 图标字体）"
 
   local font_dir="/usr/share/fonts/nerd-fonts"
   local marker="${font_dir}/.nerd-fonts-installed"
@@ -610,8 +658,7 @@ install_nerd_fonts() {
     return
   fi
 
-  info "正在安装 NerdFontsSymbolsOnly..."
-  local nerd_version="3.3.0"
+  info "正在安装 NerdFontsSymbolsOnly v${nerd_version}..."
   local nerd_filename="NerdFontsSymbolsOnly.tar.xz"
   local tmpdir
   tmpdir=$(mktemp -d)
@@ -634,7 +681,107 @@ install_nerd_fonts() {
   rm -rf "$tmpdir"
 }
 
-# ─── 安装后提示 ──────────────────────────────────────────────────────────────────
+install_package_entry() {
+  local name="$1" version="$2" source="$3" kind="${4:-}" tags="${5:-}"
+
+  if [[ "${PACKAGES_IGNORE_FILTERS:-false}" != true ]] && \
+     ! packages_list_match_filters "$kind" "$tags"; then
+    return 0
+  fi
+
+  if should_skip_package "$name"; then
+    info "跳过 ${name}"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] ${name} ${version} (${source}) [${kind}] ${tags}"
+    return 0
+  fi
+
+  case "$source" in
+    dnf)
+      install_dnf_pkg "$name"
+      ;;
+    docker-ce)
+      install_docker
+      ;;
+    nodesource)
+      install_node "$version"
+      ;;
+    module)
+      case "$name" in
+        tmux) install_tmux_module ;;
+        *) warn "未知 module 条目: $name" ;;
+      esac
+      ;;
+    github)
+      case "$name" in
+        fzf) install_fzf_github "$version" ;;
+        yazi) install_yazi_github "$version" ;;
+        zoxide) install_zoxide_github "$version" ;;
+        lazygit) install_lazygit_github "$version" ;;
+        bat) install_bat_github "$version" ;;
+        rg) install_rg_github "$version" ;;
+        *) warn "未知 github 条目: $name" ;;
+      esac
+      ;;
+    font)
+      case "$name" in
+        nerd-fonts) install_nerd_fonts "$version" ;;
+        *) warn "未知 font 条目: $name" ;;
+      esac
+      ;;
+    *)
+      warn "不支持的 source: ${source}（${name}）"
+      ;;
+  esac
+}
+
+install_packages_from_list() {
+  step "Part 2: 按 packages.centos.list 安装常见软件"
+  if [[ ! -f "$PACKAGES_LIST" ]]; then
+    error "找不到软件清单: $PACKAGES_LIST"
+    return 1
+  fi
+  info "清单: $PACKAGES_LIST"
+  if [[ -n "${PACKAGES_FILTER_KIND:-}" || -n "${PACKAGES_FILTER_TAG:-}" ]]; then
+    info "筛选: kind=${PACKAGES_FILTER_KIND:-*} tag=${PACKAGES_FILTER_TAG:-*}"
+  fi
+  packages_list_foreach "$PACKAGES_LIST" install_package_entry
+}
+
+check_packages_status() {
+  step "检查 packages.centos.list 安装状态"
+  info "清单: $PACKAGES_LIST"
+  packages_list_check "$PACKAGES_LIST"
+}
+
+install_one_package() {
+  local want_name="$1"
+  local entry name version source kind tags
+
+  step "安装单个软件: ${want_name}"
+  if ! entry="$(packages_list_lookup "$PACKAGES_LIST" "$want_name")"; then
+    error "清单中不存在: ${want_name}"
+    info "可用名称见: $PACKAGES_LIST 或运行 --check"
+    return 1
+  fi
+  IFS=$'\t' read -r name version source kind tags <<<"$entry"
+  info "${name} ${version} (${source}) [${kind}] ${tags}"
+  check_root
+
+  SKIP_DOCKER=false
+  SKIP_GIT=false
+  SKIP_NODE=false
+  SKIP_CLOC=false
+  SKIP_TOOLS=false
+  SKIP_FONTS=false
+  PACKAGES_IGNORE_FILTERS=true
+  install_package_entry "$name" "$version" "$source" "$kind" "$tags"
+  PACKAGES_IGNORE_FILTERS=false
+}
+
 post_install_notes() {
   step "安装后注意事项"
 
@@ -645,75 +792,65 @@ post_install_notes() {
   echo -e "  ${YELLOW}Node.js${NC}: 全局安装的包位于 ~/.npm-global"
   echo -e "    运行 ${BOLD}source ~/.bashrc${NC} 或重新登录以使 PATH 生效。"
   echo -e ""
-  echo -e "  ${YELLOW}npm 常用命令${NC}:"
-  echo -e "    npm -g install <package>    # 全局安装包"
-  echo -e "    npm -g list                 # 查看全局已安装包"
-  echo -e "    npm config list             # 查看 npm 配置"
-  echo -e ""
-  echo -e "  ${YELLOW}Docker 常用命令${NC}:"
-  echo -e "    docker ps                   # 查看运行中的容器"
-  echo -e "    docker images               # 查看镜像列表"
-  echo -e "    docker compose up -d        # 使用 compose 启动服务"
-  echo -e ""
-  echo -e "  ${YELLOW}cloc 代码统计${NC}:"
-  echo -e "    cloc <path>                 # 统计目录代码行数"
-  echo -e "    cloc --by-file <path>       # 按文件统计"
-  echo -e "    cloc --include-lang=Python,Go <path>  # 仅统计指定语言"
-  echo -e ""
   echo -e "  ${YELLOW}终端增强工具${NC}:"
-  echo -e "    tmux new -s <name>          # 创建新会话"
-  echo -e "    tmux attach -t <name>       # 附加到会话"
-  echo -e "    fzf                         # 模糊搜索文件"
-  echo -e "    yazi                        # 终端文件管理器"
-  echo -e "    z <目录名>                   # 快速目录跳转"
-  echo -e "    lazygit                     # 终端 Git TUI 客户端"
-  echo -e "    注意: zoxide 需要添加到 shell 配置: eval \"\$(zoxide init bash)\""
+  echo -e "    tmux / fzf / yazi / zoxide / lazygit"
+  echo -e "    zoxide: eval \"\$(zoxide init bash)\""
   echo -e ""
-  echo -e "  ${YELLOW}Nerd Fonts (yazi 图标)${NC}:"
-  echo -e "    字体已安装到 /usr/share/fonts/nerd-fonts/"
-  echo -e "    请在终端模拟器（iTerm2/Alacritty 等）的设置中，将字体改为"
-  echo -e "    ${BOLD}SymbolsNerdFontMono${NC} 或启用 Nerd Font 兼容字体，yazi 图标方可正常显示。"
+  echo -e "  ${YELLOW}Nerd Fonts${NC}: /usr/share/fonts/nerd-fonts/"
+  echo -e "    终端字体改为 SymbolsNerdFontMono 后 yazi 图标方可正常显示。"
   echo -e ""
 }
 
-# ─── 主入口 ──────────────────────────────────────────────────────────────────────
 main() {
   local info_only=false
-  local skip_docker=false
-  local skip_git=false
-  local skip_node=false
-  local skip_cloc=false
-  local skip_tools=false
-  local skip_fonts=false
+  local check_only=false
+  local install_name=""
+  local base_only=false
+  local packages_only=false
+  DRY_RUN=false
+  SKIP_DOCKER=false
+  SKIP_GIT=false
+  SKIP_NODE=false
+  SKIP_CLOC=false
+  SKIP_TOOLS=false
+  SKIP_FONTS=false
+  PACKAGES_FILTER_KIND=""
+  PACKAGES_FILTER_TAG=""
+  PACKAGES_IGNORE_FILTERS=false
 
-  # 参数解析
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        usage
-        exit 0
+      -h|--help)       usage; exit 0 ;;
+      --info-only)     info_only=true ;;
+      --check)         check_only=true ;;
+      --install)
+        shift
+        [[ $# -gt 0 ]] || { error "--install 需要软件名"; usage; exit 1; }
+        install_name="$1"
         ;;
-      --info-only)
-        info_only=true
+      --kind)
+        shift
+        [[ $# -gt 0 ]] || { error "--kind 需要 cli|tui|gui"; usage; exit 1; }
+        PACKAGES_FILTER_KIND="$1"
+        packages_list_valid_kind "$PACKAGES_FILTER_KIND" || {
+          error "--kind 无效: $PACKAGES_FILTER_KIND（使用 cli|tui|gui）"
+          exit 1
+        }
         ;;
-      --skip-docker)
-        skip_docker=true
+      --tag)
+        shift
+        [[ $# -gt 0 ]] || { error "--tag 需要用途标签"; usage; exit 1; }
+        PACKAGES_FILTER_TAG="$1"
         ;;
-      --skip-git)
-        skip_git=true
-        ;;
-      --skip-node)
-        skip_node=true
-        ;;
-      --skip-cloc)
-        skip_cloc=true
-        ;;
-      --skip-tools)
-        skip_tools=true
-        ;;
-      --skip-fonts)
-        skip_fonts=true
-        ;;
+      --dry-run)       DRY_RUN=true ;;
+      --base-only)     base_only=true ;;
+      --packages-only) packages_only=true ;;
+      --skip-docker)   SKIP_DOCKER=true ;;
+      --skip-git)      SKIP_GIT=true ;;
+      --skip-node)     SKIP_NODE=true ;;
+      --skip-cloc)     SKIP_CLOC=true ;;
+      --skip-tools)    SKIP_TOOLS=true ;;
+      --skip-fonts)    SKIP_FONTS=true ;;
       *)
         error "未知参数: $1"
         usage
@@ -723,11 +860,19 @@ main() {
     shift
   done
 
+  if [[ "$base_only" == true && "$packages_only" == true ]]; then
+    error "--base-only 与 --packages-only 不能同时使用"
+    exit 1
+  fi
+  if [[ "$check_only" == true && -n "$install_name" ]]; then
+    error "--check 与 --install 不能同时使用"
+    exit 1
+  fi
+
   echo -e "\n${BOLD}${CYAN}╔══════════════════════════════════════╗${NC}"
   echo -e "${BOLD}${CYAN}║   CentOS 初始化安装脚本              ║${NC}"
   echo -e "${BOLD}${CYAN}╚══════════════════════════════════════╝${NC}"
 
-  # 检测系统信息（始终执行）
   detect_system_info
 
   if [[ "$info_only" == true ]]; then
@@ -735,25 +880,44 @@ main() {
     exit 0
   fi
 
-  # 检查权限
-  check_root
-
-  # 确认提示
-  echo -e "${YELLOW}即将开始安装，是否继续？[y/N]${NC} \c"
-  read -r confirm
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    info "已取消安装。"
+  if [[ "$check_only" == true ]]; then
+    check_packages_status
     exit 0
   fi
 
-  $skip_docker || install_docker
-  $skip_git    || install_git
-  $skip_node   || install_node
-  $skip_cloc   || install_cloc
-  $skip_tools  || install_tools
-  $skip_fonts  || install_nerd_fonts
+  if [[ -n "$install_name" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      info "dry-run 模式：不会实际安装"
+    fi
+    install_one_package "$install_name"
+    echo -e "\n${GREEN}${BOLD}✓ 完成！${NC}\n"
+    exit 0
+  fi
 
-  post_install_notes
+  if [[ "$DRY_RUN" != true ]]; then
+    echo -e "${YELLOW}即将开始安装，是否继续？[y/N]${NC} \c"
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      info "已取消安装。"
+      exit 0
+    fi
+  else
+    info "dry-run 模式：不会实际安装"
+  fi
+
+  if [[ "$packages_only" != true ]]; then
+    configure_os_base
+  else
+    check_root
+  fi
+
+  if [[ "$base_only" != true ]]; then
+    install_packages_from_list
+  fi
+
+  if [[ "$DRY_RUN" != true ]]; then
+    post_install_notes
+  fi
 
   echo -e "\n${GREEN}${BOLD}✓ 所有任务执行完成！${NC}\n"
 }

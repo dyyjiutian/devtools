@@ -28,22 +28,25 @@ tests/                      # Shell regression tests
 
 Both scripts follow the same architecture: bash 3.2+ compatible, color-coded output functions (`info()`, `success()`, `warn()`, `error()`, `step()`), system info detection, confirmation prompts, skip flags, and post-install notes.
 
-**macOS** (`os/macos/setup.sh`):
+**macOS** (`os/macos/setup.sh` + `packages.list`):
 ```bash
-./setup.sh                 # Full installation
+./setup.sh                 # Full installation (base + packages.list)
 ./setup.sh --info-only     # Show system info only
+./setup.sh --dry-run       # Preview
+./setup.sh --base-only     # Homebrew only
 ./setup.sh --skip-casks    # Skip GUI applications
 ./setup.sh --skip-omz      # Skip Oh My Zsh
 ```
-Installs: Homebrew, CLI tools (git, curl, wget, jq, tree, htop, gh, neovim), GUI apps (iTerm2, Sublime Text, Sogou Input, Obsidian), Node.js via nvm, Oh My Zsh.
+Part 1: Homebrew. Part 2: CLI/GUI/Node/Oh My Zsh from `packages.list`.
 
-**CentOS/RHEL** (`os/linux/setup_centos.sh`):
+**Ubuntu/Debian** (`os/linux/setup_ubuntu.sh` + `packages.ubuntu.list`) and **CentOS/RHEL** (`os/linux/setup_centos.sh` + `packages.centos.list`):
 ```bash
 ./setup_centos.sh          # Full installation
 ./setup_centos.sh --info-only
-./setup.sh --skip-docker   # Skip Docker CE
+./setup_centos.sh --dry-run
+./setup_centos.sh --skip-docker   # Skip Docker CE
 ```
-Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSource.
+Part 1: base deps. Part 2: Docker CE, Git, Node.js LTS, terminal tools from the packages list.
 
 ## Terminal Configuration
 

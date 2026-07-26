@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Ubuntu / Debian 初始化安装脚本
-# 用途：自动安装常用开发工具和软件
+# Part 1: OS 基础配置（系统信息、apt 基础依赖）
+# Part 2: 按 packages.ubuntu.list 安装常见软件
 
 set -euo pipefail
 
@@ -21,6 +22,12 @@ step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
 is_installed() { command -v "$1" &>/dev/null; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
+PACKAGES_LIST="${SCRIPT_DIR}/packages.ubuntu.list"
+# shellcheck source=../lib/packages_list.sh
+source "${SCRIPT_DIR}/../lib/packages_list.sh"
+
 # ─── 用法说明 ────────────────────────────────────────────────────────────────
 usage() {
   cat <<EOF
@@ -29,40 +36,40 @@ ${BOLD}用法:${NC}
   $(basename "$0") [选项]
 
 ${BOLD}说明:${NC}
-  Ubuntu / Debian 初始化脚本，自动安装常用开发工具和软件。
+  Ubuntu / Debian 初始化脚本，分两段执行：
+    1. OS 基础配置（系统信息、apt 基础依赖）
+    2. 按 packages.ubuntu.list 安装常见软件
 
 ${BOLD}选项:${NC}
   -h, --help          显示此帮助信息并退出
   --info-only         仅显示系统信息，不执行安装
-  --skip-docker       跳过 Docker CE 安装
-  --skip-git          跳过 Git 安装
-  --skip-node         跳过 Node.js / npm 安装
-  --skip-cloc         跳过 cloc 安装
-  --skip-tools        跳过终端工具安装 (tmux, fzf, yazi, zoxide, lazygit)
+  --check             检查 packages.ubuntu.list 中各软件是否已安装
+  --install <name>    仅安装清单中的指定软件（如 bat、rg、jq）
+  --kind <cli|tui|gui>
+                      按界面类型筛选（可与 --check / 安装联用）
+  --tag <tag>         按用途筛选：productivity|diagnostic|dev|ops|shell
+  --dry-run           预览将执行的步骤，不实际安装
+  --base-only         仅执行 OS 基础配置
+  --packages-only     跳过基础配置，仅按清单安装
+  --skip-docker       跳过 Docker CE
+  --skip-git          跳过 Git / git-lfs
+  --skip-node         跳过 Node.js
+  --skip-cloc         跳过 cloc
+  --skip-tools        跳过终端工具 (tmux, fzf, yazi, zoxide, lazygit, gh)
 
-${BOLD}安装的软件:${NC}
-  基础工具:
-    curl, wget, jq, tree, unzip, build-essential
-
-  Docker CE:
-    docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin
-
-  Git:
-    git, git-lfs
-
-  Node.js:
-    Node.js LTS（通过 NodeSource）
-
-  cloc:
-    cloc（代码行数统计）
-
-  终端增强工具:
-    tmux 3.7b（源码安装）, fzf, yazi, zoxide, lazygit, gh（GitHub CLI）
+${BOLD}清单文件:${NC}
+  ${PACKAGES_LIST}
 
 ${BOLD}示例:${NC}
   $(basename "$0")                 # 完整安装
   $(basename "$0") --info-only     # 仅查看系统信息
-  $(basename "$0") --skip-docker   # 跳过 Docker 安装
+  $(basename "$0") --check         # 检查清单安装状态
+  $(basename "$0") --check --kind tui
+  $(basename "$0") --check --tag diagnostic
+  $(basename "$0") --install bat   # 只安装 bat
+  $(basename "$0") --tag productivity --packages-only
+  $(basename "$0") --dry-run       # 预览
+  $(basename "$0") --skip-docker   # 跳过 Docker
 
 EOF
 }
@@ -108,7 +115,6 @@ detect_system_info() {
   echo -e ""
 }
 
-# ─── sudo 封装 ───────────────────────────────────────────────────────────────
 run_cmd() {
   if [[ $EUID -eq 0 ]]; then "$@"; else sudo "$@"; fi
 }
@@ -120,21 +126,45 @@ check_root() {
   fi
 }
 
-# ─── 基础依赖 ────────────────────────────────────────────────────────────────
+# ─── Part 1: OS 基础配置 ─────────────────────────────────────────────────────
 install_base_deps() {
-  step "基础工具安装"
+  step "基础工具安装（OS 基础）"
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] apt-get update && install curl wget jq tree unzip zip build-essential ..."
+    return 0
+  fi
   run_cmd apt-get update -qq
   run_cmd apt-get install -y \
-    curl wget git git-lfs jq tree unzip zip \
+    curl wget tree unzip zip \
     build-essential pkg-config libssl-dev \
     ca-certificates gnupg lsb-release \
     software-properties-common apt-transport-https
   success "基础工具安装完成"
 }
 
-# ─── Docker CE ───────────────────────────────────────────────────────────────
+configure_os_base() {
+  step "Part 1: OS 基础配置"
+  check_root
+  install_base_deps
+}
+
+# ─── Part 2: packages.list 适配器 ────────────────────────────────────────────
+should_skip_package() {
+  local name="$1"
+  case "$name" in
+    docker) [[ "${SKIP_DOCKER:-false}" == true ]] && return 0 ;;
+    git|git-lfs) [[ "${SKIP_GIT:-false}" == true ]] && return 0 ;;
+    node) [[ "${SKIP_NODE:-false}" == true ]] && return 0 ;;
+    cloc) [[ "${SKIP_CLOC:-false}" == true ]] && return 0 ;;
+    tmux|fzf|yazi|zoxide|lazygit|gh)
+      [[ "${SKIP_TOOLS:-false}" == true ]] && return 0
+      ;;
+  esac
+  return 1
+}
+
 install_docker() {
-  step "Docker CE 安装"
+  step "Docker CE"
 
   if is_installed docker; then
     success "Docker 已安装：$(docker --version)"
@@ -177,30 +207,45 @@ install_docker() {
   fi
 }
 
-# ─── Git ─────────────────────────────────────────────────────────────────────
-install_git() {
-  step "Git 安装"
-
-  if is_installed git; then
-    success "Git 已安装：$(git --version)"
-    return 0
-  fi
-
-  run_cmd apt-get install -y git git-lfs
-  is_installed git && success "Git 安装完成：$(git --version)" || \
-    { error "Git 安装失败"; return 1; }
+package_is_installed() {
+  packages_list_default_is_installed "$1"
 }
 
-# ─── Node.js ─────────────────────────────────────────────────────────────────
+install_apt_pkg() {
+  local name="$1"
+  local pkg
+  pkg="$(packages_list_sys_pkg "$name")"
+
+  if packages_list_default_is_installed "$name" || dpkg -s "$pkg" &>/dev/null; then
+    success "${name} 已安装，跳过"
+    # Ubuntu 的 bat 包提供 batcat，补一个 bat 别名
+    if [[ "$name" == "bat" ]] && ! is_installed bat && is_installed batcat; then
+      run_cmd ln -sfn "$(command -v batcat)" /usr/local/bin/bat
+      success "已创建 bat → batcat 链接"
+    fi
+    return 0
+  fi
+  info "正在安装 ${name}（apt ${pkg}）..."
+  run_cmd apt-get install -y "$pkg"
+  if [[ "$name" == "bat" ]] && ! is_installed bat && is_installed batcat; then
+    run_cmd ln -sfn "$(command -v batcat)" /usr/local/bin/bat
+  fi
+  if packages_list_default_is_installed "$name"; then
+    success "${name} 安装完成"
+  else
+    warn "${name} 安装后未检测到命令，请检查 PATH"
+  fi
+}
+
 install_node() {
-  step "Node.js / npm 安装"
+  local node_version="$1"
+  step "Node.js / npm（NodeSource ${node_version}.x）"
 
   if is_installed node && is_installed npm; then
     success "Node.js 已安装：$(node --version)"
     return 0
   fi
 
-  local node_version="20"
   info "添加 NodeSource 仓库（Node.js ${node_version}.x LTS）..."
   curl -fsSL "https://deb.nodesource.com/setup_${node_version}.x" | run_cmd bash -
   run_cmd apt-get install -y nodejs
@@ -211,7 +256,6 @@ install_node() {
     error "Node.js 安装失败"; return 1
   fi
 
-  # 配置 npm 全局目录（避免权限问题）
   local npm_global_dir="$HOME/.npm-global"
   if [[ ! -d "$npm_global_dir" ]]; then
     mkdir -p "$npm_global_dir"
@@ -231,30 +275,11 @@ RCBLOCK
   fi
 }
 
-# ─── cloc ────────────────────────────────────────────────────────────────────
-install_cloc() {
-  step "cloc 安装"
-
-  if is_installed cloc; then
-    success "cloc 已安装：$(cloc --version | head -1)"
-    return 0
-  fi
-
-  run_cmd apt-get install -y cloc
-  is_installed cloc && success "cloc 安装完成" || warn "cloc 安装失败"
-}
-
-# ─── 终端增强工具 ─────────────────────────────────────────────────────────────
-install_tools() {
-  step "终端增强工具安装"
-
-  # tmux 3.7b（统一源码安装，保证 extended-keys / Codex Shift+Enter）
-  local tmux_setup cache_dir
-  tmux_setup="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../terminal/tmux/setup.sh"
-  cache_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../cache"
+install_tmux_module() {
+  local tmux_setup="${SCRIPT_DIR}/../../terminal/tmux/setup.sh"
   if [[ -f "$tmux_setup" ]]; then
-    info "通过 terminal/tmux/setup.sh 安装 tmux 3.7b..."
-    if TMUX_PREFIX=/usr/local DEVTOOLS_CACHE_DIR="$cache_dir" \
+    info "通过 terminal/tmux/setup.sh 安装 tmux..."
+    if TMUX_PREFIX=/usr/local DEVTOOLS_CACHE_DIR="$CACHE_DIR" \
         bash "$tmux_setup" --install-bin-only; then
       hash -r 2>/dev/null || true
       success "tmux 安装完成：$(/usr/local/bin/tmux -V 2>/dev/null || tmux -V 2>/dev/null || true)"
@@ -264,93 +289,202 @@ install_tools() {
   else
     warn "找不到 $tmux_setup，跳过 tmux"
   fi
+}
 
-  # fzf
-  if is_installed fzf; then
-    success "fzf 已安装"
-  else
-    run_cmd apt-get install -y fzf 2>/dev/null || {
-      info "通过 Git 安装 fzf..."
-      git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
-      "$HOME/.fzf/install" --all --no-bash --no-fish
-    }
-    is_installed fzf && success "fzf 安装完成" || warn "fzf 安装失败"
-  fi
-
-  # GitHub CLI (gh)
+install_gh_apt_repo() {
   if is_installed gh; then
     success "GitHub CLI 已安装：$(gh --version | head -1)"
-  else
-    info "安装 GitHub CLI..."
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
-      run_cmd dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
-    run_cmd chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
-      run_cmd tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-    run_cmd apt-get update -qq
-    run_cmd apt-get install -y gh
-    is_installed gh && success "GitHub CLI 安装完成" || warn "GitHub CLI 安装失败"
+    return 0
   fi
+  info "安装 GitHub CLI..."
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | \
+    run_cmd dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  run_cmd chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | \
+    run_cmd tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+  run_cmd apt-get update -qq
+  run_cmd apt-get install -y gh
+  is_installed gh && success "GitHub CLI 安装完成" || warn "GitHub CLI 安装失败"
+}
 
-  # zoxide
+install_zoxide_script() {
   if is_installed zoxide; then
     success "zoxide 已安装"
-  else
-    info "安装 zoxide..."
-    if curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | \
-       run_cmd bash -s -- --bin-dir /usr/local/bin 2>/dev/null; then
-      success "zoxide 安装完成"
-    else
-      warn "zoxide 安装失败"
-    fi
+    return 0
   fi
-
-  # yazi（终端文件管理器）
-  if is_installed yazi; then
-    success "yazi 已安装"
+  info "安装 zoxide..."
+  if curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | \
+     run_cmd bash -s -- --bin-dir /usr/local/bin 2>/dev/null; then
+    success "zoxide 安装完成"
   else
-    info "安装 yazi..."
-    local arch; arch=$(uname -m)
-    local yazi_arch="x86_64"
-    [[ "$arch" == "aarch64" ]] && yazi_arch="aarch64"
-    local yazi_version="0.3.3"
-    local tmpdir; tmpdir=$(mktemp -d)
-    local url="https://github.com/sxyazi/yazi/releases/download/v${yazi_version}/yazi-${yazi_arch}-unknown-linux-gnu.zip"
-    if curl -fsSL "$url" -o "$tmpdir/yazi.zip" 2>/dev/null && \
-       unzip -q "$tmpdir/yazi.zip" -d "$tmpdir" 2>/dev/null; then
-      local yazi_bin
-      yazi_bin=$(find "$tmpdir" -name "yazi" -type f | head -1)
-      [[ -n "$yazi_bin" ]] && run_cmd install -m 755 "$yazi_bin" /usr/local/bin/yazi && \
-        success "yazi 安装完成" || warn "yazi 安装失败"
-    else
-      warn "yazi 下载失败，请手动安装"
-    fi
-    rm -rf "$tmpdir"
-  fi
-
-  # lazygit
-  if is_installed lazygit; then
-    success "lazygit 已安装：$(lazygit --version | head -1)"
-  else
-    info "安装 lazygit..."
-    local arch; arch=$(uname -m)
-    local lg_arch="x86_64"
-    [[ "$arch" == "aarch64" ]] && lg_arch="arm64"
-    local lg_ver="0.44.1"
-    local tmpdir; tmpdir=$(mktemp -d)
-    local url="https://github.com/jesseduffield/lazygit/releases/download/v${lg_ver}/lazygit_${lg_ver}_Linux_${lg_arch}.tar.gz"
-    if curl -fsSL "$url" -o "$tmpdir/lazygit.tar.gz" 2>/dev/null && \
-       tar -xzf "$tmpdir/lazygit.tar.gz" -C "$tmpdir" lazygit 2>/dev/null; then
-      run_cmd install -m 755 "$tmpdir/lazygit" /usr/local/bin/lazygit
-      success "lazygit 安装完成：$(lazygit --version | head -1)"
-    else
-      warn "lazygit 安装失败"
-    fi
-    rm -rf "$tmpdir"
+    warn "zoxide 安装失败"
   fi
 }
 
-# ─── 安装后提示 ──────────────────────────────────────────────────────────────
+install_yazi_github() {
+  local version="$1"
+  if is_installed yazi; then
+    success "yazi 已安装"
+    return 0
+  fi
+  info "安装 yazi v${version}..."
+  local arch; arch=$(uname -m)
+  local yazi_arch="x86_64"
+  [[ "$arch" == "aarch64" ]] && yazi_arch="aarch64"
+  local tmpdir; tmpdir=$(mktemp -d)
+  local url="https://github.com/sxyazi/yazi/releases/download/v${version}/yazi-${yazi_arch}-unknown-linux-gnu.zip"
+  if curl -fsSL "$url" -o "$tmpdir/yazi.zip" 2>/dev/null && \
+     unzip -q "$tmpdir/yazi.zip" -d "$tmpdir" 2>/dev/null; then
+    local yazi_bin
+    yazi_bin=$(find "$tmpdir" -name "yazi" -type f | head -1)
+    [[ -n "$yazi_bin" ]] && run_cmd install -m 755 "$yazi_bin" /usr/local/bin/yazi && \
+      success "yazi 安装完成" || warn "yazi 安装失败"
+  else
+    warn "yazi 下载失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_lazygit_github() {
+  local version="$1"
+  if is_installed lazygit; then
+    success "lazygit 已安装：$(lazygit --version | head -1)"
+    return 0
+  fi
+  info "安装 lazygit v${version}..."
+  local arch; arch=$(uname -m)
+  local lg_arch="x86_64"
+  [[ "$arch" == "aarch64" ]] && lg_arch="arm64"
+  local tmpdir; tmpdir=$(mktemp -d)
+  local url="https://github.com/jesseduffield/lazygit/releases/download/v${version}/lazygit_${version}_Linux_${lg_arch}.tar.gz"
+  if curl -fsSL "$url" -o "$tmpdir/lazygit.tar.gz" 2>/dev/null && \
+     tar -xzf "$tmpdir/lazygit.tar.gz" -C "$tmpdir" lazygit 2>/dev/null; then
+    run_cmd install -m 755 "$tmpdir/lazygit" /usr/local/bin/lazygit
+    success "lazygit 安装完成：$(lazygit --version | head -1)"
+  else
+    warn "lazygit 安装失败"
+  fi
+  rm -rf "$tmpdir"
+}
+
+install_fzf_apt_or_git() {
+  if is_installed fzf; then
+    success "fzf 已安装"
+    return 0
+  fi
+  run_cmd apt-get install -y fzf 2>/dev/null || {
+    info "通过 Git 安装 fzf..."
+    git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf"
+    "$HOME/.fzf/install" --all --no-bash --no-fish
+  }
+  is_installed fzf && success "fzf 安装完成" || warn "fzf 安装失败"
+}
+
+install_package_entry() {
+  local name="$1" version="$2" source="$3" kind="${4:-}" tags="${5:-}"
+
+  if [[ "${PACKAGES_IGNORE_FILTERS:-false}" != true ]] && \
+     ! packages_list_match_filters "$kind" "$tags"; then
+    return 0
+  fi
+
+  if should_skip_package "$name"; then
+    info "跳过 ${name}"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] ${name} ${version} (${source}) [${kind}] ${tags}"
+    return 0
+  fi
+
+  case "$source" in
+    apt)
+      case "$name" in
+        fzf) install_fzf_apt_or_git ;;
+        *) install_apt_pkg "$name" ;;
+      esac
+      ;;
+    apt-repo)
+      case "$name" in
+        gh) install_gh_apt_repo ;;
+        *) warn "未知 apt-repo 条目: $name" ;;
+      esac
+      ;;
+    docker-ce)
+      install_docker
+      ;;
+    nodesource)
+      install_node "$version"
+      ;;
+    module)
+      case "$name" in
+        tmux) install_tmux_module ;;
+        *) warn "未知 module 条目: $name" ;;
+      esac
+      ;;
+    script)
+      case "$name" in
+        zoxide) install_zoxide_script ;;
+        *) warn "未知 script 条目: $name" ;;
+      esac
+      ;;
+    github)
+      case "$name" in
+        yazi) install_yazi_github "$version" ;;
+        lazygit) install_lazygit_github "$version" ;;
+        *) warn "未知 github 条目: $name" ;;
+      esac
+      ;;
+    *)
+      warn "不支持的 source: ${source}（${name}）"
+      ;;
+  esac
+}
+
+install_packages_from_list() {
+  step "Part 2: 按 packages.ubuntu.list 安装常见软件"
+  if [[ ! -f "$PACKAGES_LIST" ]]; then
+    error "找不到软件清单: $PACKAGES_LIST"
+    return 1
+  fi
+  info "清单: $PACKAGES_LIST"
+  if [[ -n "${PACKAGES_FILTER_KIND:-}" || -n "${PACKAGES_FILTER_TAG:-}" ]]; then
+    info "筛选: kind=${PACKAGES_FILTER_KIND:-*} tag=${PACKAGES_FILTER_TAG:-*}"
+  fi
+  packages_list_foreach "$PACKAGES_LIST" install_package_entry
+}
+
+check_packages_status() {
+  step "检查 packages.ubuntu.list 安装状态"
+  info "清单: $PACKAGES_LIST"
+  packages_list_check "$PACKAGES_LIST"
+}
+
+install_one_package() {
+  local want_name="$1"
+  local entry name version source kind tags
+
+  step "安装单个软件: ${want_name}"
+  if ! entry="$(packages_list_lookup "$PACKAGES_LIST" "$want_name")"; then
+    error "清单中不存在: ${want_name}"
+    info "可用名称见: $PACKAGES_LIST 或运行 --check"
+    return 1
+  fi
+  IFS=$'\t' read -r name version source kind tags <<<"$entry"
+  info "${name} ${version} (${source}) [${kind}] ${tags}"
+  check_root
+
+  SKIP_DOCKER=false
+  SKIP_GIT=false
+  SKIP_NODE=false
+  SKIP_CLOC=false
+  SKIP_TOOLS=false
+  PACKAGES_IGNORE_FILTERS=true
+  install_package_entry "$name" "$version" "$source" "$kind" "$tags"
+  PACKAGES_IGNORE_FILTERS=false
+}
+
 post_install_notes() {
   step "安装后注意事项"
   echo -e "  ${YELLOW}Docker${NC}: 如需非 root 运行 docker："
@@ -359,51 +493,77 @@ post_install_notes() {
   echo -e "  ${YELLOW}Node.js${NC}: 全局包目录 ~/.npm-global"
   echo -e "    运行 ${BOLD}source ~/.bashrc${NC} 或重新登录使 PATH 生效"
   echo -e ""
-  echo -e "  ${YELLOW}GitHub CLI${NC}: 登录："
-  echo -e "    ${BOLD}gh auth login${NC}"
+  echo -e "  ${YELLOW}GitHub CLI${NC}: 登录：${BOLD}gh auth login${NC}"
   echo -e ""
-  echo -e "  ${YELLOW}zoxide${NC}: 快速目录跳转，添加到 ~/.bashrc："
-  echo -e "    eval \"\$(zoxide init bash)\""
+  echo -e "  ${YELLOW}zoxide${NC}: 添加到 ~/.bashrc：eval \"\$(zoxide init bash)\""
   echo -e ""
-  echo -e "  ${YELLOW}终端工具${NC}："
-  echo -e "    tmux new -s dev          # 新建 tmux 会话"
-  echo -e "    yazi                     # 终端文件管理器"
-  echo -e "    z <目录关键词>            # 快速跳转（zoxide）"
-  echo -e "    lazygit                  # 终端 Git TUI"
-  echo -e ""
-  echo -e "  ${YELLOW}下一步（AI 研发环境）${NC}："
+  echo -e "  ${YELLOW}下一步${NC}："
   echo -e "    languages/python/setup.sh    # Python + AI 包"
-  echo -e "    languages/go/setup.sh        # Go 环境"
-  echo -e "    languages/java/setup.sh      # Java + SDKMan"
-  echo -e "    languages/rust/setup.sh      # Rust 环境"
   echo -e "    agents/claude/setup.sh       # Claude Code"
-  echo -e "    agents/codex/setup.sh        # Codex CLI"
-  echo -e "    agents/cursor-agent/setup.sh # Cursor Agent CLI"
   echo -e ""
 }
 
-# ─── 主入口 ──────────────────────────────────────────────────────────────────
 main() {
   local info_only=false
-  local skip_docker=false
-  local skip_git=false
-  local skip_node=false
-  local skip_cloc=false
-  local skip_tools=false
+  local check_only=false
+  local install_name=""
+  local base_only=false
+  local packages_only=false
+  DRY_RUN=false
+  SKIP_DOCKER=false
+  SKIP_GIT=false
+  SKIP_NODE=false
+  SKIP_CLOC=false
+  SKIP_TOOLS=false
+  PACKAGES_FILTER_KIND=""
+  PACKAGES_FILTER_TAG=""
+  PACKAGES_IGNORE_FILTERS=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h|--help)      usage; exit 0 ;;
       --info-only)    info_only=true ;;
-      --skip-docker)  skip_docker=true ;;
-      --skip-git)     skip_git=true ;;
-      --skip-node)    skip_node=true ;;
-      --skip-cloc)    skip_cloc=true ;;
-      --skip-tools)   skip_tools=true ;;
+      --check)        check_only=true ;;
+      --install)
+        shift
+        [[ $# -gt 0 ]] || { error "--install 需要软件名"; usage; exit 1; }
+        install_name="$1"
+        ;;
+      --kind)
+        shift
+        [[ $# -gt 0 ]] || { error "--kind 需要 cli|tui|gui"; usage; exit 1; }
+        PACKAGES_FILTER_KIND="$1"
+        packages_list_valid_kind "$PACKAGES_FILTER_KIND" || {
+          error "--kind 无效: $PACKAGES_FILTER_KIND（使用 cli|tui|gui）"
+          exit 1
+        }
+        ;;
+      --tag)
+        shift
+        [[ $# -gt 0 ]] || { error "--tag 需要用途标签"; usage; exit 1; }
+        PACKAGES_FILTER_TAG="$1"
+        ;;
+      --dry-run)      DRY_RUN=true ;;
+      --base-only)    base_only=true ;;
+      --packages-only) packages_only=true ;;
+      --skip-docker)  SKIP_DOCKER=true ;;
+      --skip-git)     SKIP_GIT=true ;;
+      --skip-node)    SKIP_NODE=true ;;
+      --skip-cloc)    SKIP_CLOC=true ;;
+      --skip-tools)   SKIP_TOOLS=true ;;
       *) error "未知参数: $1"; usage; exit 1 ;;
     esac
     shift
   done
+
+  if [[ "$base_only" == true && "$packages_only" == true ]]; then
+    error "--base-only 与 --packages-only 不能同时使用"
+    exit 1
+  fi
+  if [[ "$check_only" == true && -n "$install_name" ]]; then
+    error "--check 与 --install 不能同时使用"
+    exit 1
+  fi
 
   echo -e "\n${BOLD}${CYAN}╔══════════════════════════════════════╗${NC}"
   echo -e "${BOLD}${CYAN}║   Ubuntu / Debian 初始化安装脚本     ║${NC}"
@@ -416,23 +576,44 @@ main() {
     exit 0
   fi
 
-  check_root
-
-  echo -e "${YELLOW}即将开始安装，是否继续？[y/N]${NC} \c"
-  read -r confirm
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    info "已取消安装。"
+  if [[ "$check_only" == true ]]; then
+    check_packages_status
     exit 0
   fi
 
-  install_base_deps
-  $skip_docker || install_docker
-  $skip_git    || install_git
-  $skip_node   || install_node
-  $skip_cloc   || install_cloc
-  $skip_tools  || install_tools
+  if [[ -n "$install_name" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      info "dry-run 模式：不会实际安装"
+    fi
+    install_one_package "$install_name"
+    echo -e "\n${GREEN}${BOLD}✓ 完成！${NC}\n"
+    exit 0
+  fi
 
-  post_install_notes
+  if [[ "$DRY_RUN" != true ]]; then
+    echo -e "${YELLOW}即将开始安装，是否继续？[y/N]${NC} \c"
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      info "已取消安装。"
+      exit 0
+    fi
+  else
+    info "dry-run 模式：不会实际安装"
+  fi
+
+  if [[ "$packages_only" != true ]]; then
+    configure_os_base
+  else
+    check_root
+  fi
+
+  if [[ "$base_only" != true ]]; then
+    install_packages_from_list
+  fi
+
+  if [[ "$DRY_RUN" != true ]]; then
+    post_install_notes
+  fi
   echo -e "\n${GREEN}${BOLD}✓ 所有任务执行完成！${NC}\n"
 }
 

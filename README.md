@@ -34,23 +34,36 @@ devtools/
 ### macOS
 
 ```bash
-./os/macos/setup.sh               # Full installation
+./os/macos/setup.sh               # Full installation (base + packages.list)
 ./os/macos/setup.sh --info-only   # Show system info only
+./os/macos/setup.sh --dry-run     # Preview without installing
+./os/macos/setup.sh --base-only   # Homebrew only
 ./os/macos/setup.sh --skip-casks  # Skip GUI applications
 ./os/macos/setup.sh --skip-omz    # Skip Oh My Zsh
 ```
 
-Installs: Homebrew, CLI tools (git, curl, wget, jq, tree, htop, gh, neovim), GUI apps (iTerm2, Sublime Text, Obsidian), Node.js via nvm, Oh My Zsh.
+Part 1 installs Homebrew. Part 2 installs from [`os/macos/packages.list`](os/macos/packages.list) (CLI formulae, GUI casks, Node via nvm, Oh My Zsh).
+
+### Ubuntu / Debian
+
+```bash
+./os/linux/setup_ubuntu.sh               # Full installation
+./os/linux/setup_ubuntu.sh --dry-run
+./os/linux/setup_ubuntu.sh --skip-docker
+```
+
+Uses [`os/linux/packages.ubuntu.list`](os/linux/packages.ubuntu.list).
 
 ### CentOS / RHEL
 
 ```bash
 ./os/linux/setup_centos.sh               # Full installation
 ./os/linux/setup_centos.sh --info-only
+./os/linux/setup_centos.sh --dry-run
 ./os/linux/setup_centos.sh --skip-docker # Skip Docker CE
 ```
 
-Installs: Docker CE (with docker-compose-plugin), Git, Node.js LTS via NodeSource.
+Part 1 installs base deps. Part 2 installs from [`os/linux/packages.centos.list`](os/linux/packages.centos.list) (Docker CE, Git, Node via NodeSource, terminal tools, Nerd Fonts).
 
 ## Shell and Terminal
 

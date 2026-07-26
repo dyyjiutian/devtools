@@ -22,7 +22,7 @@
 | 路径 | 职责 | 修改提示 |
 |---|---|---|
 | `setup.sh` | 根入口：交互式、全量或按模块编排初始化 | 新增模块时同步更新帮助、菜单、模块分派与 dry-run 行为 |
-| `os/` | macOS、Ubuntu/Debian、CentOS/RHEL 的系统初始化 | 可能安装系统包、写入系统配置或启用服务 |
+| `os/` | macOS、Ubuntu/Debian、CentOS/RHEL 的系统初始化 | 分「基础配置」与 `packages*.list` 驱动安装；共享解析在 `os/lib/` |
 | `languages/` | Python、Go、Java、Rust 等语言运行时 | 保持各语言安装器独立，不把语言特有逻辑塞进根入口 |
 | `shell/` | Bash、Zsh、Oh My Zsh、Starship 等 Shell 配置 | 注意 shell 启动文件的幂等修改 |
 | `terminal/` | Ghostty、iTerm2、tmux、Yazi 等终端工具 | 配置文件与安装脚本分离 |

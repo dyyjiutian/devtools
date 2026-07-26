@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # macOS 初始化安装脚本
-# 用途：自动安装常用开发工具和软件
+# Part 1: OS 基础配置（系统信息、Homebrew）
+# Part 2: 按 packages.list 安装常见软件
 
 set -euo pipefail
 
@@ -26,11 +27,12 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
-# ─── 本地缓存配置 ────────────────────────────────────────────────────────────
-# 若 cache/ 目录中存在对应文件，优先使用本地缓存，否则从官方 URL 下载。
-# 运行 `cache/download.sh macos` 可预先下载所有文件。
+# ─── 路径与缓存 ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${SCRIPT_DIR}/../../cache"
+PACKAGES_LIST="${SCRIPT_DIR}/packages.list"
+# shellcheck source=../lib/packages_list.sh
+source "${SCRIPT_DIR}/../lib/packages_list.sh"
 
 # 本地缓存优先下载：有缓存用缓存，否则从官方 URL 下载
 # 用法: fetch <cache相对路径> <官方URL> <输出文件>
@@ -53,41 +55,42 @@ ${BOLD}用法:${NC}
   $(basename "$0") [选项]
 
 ${BOLD}说明:${NC}
-  macOS 初始化脚本，自动检测系统信息并安装常用开发工具和软件。
+  macOS 初始化脚本，分两段执行：
+    1. OS 基础配置（系统信息、Homebrew）
+    2. 按 packages.list 安装常见软件
 
 ${BOLD}选项:${NC}
   -h, --help          显示此帮助信息并退出
   --info-only         仅显示系统信息，不执行安装
-  --skip-brew         跳过 Homebrew 安装/更新
-  --skip-casks        跳过 GUI 应用安装（iTerm2、Sublime Text、搜狗输入法、Obsidian 等）
-  --skip-formulae     跳过 CLI 工具安装
-  --skip-node         跳过 Node.js / npm 安装
-  --skip-omz          跳过 Oh My Zsh 安装
+  --check             检查 packages.list 中各软件是否已安装
+  --install <name>    仅安装清单中的指定软件（如 bat、rg）
+  --kind <cli|tui|gui>
+                      按界面类型筛选（可与 --check / 安装联用）
+  --tag <tag>         按用途筛选：productivity|diagnostic|dev|ops|shell
+  --dry-run           预览将执行的步骤，不实际安装
+  --base-only         仅执行 OS 基础配置
+  --packages-only     跳过基础配置，仅按 packages.list 安装
+  --skip-brew         跳过 Homebrew 安装/更新（基础阶段）
+  --skip-casks        跳过 brew-cask 条目
+  --skip-formulae     跳过 brew 条目
+  --skip-node         跳过 node / nvm 条目
+  --skip-omz          跳过 oh-my-zsh 条目
+  --skip-docker       跳过 docker cask
+  --skip-vscode       跳过 visual-studio-code cask
 
-${BOLD}安装的软件:${NC}
-  CLI 工具 (brew formulae):
-    git, curl, wget, jq, tree, htop, gh, neovim, cloc
-    tmux, fzf, yazi, zoxide, lazygit  - 终端增强工具
-
-  GUI 应用 (brew casks):
-    iterm2                 - 终端模拟器
-    visual-studio-code     - VS Code 编辑器（AI 开发首选）
-    docker                 - Docker Desktop
-    obsidian               - 知识库 / 笔记应用
-
-  Node.js:
-    nvm             - Node 版本管理器
-    node (LTS)      - 通过 nvm 安装最新 LTS 版本
-
-  Oh My Zsh:
-    oh-my-zsh       - Zsh 配置管理框架（包含插件和主题支持）
+${BOLD}清单文件:${NC}
+  ${PACKAGES_LIST}
 
 ${BOLD}示例:${NC}
   $(basename "$0")                    # 完整安装
   $(basename "$0") --info-only        # 仅查看系统信息
-  $(basename "$0") --skip-casks       # 仅安装 CLI 工具
-  $(basename "$0") --skip-docker      # 跳过 Docker Desktop
-  $(basename "$0") --skip-vscode      # 跳过 VS Code
+  $(basename "$0") --check            # 检查清单安装状态
+  $(basename "$0") --check --kind tui # 只看 TUI
+  $(basename "$0") --check --tag diagnostic
+  $(basename "$0") --install bat      # 只安装 bat
+  $(basename "$0") --tag productivity --packages-only
+  $(basename "$0") --dry-run          # 预览
+  $(basename "$0") --base-only        # 仅 Homebrew
 
 EOF
 }
@@ -96,7 +99,6 @@ EOF
 detect_system_info() {
   step "系统基本信息"
 
-  # macOS 版本
   local macos_version
   macos_version=$(sw_vers -productVersion)
   local macos_name
@@ -104,7 +106,6 @@ detect_system_info() {
   local build
   build=$(sw_vers -buildVersion)
 
-  # 芯片类型检测
   local chip_type chip_brand arch
   arch=$(uname -m)
   if [[ "$arch" == "arm64" ]]; then
@@ -115,21 +116,17 @@ detect_system_info() {
     chip_type="${YELLOW}Intel 芯片${NC}"
   fi
 
-  # 内存
   local mem_bytes mem_gb
   mem_bytes=$(sysctl -n hw.memsize)
   mem_gb=$(( mem_bytes / 1024 / 1024 / 1024 ))
 
-  # CPU 核心数
   local cpu_cores cpu_logical
   cpu_cores=$(sysctl -n hw.physicalcpu)
   cpu_logical=$(sysctl -n hw.logicalcpu)
 
-  # 磁盘空间
   local disk_info
   disk_info=$(df -h / | awk 'NR==2 {printf "总计 %s，已用 %s，可用 %s", $2, $3, $4}')
 
-  # 主机名 & 用户
   local hostname username
   hostname=$(scutil --get ComputerName 2>/dev/null || hostname)
   username=$(whoami)
@@ -147,14 +144,18 @@ detect_system_info() {
   echo -e ""
 }
 
-# ─── 检查命令是否存在 ────────────────────────────────────────────────────────
 is_installed() {
   command -v "$1" &>/dev/null
 }
 
-# ─── 安装 Homebrew ───────────────────────────────────────────────────────────
+# ─── Part 1: OS 基础配置 ─────────────────────────────────────────────────────
 install_brew() {
-  step "Homebrew"
+  step "Homebrew（OS 基础）"
+
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] 安装/更新 Homebrew"
+    return 0
+  fi
 
   if is_installed brew; then
     success "Homebrew 已安装：$(brew --version | head -1)"
@@ -168,7 +169,6 @@ install_brew() {
     /bin/bash "$tmp"
     rm -f "$tmp"
 
-    # Apple Silicon 需要配置 PATH
     if [[ "$(uname -m)" == "arm64" ]]; then
       local brew_profile='/opt/homebrew/bin/brew'
       if [[ -f "$brew_profile" ]]; then
@@ -181,76 +181,95 @@ install_brew() {
   fi
 }
 
-# ─── 安装 CLI 工具 ───────────────────────────────────────────────────────────
-install_formulae() {
-  step "CLI 工具安装"
-
-  local formulae=(
-    git
-    curl
-    wget
-    jq
-    tree
-    htop
-    gh
-    neovim
-    cloc
-    tmux
-    fzf
-    yazi
-    zoxide
-    lazygit
-    git-delta
-  )
-
-  for pkg in "${formulae[@]}"; do
-    if brew list --formula "$pkg" &>/dev/null; then
-      success "${pkg} 已安装，跳过"
-    else
-      info "正在安装 ${pkg}..."
-      brew install "$pkg" && success "${pkg} 安装完成"
-    fi
-  done
+configure_os_base() {
+  step "Part 1: OS 基础配置"
+  if [[ "${SKIP_BREW:-false}" == true ]]; then
+    info "已跳过 Homebrew（--skip-brew）"
+    return 0
+  fi
+  install_brew
 }
 
-# ─── 安装 GUI 应用（Casks）───────────────────────────────────────────────────
-# 用 "cask:描述" 格式的普通数组，兼容 bash 3.2（macOS 自带版本不支持 declare -A）
-install_casks() {
-  step "GUI 应用安装"
-
-  local _skip_docker="${MACOS_SKIP_DOCKER:-false}"
-  local _skip_vscode="${MACOS_SKIP_VSCODE:-false}"
-
-  local casks=()
-  casks+=("iterm2:iTerm2 终端")
-  [[ "$_skip_vscode" != true ]]  && casks+=("visual-studio-code:VS Code 编辑器")
-  [[ "$_skip_docker" != true ]]  && casks+=("docker:Docker Desktop")
-  casks+=("obsidian:Obsidian 知识库")
-
-  for entry in "${casks[@]}"; do
-    local cask="${entry%%:*}"
-    local desc="${entry#*:}"
-    if brew list --cask "$cask" &>/dev/null; then
-      success "${desc} 已安装，跳过"
-    else
-      info "正在安装 ${desc}..."
-      if brew install --cask "$cask"; then
-        success "${desc} 安装完成"
-      else
-        warn "${desc} 安装失败，请手动安装"
-      fi
-    fi
-  done
+# ─── Part 2: packages.list 安装适配 ──────────────────────────────────────────
+should_skip_package() {
+  local name="$1" source="$2"
+  case "$source" in
+    brew)
+      [[ "${SKIP_FORMULAE:-false}" == true ]] && return 0
+      ;;
+    brew-cask)
+      [[ "${SKIP_CASKS:-false}" == true ]] && return 0
+      [[ "$name" == "docker" && "${MACOS_SKIP_DOCKER:-false}" == true ]] && return 0
+      [[ "$name" == "visual-studio-code" && "${MACOS_SKIP_VSCODE:-false}" == true ]] && return 0
+      ;;
+    nvm)
+      [[ "${SKIP_NODE:-false}" == true ]] && return 0
+      ;;
+    script)
+      [[ "$name" == "oh-my-zsh" && "${SKIP_OMZ:-false}" == true ]] && return 0
+      ;;
+  esac
+  return 1
 }
 
-# ─── 安装 Node.js（通过 nvm）────────────────────────────────────────────────
-install_node() {
-  step "Node.js / npm 安装"
+package_is_installed() {
+  local name="$1"
+  case "$name" in
+    visual-studio-code)
+      is_installed code || brew list --cask visual-studio-code &>/dev/null
+      return $?
+      ;;
+    iterm2|obsidian)
+      brew list --cask "$name" &>/dev/null
+      return $?
+      ;;
+    docker)
+      is_installed docker || brew list --cask docker &>/dev/null
+      return $?
+      ;;
+  esac
+  packages_list_default_is_installed "$name"
+}
+
+install_brew_formula() {
+  local name="$1"
+  local formula
+  formula="$(packages_list_brew_formula "$name")"
+  if brew list --formula "$formula" &>/dev/null || packages_list_default_is_installed "$name"; then
+    success "${name} 已安装，跳过"
+  else
+    info "正在安装 ${name}（brew ${formula}）..."
+    brew install "$formula" && success "${name} 安装完成"
+  fi
+}
+
+install_brew_cask() {
+  local name="$1"
+  local desc="$name"
+  case "$name" in
+    iterm2) desc="iTerm2 终端" ;;
+    visual-studio-code) desc="VS Code 编辑器" ;;
+    docker) desc="Docker Desktop" ;;
+    obsidian) desc="Obsidian 知识库" ;;
+  esac
+  if brew list --cask "$name" &>/dev/null; then
+    success "${desc} 已安装，跳过"
+  else
+    info "正在安装 ${desc}..."
+    if brew install --cask "$name"; then
+      success "${desc} 安装完成"
+    else
+      warn "${desc} 安装失败，请手动安装"
+    fi
+  fi
+}
+
+install_node_nvm() {
+  step "Node.js / npm（nvm）"
 
   local nvm_dir="${NVM_DIR:-$HOME/.nvm}"
   export NVM_DIR="$nvm_dir"
 
-  # 安装或更新 nvm
   if [[ -s "$nvm_dir/nvm.sh" ]]; then
     # shellcheck source=/dev/null
     source "$nvm_dir/nvm.sh"
@@ -267,7 +286,6 @@ install_node() {
     success "nvm 安装完成：$(nvm --version)"
   fi
 
-  # 确保 zshrc 中包含 nvm 初始化代码（官方安装脚本只写 .bashrc/.bash_profile）
   local zshrc="$HOME/.zshrc"
   local nvm_init_marker='# nvm init (added by install.sh)'
   if [[ -f "$zshrc" ]] && ! grep -qF "$nvm_init_marker" "$zshrc"; then
@@ -291,7 +309,6 @@ ZSHRC
     info "~/.zshrc 中已有 nvm 初始化代码，跳过"
   fi
 
-  # 安装 Node.js LTS
   local current_node
   current_node=$(nvm current 2>/dev/null || echo "none")
   if [[ "$current_node" == "none" ]] || ! node --version &>/dev/null; then
@@ -306,9 +323,8 @@ ZSHRC
   fi
 }
 
-# ─── 安装 Oh My Zsh ─────────────────────────────────────────────────────────
-install_omz() {
-  step "Oh My Zsh 安装"
+install_oh_my_zsh() {
+  step "Oh My Zsh"
 
   if [[ -d "$HOME/.oh-my-zsh" ]]; then
     success "Oh My Zsh 已安装，跳过"
@@ -326,13 +342,111 @@ install_omz() {
   fi
 }
 
+install_package_entry() {
+  local name="$1" version="$2" source="$3" kind="${4:-}" tags="${5:-}"
+
+  if [[ "${PACKAGES_IGNORE_FILTERS:-false}" != true ]] && \
+     ! packages_list_match_filters "$kind" "$tags"; then
+    return 0
+  fi
+
+  if should_skip_package "$name" "$source"; then
+    info "跳过 ${name}（${source}）"
+    return 0
+  fi
+
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] ${name} ${version} (${source}) [${kind}] ${tags}"
+    return 0
+  fi
+
+  case "$source" in
+    brew)
+      install_brew_formula "$name"
+      ;;
+    brew-cask)
+      install_brew_cask "$name"
+      ;;
+    nvm)
+      [[ "$name" == "node" ]] || { warn "未知 nvm 条目: $name"; return 0; }
+      install_node_nvm
+      ;;
+    script)
+      case "$name" in
+        oh-my-zsh) install_oh_my_zsh ;;
+        *) warn "未知 script 条目: $name" ;;
+      esac
+      ;;
+    *)
+      warn "不支持的 source: ${source}（${name}）"
+      ;;
+  esac
+}
+
+install_packages_from_list() {
+  step "Part 2: 按 packages.list 安装常见软件"
+  if [[ ! -f "$PACKAGES_LIST" ]]; then
+    error "找不到软件清单: $PACKAGES_LIST"
+    return 1
+  fi
+  info "清单: $PACKAGES_LIST"
+  if [[ -n "${PACKAGES_FILTER_KIND:-}" || -n "${PACKAGES_FILTER_TAG:-}" ]]; then
+    info "筛选: kind=${PACKAGES_FILTER_KIND:-*} tag=${PACKAGES_FILTER_TAG:-*}"
+  fi
+  packages_list_foreach "$PACKAGES_LIST" install_package_entry
+}
+
+check_packages_status() {
+  step "检查 packages.list 安装状态"
+  info "清单: $PACKAGES_LIST"
+  packages_list_check "$PACKAGES_LIST"
+}
+
+install_one_package() {
+  local want_name="$1"
+  local entry name version source kind tags
+
+  step "安装单个软件: ${want_name}"
+  if ! entry="$(packages_list_lookup "$PACKAGES_LIST" "$want_name")"; then
+    error "清单中不存在: ${want_name}"
+    info "可用名称见: $PACKAGES_LIST 或运行 --check"
+    return 1
+  fi
+  IFS=$'\t' read -r name version source kind tags <<<"$entry"
+  info "${name} ${version} (${source}) [${kind}] ${tags}"
+
+  # brew / cask / nvm / script 依赖 Homebrew 或基础环境
+  if [[ "$source" == "brew" || "$source" == "brew-cask" ]]; then
+    if ! is_installed brew; then
+      warn "未检测到 Homebrew，先执行基础安装..."
+      configure_os_base
+    fi
+  fi
+
+  # 单包安装时忽略 --skip-* / --kind / --tag 过滤
+  local saved_skip_formulae="${SKIP_FORMULAE:-false}"
+  local saved_skip_casks="${SKIP_CASKS:-false}"
+  local saved_skip_node="${SKIP_NODE:-false}"
+  local saved_skip_omz="${SKIP_OMZ:-false}"
+  SKIP_FORMULAE=false
+  SKIP_CASKS=false
+  SKIP_NODE=false
+  SKIP_OMZ=false
+  MACOS_SKIP_DOCKER=false
+  MACOS_SKIP_VSCODE=false
+  PACKAGES_IGNORE_FILTERS=true
+  install_package_entry "$name" "$version" "$source" "$kind" "$tags"
+  PACKAGES_IGNORE_FILTERS=false
+  SKIP_FORMULAE="$saved_skip_formulae"
+  SKIP_CASKS="$saved_skip_casks"
+  SKIP_NODE="$saved_skip_node"
+  SKIP_OMZ="$saved_skip_omz"
+}
+
 # ─── 安装后提示 ──────────────────────────────────────────────────────────────
 post_install_notes() {
   step "安装后注意事项"
 
-  echo -e "  ${YELLOW}搜狗输入法${NC}: 安装后请前往"
-  echo -e "    系统设置 → 键盘 → 输入法 → 添加 "搜狗输入法""
-  echo -e ""
   echo -e "  ${YELLOW}iTerm2${NC}: 建议配置 Shell Integration:"
   echo -e "    打开 iTerm2 → 菜单 Install Shell Integration"
   echo -e ""
@@ -342,88 +456,77 @@ post_install_notes() {
   echo -e "  ${YELLOW}tmux${NC}: 终端复用器"
   echo -e "    常用命令: tmux new -s <name>, tmux attach -t <name>"
   echo -e ""
-  echo -e "  ${YELLOW}yazi${NC}: 终端文件管理器"
-  echo -e "    启动命令: yazi"
+  echo -e "  ${YELLOW}yazi${NC}: 终端文件管理器 — 启动: yazi"
   echo -e ""
-  echo -e "  ${YELLOW}zoxide${NC}: 快速目录跳转 (z 命令替代 cd)"
-  echo -e "    用法: z <目录名或关键词>"
-  echo -e "    添加到 ~/.zshrc: eval \"\$(zoxide init zsh)\""
+  echo -e "  ${YELLOW}zoxide${NC}: 快速目录跳转，添加到 ~/.zshrc:"
+  echo -e "    eval \"\$(zoxide init zsh)\""
   echo -e ""
-  echo -e "  ${YELLOW}lazygit${NC}: 终端 Git TUI 客户端"
-  echo -e "    启动命令: lazygit"
+  echo -e "  ${YELLOW}gh (GitHub CLI)${NC}: 安装完成后需登录：${BOLD}gh auth login${NC}"
   echo -e ""
-  echo -e "  ${YELLOW}gh (GitHub CLI)${NC}: 安装完成后需登录："
-  echo -e "    ${BOLD}gh auth login${NC}"
+  echo -e "  ${YELLOW}nvm / Node.js${NC}: 运行 ${BOLD}source ~/.zshrc${NC} 或打开新终端"
   echo -e ""
-  echo -e "  ${YELLOW}nvm / Node.js${NC}: 在当前终端立即生效，运行："
-  echo -e "    ${BOLD}source ~/.zshrc${NC}"
-  echo -e "  或直接打开新终端窗口。常用命令："
-  echo -e "    nvm ls                  # 查看已安装版本"
-  echo -e "    nvm install --lts       # 安装最新 LTS"
-  echo -e "    nvm use <version>       # 切换版本"
-  echo -e "    nvm alias default <ver> # 设置默认版本"
-  echo -e ""
-  echo -e "  ${YELLOW}Oh My Zsh${NC}: 配置文件位于 ~/.zshrc"
-  echo -e "    查看主题: ls ~/.oh-my-zsh/themes/"
-  echo -e "    查看插件: ls ~/.oh-my-zsh/plugins/"
-  echo -e ""
-  echo -e "  ${YELLOW}VS Code${NC}: AI 扩展可通过以下脚本安装："
-  echo -e "    ${BOLD}./editors/vscode/setup.sh${NC}"
+  echo -e "  ${YELLOW}VS Code${NC}: AI 扩展可通过 ./editors/vscode/setup.sh 安装"
   echo -e ""
   echo -e "  ${YELLOW}下一步（AI 研发环境）${NC}："
   echo -e "    languages/python/setup.sh    # Python + AI 包"
   echo -e "    languages/go/setup.sh        # Go 环境"
-  echo -e "    languages/java/setup.sh      # Java + SDKMan"
-  echo -e "    languages/rust/setup.sh      # Rust 环境"
   echo -e "    agents/claude/setup.sh       # Claude Code"
-  echo -e "    agents/codex/setup.sh        # Codex CLI"
-  echo -e "    agents/cursor-agent/setup.sh # Cursor Agent CLI"
   echo -e ""
 }
 
 # ─── 主入口 ──────────────────────────────────────────────────────────────────
 main() {
   local info_only=false
-  local skip_brew=false
-  local skip_casks=false
-  local skip_formulae=false
-  local skip_node=false
-  local skip_omz=false
-  # 可通过环境变量或标志控制 cask 中的可选组件
+  local check_only=false
+  local install_name=""
+  local base_only=false
+  local packages_only=false
+  DRY_RUN=false
+  SKIP_BREW=false
+  SKIP_CASKS=false
+  SKIP_FORMULAE=false
+  SKIP_NODE=false
+  SKIP_OMZ=false
   MACOS_SKIP_DOCKER=false
   MACOS_SKIP_VSCODE=false
+  PACKAGES_FILTER_KIND=""
+  PACKAGES_FILTER_TAG=""
+  PACKAGES_IGNORE_FILTERS=false
 
-  # 参数解析
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        usage
-        exit 0
+      -h|--help)        usage; exit 0 ;;
+      --info-only)      info_only=true ;;
+      --check)          check_only=true ;;
+      --install)
+        shift
+        [[ $# -gt 0 ]] || { error "--install 需要软件名"; usage; exit 1; }
+        install_name="$1"
         ;;
-      --info-only)
-        info_only=true
+      --kind)
+        shift
+        [[ $# -gt 0 ]] || { error "--kind 需要 cli|tui|gui"; usage; exit 1; }
+        PACKAGES_FILTER_KIND="$1"
+        packages_list_valid_kind "$PACKAGES_FILTER_KIND" || {
+          error "--kind 无效: $PACKAGES_FILTER_KIND（使用 cli|tui|gui）"
+          exit 1
+        }
         ;;
-      --skip-brew)
-        skip_brew=true
+      --tag)
+        shift
+        [[ $# -gt 0 ]] || { error "--tag 需要用途标签"; usage; exit 1; }
+        PACKAGES_FILTER_TAG="$1"
         ;;
-      --skip-casks)
-        skip_casks=true
-        ;;
-      --skip-formulae)
-        skip_formulae=true
-        ;;
-      --skip-node)
-        skip_node=true
-        ;;
-      --skip-omz)
-        skip_omz=true
-        ;;
-      --skip-docker)
-        MACOS_SKIP_DOCKER=true
-        ;;
-      --skip-vscode)
-        MACOS_SKIP_VSCODE=true
-        ;;
+      --dry-run)        DRY_RUN=true ;;
+      --base-only)      base_only=true ;;
+      --packages-only)  packages_only=true ;;
+      --skip-brew)      SKIP_BREW=true ;;
+      --skip-casks)     SKIP_CASKS=true ;;
+      --skip-formulae)  SKIP_FORMULAE=true ;;
+      --skip-node)      SKIP_NODE=true ;;
+      --skip-omz)       SKIP_OMZ=true ;;
+      --skip-docker)    MACOS_SKIP_DOCKER=true ;;
+      --skip-vscode)    MACOS_SKIP_VSCODE=true ;;
       *)
         error "未知参数: $1"
         usage
@@ -433,11 +536,19 @@ main() {
     shift
   done
 
+  if [[ "$base_only" == true && "$packages_only" == true ]]; then
+    error "--base-only 与 --packages-only 不能同时使用"
+    exit 1
+  fi
+  if [[ "$check_only" == true && -n "$install_name" ]]; then
+    error "--check 与 --install 不能同时使用"
+    exit 1
+  fi
+
   echo -e "\n${BOLD}${CYAN}╔══════════════════════════════════════╗${NC}"
   echo -e "${BOLD}${CYAN}║   macOS 初始化安装脚本               ║${NC}"
   echo -e "${BOLD}${CYAN}╚══════════════════════════════════════╝${NC}"
 
-  # 检测系统信息（始终执行）
   detect_system_info
 
   if [[ "$info_only" == true ]]; then
@@ -445,21 +556,42 @@ main() {
     exit 0
   fi
 
-  # 确认提示
-  echo -e "${YELLOW}即将开始安装，是否继续？[y/N]${NC} \c"
-  read -r confirm
-  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    info "已取消安装。"
+  if [[ "$check_only" == true ]]; then
+    check_packages_status
     exit 0
   fi
 
-  $skip_brew     || install_brew
-  $skip_formulae || install_formulae
-  $skip_casks    || install_casks
-  $skip_node     || install_node
-  $skip_omz      || install_omz
+  if [[ -n "$install_name" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      info "dry-run 模式：不会实际安装"
+    fi
+    install_one_package "$install_name"
+    echo -e "\n${GREEN}${BOLD}✓ 完成！${NC}\n"
+    exit 0
+  fi
 
-  post_install_notes
+  if [[ "$DRY_RUN" != true ]]; then
+    echo -e "${YELLOW}即将开始安装，是否继续？[y/N]${NC} \c"
+    read -r confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      info "已取消安装。"
+      exit 0
+    fi
+  else
+    info "dry-run 模式：不会实际安装"
+  fi
+
+  if [[ "$packages_only" != true ]]; then
+    configure_os_base
+  fi
+
+  if [[ "$base_only" != true ]]; then
+    install_packages_from_list
+  fi
+
+  if [[ "$DRY_RUN" != true ]]; then
+    post_install_notes
+  fi
 
   echo -e "\n${GREEN}${BOLD}✓ 所有任务执行完成！${NC}\n"
 }

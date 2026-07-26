@@ -4,6 +4,8 @@
 在执行时会自动优先使用本地缓存，无需联网，适合网络受限环境或统一分发。
 
 运行 `download.sh` 可一键下载所有文件到对应子目录。
+Linux 二进制版本（yazi / lazygit / fzf / zoxide / nerd-fonts / tmux / node）从
+`os/linux/packages.centos.list` 读取，修改版本时只需更新该清单。
 
 ---
 
