@@ -326,6 +326,8 @@ configure_starship_config() {
 
 # ---- 生成 .bashrc 配置块 ----
 # ble.sh 需要在其他插件前 source（--noattach），并在末尾 ble-attach。
+# 同时用 --noinputrc 让 ble.sh 不重建 readline (~/.inputrc) 的键绑定,
+# 避免个别环境里 inputrc 把普通方向键 (\eOD/\eOC) 误绑成按词移动。
 generate_bashrc_config() {
     echo "$CONFIG_MARKER"
     echo ""
@@ -335,8 +337,9 @@ generate_bashrc_config() {
         brew_prefix="$(brew --prefix)"
 
         echo "# ble.sh (自动建议 + 语法高亮，需在其他插件之前 source)"
+        echo "# --noinputrc: 不导入 readline 的 ~/.inputrc，避免其中的方向键绑定"
         echo "[[ \$- == *i* && -f \"${brew_prefix}/share/blesh/ble.sh\" ]] && \\"
-        echo "    source \"${brew_prefix}/share/blesh/ble.sh\" --noattach"
+        echo "    source \"${brew_prefix}/share/blesh/ble.sh\" --noattach --noinputrc"
         echo ""
         echo "# zoxide (z <关键词> 跳转，zi 交互式选择)"
         echo 'eval "$(zoxide init bash)"'
@@ -355,7 +358,7 @@ generate_bashrc_config() {
         echo ""
         echo "# ble.sh (自动建议 + 语法高亮，需在其他插件之前 source)"
         echo '[[ $- == *i* && -f ~/.local/share/blesh/ble.sh ]] && \'
-        echo '    source ~/.local/share/blesh/ble.sh --noattach'
+        echo '    source ~/.local/share/blesh/ble.sh --noattach --noinputrc'
         echo ""
         echo "# zoxide"
         echo 'command -v zoxide &>/dev/null && eval "$(zoxide init bash)"'
