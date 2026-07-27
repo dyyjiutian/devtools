@@ -1,0 +1,70 @@
+.TH GIT-SPARSE-CLONE 1
+.SH NAME
+git-sparse-clone \- sparse-clone selected directories from a large repository
+.SH SYNOPSIS
+.B git sparse-clone
+.I url
+.RI [ paths... ]
+.RI [ options ]
+.br
+.B git sparse-clone --append
+.RI [ --dir
+.IR dir ]
+.I paths...
+.SH DESCRIPTION
+.B git sparse-clone
+wraps Git sparse checkout (cone mode) to clone only selected directories from a
+large repository, or to append directories to an existing sparse checkout.
+.PP
+When no paths are given, only top-level files are checked out (no
+subdirectories), matching
+.B git clone --sparse
+defaults.
+.PP
+Paths are literal directory names. Glob patterns and negation
+.RB ( ! path )
+are not supported in this version.
+.SH OPTIONS
+.TP
+.BI --dir " DIR"
+Local target directory. Default: repository name derived from
+.IR url .
+With
+.BR --append ,
+an existing sparse repository (default: current repository).
+.TP
+.BI --branch " BRANCH"
+Branch to clone. Default: remote default branch.
+.TP
+.BI --commit " SHA"
+Check out a specific commit after clone.
+.TP
+.BI --depth " N"
+Shallow clone depth. Default: 1. Use 0 for full history.
+.TP
+.B --no-filter
+Disable
+.B --filter=blob:none
+(enabled by default).
+.TP
+.B --append
+Add paths to an existing sparse checkout instead of cloning.
+.TP
+.BR --force ", " -f
+Remove an existing target directory without prompting.
+.TP
+.BR --dry-run ", " -n
+Print actions without changing anything.
+.TP
+.BR -h ", " --help
+Show help.
+.SH EXAMPLES
+.nf
+git sparse-clone git@host:group/repo.git
+git sparse-clone https://github.com/org/repo.git devtools scripts
+git sparse-clone --dir my-sparse --branch main --depth 0 <url> src
+git sparse-clone --append scripts config
+git sparse-clone --append --dir /path/to/repo deploy
+.fi
+.SH NOTES
+Requires Git 2.25 or newer.

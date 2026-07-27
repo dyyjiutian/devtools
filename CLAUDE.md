@@ -88,7 +88,7 @@ Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential
 
 **Git Subcommand Installer** (`tools/git/scripts/sub-command.sh`):
 ```bash
-./sub-command.sh          # Install git rb/bc/wc/review + man pages to ~/.local/bin
+./sub-command.sh          # Install git rb/bc/wc/review/sparse-clone + man pages to ~/.local/bin
 ./sub-command.sh --dry-run
 ```
 
@@ -97,6 +97,7 @@ Sets: core.editor, pull.rebase, push.autoSetupRemote, diff.algorithm, credential
 - `git bc [branch] [--dry-run]` - delete local branches merged into the target branch
 - `git wc [branch] [--dry-run]` - remove merged linked worktrees and their branches
 - `git review [branch]` - open a review, auto-detecting the platform from origin (GitHub PR / Alibaba GitLab `refs/for/<target>/<branch>` / GitLab MR / Gerrit)
+- `git sparse-clone <url> [paths...]` - sparse-clone selected directories (cone); `--append` adds paths to an existing sparse repo
 
 These are self-contained scripts (not gitconfig aliases), so they survive removal of this repo. All support `--help` and auto-detect the default branch via `origin/HEAD`.
 

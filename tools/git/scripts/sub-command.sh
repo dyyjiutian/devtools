@@ -18,8 +18,8 @@ MAN_SRC_DIR="$GIT_ROOT_DIR/man/man1"
 LOCAL_BIN_DIR="$HOME/.local/bin"
 LOCAL_MAN_DIR="$HOME/.local/share/man/man1"
 
-COMMANDS=(git-rb git-bc git-wc git-review)
-MANPAGES=(git-rb.1 git-bc.1 git-wc.1 git-review.1)
+COMMANDS=(git-rb git-bc git-wc git-review git-sparse-clone)
+MANPAGES=(git-rb.1 git-bc.1 git-wc.1 git-review.1 git-sparse-clone.1)
 
 DRY_RUN=false
 
@@ -41,6 +41,7 @@ Subcommands installed:
   git bc [branch] [--dry-run]  delete local branches merged into the target branch
   git wc [branch] [--dry-run]  remove merged linked worktrees and their branches
   git review [branch]          open a PR / MR / Gerrit review, auto-detecting platform
+  git sparse-clone <url> [paths...]  sparse-clone selected directories (cone mode)
 
 Options:
   (none)       Install subcommands and man pages
@@ -181,5 +182,5 @@ echo ""
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "[DRY RUN] No changes were made. Remove --dry-run to apply."
 else
-  success "Git 子命令安装完成（git rb / bc / wc / review）"
+  success "Git 子命令安装完成（git rb / bc / wc / review / sparse-clone）"
 fi

@@ -215,7 +215,7 @@ See [`tools/git/README.md`](tools/git/README.md) for full documentation.
 
 ### One-Shot Setup (`tools/git/setup.sh`)
 
-Installs git-delta and GitHub CLI (`gh`; then run `gh auth login` to authenticate), installs the `git rb` / `git bc` / `git wc` / `git review` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
+Installs git-delta and GitHub CLI (`gh`; then run `gh auth login` to authenticate), installs the `git rb` / `git bc` / `git wc` / `git review` / `git sparse-clone` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
 
 ```bash
 bash tools/git/setup.sh           # Full setup
@@ -234,7 +234,7 @@ bash tools/git/scripts/config.sh --dry-run # Preview only
 
 ### Git Subcommand Installer (`tools/git/scripts/sub-command.sh`)
 
-Installs `git rb` / `git bc` / `git wc` / `git review` and their man pages to `~/.local/bin`. Runnable on its own with `--dry-run` / `--help`.
+Installs `git rb` / `git bc` / `git wc` / `git review` / `git sparse-clone` and their man pages to `~/.local/bin`. Runnable on its own with `--dry-run` / `--help`.
 
 ```bash
 bash tools/git/scripts/sub-command.sh           # Install
@@ -251,6 +251,7 @@ Installed to `~/.local/bin` by setup, so they keep working even if this repo is 
 | `git bc [branch] [--dry-run]` | Delete local branches already merged into the target remote branch (merged / rebase); skips worktree branches |
 | `git wc [branch] [--dry-run]` | Remove linked worktrees whose branches are already merged (merged / rebase), then delete those branches |
 | `git review [branch]` | Open a review for the current branch, auto-detecting the platform |
+| `git sparse-clone <url> [paths...]` | Sparse-clone selected directories (cone); append with `--append` |
 
 `git review` detects the platform from the `origin` remote URL and targets the repository's default branch (override with `git review <branch>`), matched in priority order:
 

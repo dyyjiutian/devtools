@@ -8,13 +8,14 @@ Git 开发环境的一键配置与可移植子命令。推荐用 `setup.sh` 一�
 tools/git/
 ├── setup.sh            # 一键配置入口
 ├── bin/                # 可移植的 git 子命令（安装到 ~/.local/bin）
-│   ├── git-rb          #   git rb     — fetch + rebase 到远端目标分支
-│   ├── git-bc          #   git bc     — 清理已合入的本地分支
-│   ├── git-wc          #   git wc     — 清理已合入的 linked worktree 及分支
-│   └── git-review      #   git review — 自动识别平台创建 PR / MR / Gerrit review
+│   ├── git-rb          #   git rb           — fetch + rebase 到远端目标分支
+│   ├── git-bc          #   git bc           — 清理已合入的本地分支
+│   ├── git-wc          #   git wc           — 清理已合入的 linked worktree 及分支
+│   ├── git-review      #   git review       — 自动识别平台创建 PR / MR / Gerrit review
+│   └── git-sparse-clone #  git sparse-clone — 稀疏克隆指定目录（cone） / 追加路径
 ├── man/man1/           # 上述子命令的 man 手册
 └── scripts/            # setup.sh 各步骤对应的可单独运行脚本
-    ├── sub-command.sh  # 安装 git rb / bc / wc / review 子命令及 man 手册
+    ├── sub-command.sh  # 安装 git rb / bc / wc / review / sparse-clone 子命令及 man 手册
     ├── config.sh       # 交互式写入推荐的 git 全局配置与性能优化
     └── alias.sh        # 安装 shell alias（仅 gitroot）
 ```
@@ -39,7 +40,7 @@ bash setup.sh --skip-config # 跳过 git config
 
 1. 安装 [git-delta](https://github.com/dandavison/delta) 并配置为 diff/log/show pager
 2. 安装 [GitHub CLI (`gh`)](https://cli.github.com/)；DNF 系统自动添加 GitHub 官方 RPM 源，并提示执行 `gh auth login` 完成 GitHub 认证
-3. `scripts/sub-command.sh`：安装 `git rb` / `git bc` / `git wc` / `git review` 子命令及 man 手册到 `~/.local/bin`
+3. `scripts/sub-command.sh`：安装 `git rb` / `git bc` / `git wc` / `git review` / `git sparse-clone` 子命令及 man 手册到 `~/.local/bin`
 4. `scripts/config.sh`：写入推荐的 git 全局配置与 status / pull / fetch / checkout 性能优化
 5. `scripts/alias.sh`：安装 `gitroot`
 
@@ -62,8 +63,24 @@ bash scripts/sub-command.sh --dry-run  # 预览
 | `git bc [branch] [--dry-run]` | 删除已合入目标远端分支的本地分支（含 merged / rebase）；worktree 中的分支请用 `git wc` |
 | `git wc [branch] [--dry-run]` | 删除已合入的 linked worktree 及其本地分支（含 merged / rebase） |
 | `git review [branch]` | 自动识别 origin 平台，向远端主干分支创建 review |
+| `git sparse-clone <url> [paths...]` | 稀疏克隆指定目录（cone）；无路径时仅根目录文件 |
+| `git sparse-clone --append [paths...]` | 在已有稀疏仓中追加路径（可用 `--dir`） |
 
 所有子命令均支持 `--help`，并通过 `git symbolic-ref refs/remotes/origin/HEAD` 自动识别默认分支（main / master 等）。`git bc` / `git wc` 默认保护 `main` / `master` / `develop` / `dev` 及目标分支。
+
+### git sparse-clone
+
+从大型仓库只检出需要的目录（默认启用 `--filter=blob:none` 与浅克隆 `--depth 1`）：
+
+```bash
+git sparse-clone <url>                         # 仅根目录文件
+git sparse-clone <url> devtools scripts        # 指定多个目录
+git sparse-clone --dir my-sparse --branch main <url> src
+git sparse-clone --append scripts              # 在当前稀疏仓追加
+git sparse-clone --append --dir /path/to/repo deploy
+```
+
+常用选项：`--dir`、`--branch`、`--commit`、`--depth`（`0` = 完整历史）、`--no-filter`、`--force`、`--dry-run`。首版为 cone 模式字面路径；glob / `!` 排除尚未支持。
 
 ### git review 平台识别规则
 
@@ -156,4 +173,11 @@ source ~/.zshrc   # 或 source ~/.bashrc
 git config --global --list
 git rb --help
 git review --help
+git sparse-clone --help
 ```
+
+## Issues
+
+### 2026-07-27 — 大型仓库稀疏克隆步骤多、易配错
+
+原生 `git clone --sparse` + `sparse-checkout` 需要多步参数组合，且 cone / filter / depth 容易漏配。新增可移植子命令 `git sparse-clone`：默认 `--filter=blob:none`、`--depth 1`、cone 模式；支持多路径与 `--append` 追加。安装：`bash tools/git/scripts/sub-command.sh`。

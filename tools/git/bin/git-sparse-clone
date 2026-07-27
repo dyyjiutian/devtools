@@ -1,0 +1,317 @@
+#!/usr/bin/env bash
+# Portable git subcommand: sparse-clone a large repo to selected cone paths,
+# or append paths to an existing sparse checkout.
+set -euo pipefail
+
+PROG="git sparse-clone"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  git sparse-clone <url> [paths...] [options]
+  git sparse-clone --append [--dir <DIR>] <paths...>
+
+Sparse-clone selected directories from a large repository (cone mode), or append
+paths to an existing sparse checkout.
+
+Options:
+  --dir <DIR>         Local target directory (default: repo name from URL)
+                      With --append: existing sparse repo (default: current)
+  --branch <BRANCH>   Branch to clone (default: remote default branch)
+  --commit <SHA>      Check out a specific commit after clone
+  --depth <N>         Shallow clone depth; 0 = full history (default: 1)
+  --no-filter         Disable --filter=blob:none (enabled by default)
+  --append            Add paths to an existing sparse checkout
+  --force             Remove existing target directory without prompting
+  --dry-run           Print actions without changing anything
+  -h, --help          Show this help
+
+Notes:
+  - With no paths, only top-level files are checked out (no subdirectories).
+  - Paths are literal directory names (cone mode). Glob / negation (!path)
+    are not supported in this version.
+  - Requires Git 2.25+ (clone --sparse / sparse-checkout cone).
+
+Examples:
+  git sparse-clone git@host:group/repo.git
+  git sparse-clone https://github.com/org/repo.git devtools scripts
+  git sparse-clone --dir my-sparse --branch main --depth 0 <url> src
+  git sparse-clone --append scripts config
+  git sparse-clone --append --dir /path/to/repo deploy
+EOF
+}
+
+die() {
+  echo "$PROG: $*" >&2
+  exit 1
+}
+
+require_git_version() {
+  local ver major minor
+  ver="$(git --version 2>/dev/null | awk '{print $3}')"
+  major="${ver%%.*}"
+  minor="${ver#*.}"
+  minor="${minor%%.*}"
+  if [[ -z "$major" || -z "$minor" ]] || (( major < 2 || (major == 2 && minor < 25) )); then
+    die "requires Git 2.25+ (found: ${ver:-unknown})"
+  fi
+}
+
+repo_name_from_url() {
+  local url="$1" name
+  name="${url%/}"
+  name="${name%.git}"
+  name="${name##*/}"
+  name="${name##*:}"
+  if [[ -z "$name" || "$name" == "$url" ]]; then
+    die "cannot derive directory name from URL: $url"
+  fi
+  printf '%s\n' "$name"
+}
+
+validate_paths() {
+  local p
+  for p in "$@"; do
+    if [[ "$p" == !* ]]; then
+      die "negation paths are not supported yet: $p"
+    fi
+    case "$p" in
+      *[\*\?\[]* | *\]*)
+        die "glob paths are not supported yet: $p"
+        ;;
+    esac
+    if [[ -z "$p" ]]; then
+      die "empty path is not allowed"
+    fi
+  done
+}
+
+run_cmd() {
+  if [[ "$DRY_RUN" == "true" ]]; then
+    printf '[DRY RUN] '
+    printf '%q ' "$@"
+    printf '\n'
+  else
+    "$@"
+  fi
+}
+
+confirm_remove_dir() {
+  local dir="$1"
+  if [[ "$FORCE" == "true" ]]; then
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    die "target directory exists: $dir (re-run with --force)"
+  fi
+  local reply
+  printf 'Directory %s already exists. Delete it? [y/N] ' "$dir"
+  read -r reply
+  case "$reply" in
+    y|Y|yes|YES) return 0 ;;
+    *) die "aborted" ;;
+  esac
+}
+
+ensure_sparse_enabled() {
+  local repo="$1"
+  local mode
+  mode="$(git -C "$repo" config --get core.sparseCheckout 2>/dev/null || true)"
+  if [[ "$mode" != "true" ]]; then
+    die "sparse-checkout is not enabled in $repo"
+  fi
+}
+
+do_clone() {
+  local -a clone_args=(clone)
+  local -a path_args=()
+
+  if [[ "$NO_FILTER" != "true" ]]; then
+    clone_args+=(--filter=blob:none)
+  fi
+  clone_args+=(--sparse)
+  if [[ "$DEPTH" -gt 0 ]]; then
+    clone_args+=(--depth "$DEPTH")
+  fi
+  if [[ -n "$BRANCH" ]]; then
+    clone_args+=(--branch "$BRANCH")
+  fi
+  clone_args+=("$URL" "$DIR")
+
+  if [[ ${#PATHS[@]} -gt 0 ]]; then
+    path_args=("${PATHS[@]}")
+  fi
+
+  if [[ -e "$DIR" ]]; then
+    confirm_remove_dir "$DIR"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      printf '[DRY RUN] rm -rf %q\n' "$DIR"
+    else
+      rm -rf "$DIR"
+    fi
+  fi
+
+  run_cmd git "${clone_args[@]}"
+
+  if [[ ${#path_args[@]} -gt 0 ]]; then
+    run_cmd git -C "$DIR" sparse-checkout set --cone -- "${path_args[@]}"
+  fi
+
+  if [[ -n "$COMMIT" ]]; then
+    if [[ "$DEPTH" -gt 0 ]]; then
+      run_cmd git -C "$DIR" fetch --depth "$DEPTH" origin "$COMMIT"
+    else
+      run_cmd git -C "$DIR" fetch origin "$COMMIT"
+    fi
+    run_cmd git -C "$DIR" checkout --detach "$COMMIT"
+  fi
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN] sparse clone planned → $DIR"
+    return 0
+  fi
+
+  echo "Sparse clone ready: $DIR"
+  if [[ -n "$COMMIT" ]]; then
+    echo "  commit: $COMMIT"
+  elif [[ -n "$BRANCH" ]]; then
+    echo "  branch: $BRANCH"
+  else
+    echo "  branch: $(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  fi
+  echo "  sparse paths:"
+  git -C "$DIR" sparse-checkout list | sed 's/^/    /' || echo "    (root only)"
+}
+
+do_append() {
+  local repo="$DIR"
+  local -a path_args=("${PATHS[@]}")
+
+  if [[ ${#path_args[@]} -eq 0 ]]; then
+    die "--append requires at least one path"
+  fi
+
+  if [[ -z "$repo" ]]; then
+    repo="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repository (pass --dir)"
+  fi
+
+  if ! git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    die "not a git work tree: $repo"
+  fi
+
+  ensure_sparse_enabled "$repo"
+  run_cmd git -C "$repo" sparse-checkout add -- "${path_args[@]}"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN] sparse append planned → $repo"
+    return 0
+  fi
+
+  echo "Sparse paths updated in $repo:"
+  git -C "$repo" sparse-checkout list | sed 's/^/  /'
+}
+
+# --- defaults ---
+URL=""
+DIR=""
+BRANCH=""
+COMMIT=""
+DEPTH=1
+NO_FILTER=false
+APPEND=false
+FORCE=false
+DRY_RUN=false
+PATHS=()
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --dir)
+      [[ $# -ge 2 ]] || die "--dir requires a value"
+      DIR="$2"
+      shift 2
+      ;;
+    --branch)
+      [[ $# -ge 2 ]] || die "--branch requires a value"
+      BRANCH="$2"
+      shift 2
+      ;;
+    --commit)
+      [[ $# -ge 2 ]] || die "--commit requires a value"
+      COMMIT="$2"
+      shift 2
+      ;;
+    --depth)
+      [[ $# -ge 2 ]] || die "--depth requires a value"
+      DEPTH="$2"
+      [[ "$DEPTH" =~ ^[0-9]+$ ]] || die "--depth must be a non-negative integer"
+      shift 2
+      ;;
+    --no-filter)
+      NO_FILTER=true
+      shift
+      ;;
+    --append)
+      APPEND=true
+      shift
+      ;;
+    --force|-f)
+      FORCE=true
+      shift
+      ;;
+    --dry-run|-n)
+      DRY_RUN=true
+      shift
+      ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do
+        POSITIONAL+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      die "unknown option: $1"
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+require_git_version
+
+if [[ "$APPEND" == "true" ]]; then
+  if [[ ${#POSITIONAL[@]} -eq 0 ]]; then
+    die "--append requires at least one path"
+  fi
+  if [[ -n "$BRANCH" || -n "$COMMIT" ]]; then
+    die "--branch/--commit cannot be used with --append"
+  fi
+  PATHS=("${POSITIONAL[@]}")
+  validate_paths "${PATHS[@]}"
+  do_append
+  exit 0
+fi
+
+if [[ ${#POSITIONAL[@]} -eq 0 ]]; then
+  usage >&2
+  die "repository URL is required"
+fi
+
+URL="${POSITIONAL[0]}"
+if [[ ${#POSITIONAL[@]} -gt 1 ]]; then
+  PATHS=("${POSITIONAL[@]:1}")
+  validate_paths "${PATHS[@]}"
+fi
+
+if [[ -z "$DIR" ]]; then
+  DIR="$(repo_name_from_url "$URL")"
+fi
+
+do_clone
