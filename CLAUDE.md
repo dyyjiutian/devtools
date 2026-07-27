@@ -116,3 +116,116 @@ All setup scripts:
 - Create backups before modifying existing files
 - Support `--dry-run` or similar preview modes where applicable
 - Output color-coded status messages
+
+## Repository Conventions
+
+Follow this order when instructions conflict:
+
+1. The user's current request
+2. Repository-level `AGENTS.md` rules
+3. More specific `AGENTS.md`, `CLAUDE.md`, or README files in the target directory
+4. `README.md`, `BAZEL.md`, and each script's `--help` output
+
+Keep module boundaries clear. The root `setup.sh` should only parse arguments,
+select modules, orchestrate workflows, and implement dry-run behavior. Put
+tool- or platform-specific logic in the relevant subdirectory. Directories
+such as `network/`, `tools/`, `agents/`, and `os/macos/remote-desktop/` may
+have their own entry points and are not necessarily included by
+`./setup.sh --all`.
+
+For new or changed shell functionality:
+
+- Keep scripts Bash-compatible and safe to rerun. Configuration changes must
+  be idempotent and use markers, backups, or an equivalent managed update
+  strategy; repeated runs must not duplicate or damage correct state.
+- Prefer existing interfaces and markers over global state or copied logic.
+  Keep CLI handling, use-case orchestration, and system/package/network
+  adapters separated.
+- Add or update Bazel tests for installer and configuration behavior. Prefer
+  OS-profile × module coverage and run at least the `macos` and
+  `linux_centos` profiles when available; include Ubuntu coverage when the
+  module has an Ubuntu matrix.
+- Prefer cached installation assets under `cache/`. If a source, version,
+  checksum, or architecture changes, update the corresponding tests.
+- Do not commit API keys, passwords, UUIDs, private keys, personal machine
+  paths, or temporary generated configuration.
+
+Preview installation behavior before making real system changes:
+
+```bash
+bash setup.sh --help
+bash setup.sh --modules python --dry-run
+bash languages/python/setup.sh --help
+bash languages/python/setup.sh --dry-run
+```
+
+Network, service, firewall, VPN, proxy, FRP, SSH, and remote-host operations
+must state their permissions, exact targets, risks, and rollback path. Do not
+run real installations merely to validate syntax or run remote/network
+changes without an explicit target and recovery plan.
+
+## Documentation and Issue Records
+
+The root README is user-facing; module READMEs describe module operation and
+maintenance; this file and `AGENTS.md` guide development agents. Keep
+commands copyable and document when `sudo`, network access, a particular OS,
+or extra tools are required. Treat scripts and tests as the source of truth;
+do not expand undocumented or unverified promises.
+
+When fixing an issue in an existing module, add an entry to that module's
+`README.md` under `## Issues` or `## Issues / FAQ` using this format:
+
+```text
+YYYY-MM-DD — Short problem description
+```
+
+Include the symptom, root cause, and solution, with reproduction or repair
+commands when useful.
+
+## Verification Workflow
+
+Choose the smallest sufficient checks for the changed scope. At minimum,
+inspect the diff and run `git diff --check`. For shell changes, use `bash -n`
+and the relevant regression tests. When available, validate installer changes
+with `--help`, `--dry-run`, cached paths, repeated execution, and rollback
+paths.
+
+```bash
+bash -n setup.sh
+bash tests/linux_setup_scripts_test.sh
+bash os/macos/run_bats.sh
+bazel test //...
+bazel test //os/macos:macos_setup_bats_test
+bazel test //tools/git/... //terminal/tmux/...
+```
+
+If `bazel` or `bats` is unavailable, report that it was not run; never treat
+missing tooling as a passing result. Do not run real installers during routine
+validation.
+
+## Git Workflow
+
+Preserve unrelated user changes and inspect the worktree before editing. Do
+not use destructive Git cleanup commands unless the user explicitly requests
+them. When using a Superpowers implementation workflow, work in a dedicated
+Git worktree.
+
+Before submitting changes, check:
+
+```bash
+git status --short
+git diff --check
+git diff
+```
+
+Use concise conventional commit messages. After verification, prefer the
+repository workflow:
+
+```bash
+git rb && git review
+```
+
+If that workflow fails, fetch and rebase the default branch before falling
+back to the normal push and PR flow. Resolve conflicts and verify before
+continuing. Never force-push over another person's work without explicit
+authorization.
