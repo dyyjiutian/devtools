@@ -168,11 +168,40 @@ establish_master() {
 # Wrapper: route any ssh call through the open master socket
 mssh() { ssh -o ControlMaster=no -o ControlPath="$CTRL_SOCK" "$@"; }
 
+# Run tmux through a login shell so remote user startup files can add
+# ~/.local/bin (or another user-local directory) to PATH. Each argument is
+# quoted for the remote shell before being passed to `bash -lc`.
+remote_tmux() {
+    local ssh_args=()
+    if [[ "$1" == "-t" ]]; then
+        ssh_args+=("-t")
+        shift
+    fi
+
+    local host="$1"
+    shift
+
+    local tmux_command="tmux"
+    local arg quoted_command
+    for arg in "$@"; do
+        tmux_command+=" $(printf '%q' "$arg")"
+    done
+
+    quoted_command=$(printf '%q' "$tmux_command")
+    mssh "${ssh_args[@]}" "$host" "bash -lc $quoted_command"
+}
+
 # ── Remote tmux session lister ────────────────────────────────────────────────
 list_remote_sessions() {
     local host="$1"
-    mssh "$host" "tmux list-sessions -F '#{session_name}' 2>/dev/null" 2>/dev/null \
-        | grep -v '^$' || true
+    local sessions
+
+    if ! sessions=$(remote_tmux "$host" list-sessions -F '#{session_name}' 2>/dev/null); then
+        warn "无法列出 ${host} 上的远端 tmux session，继续创建/登录会话"
+        return 0
+    fi
+
+    printf '%s\n' "$sessions" | grep -v '^$' || true
 }
 
 # ── fzf session picker ────────────────────────────────────────────────────────
@@ -244,20 +273,18 @@ case "$CHOICE" in
         ;;
 esac
 
-SESSION_Q=$(printf '%q' "$SESSION")
-
 success "→ ${HOST}  session: ${SESSION}"
 
 # Probe without PTY so the shell's raw stderr (e.g. "tmux: command not found")
 # comes back through the non-PTY SSH channel and can be captured and displayed.
-if ! _tmux_check=$(mssh "$HOST" "tmux -V" 2>&1); then
+if ! _tmux_check=$(remote_tmux "$HOST" -V 2>&1); then
     [[ -n "$_tmux_check" ]] && echo "$_tmux_check" >&2
     error "tmux not available on ${HOST}"
 fi
 
 # Do not use exec — trap must fire on exit to clean up terminal state
 INTERACTIVE_SESSION_STARTED=true
-mssh -t "$HOST" "tmux new-session -As $SESSION_Q" || {
+remote_tmux -t "$HOST" new-session -As "$SESSION" || {
     rc=$?
     echo -e "\033[31m[ERROR]\033[0m Remote tmux exited ${rc} on ${HOST}" >&2
     exit $rc
