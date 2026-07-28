@@ -14,7 +14,8 @@
 | `agent-hooks-setup.sh` | macOS | 管理 listener、LaunchAgent，以及本机/远端的 Claude / Codex / Cursor hook |
 | `agent-listener.sh` | macOS | python3 socket server：解析通知、播放提示音、弹系统通知 |
 
-> listener 与 hook 均依赖 `python3`（macOS 自带）与 `nc`。
+> listener 与 hook 均依赖 `python3`（macOS 自带）。通知通过带 2 秒超时的
+> Python socket 发送，不依赖不同平台上行为不一致的 `nc`。
 
 安装后 `agent-listener.sh` 会被复制到与代码库解耦的稳定位置 `~/.cliagent-hook/agent-listener.sh`，即使代码库被移动/删除，开机自启仍可用。本机与远端安装的 hook 脚本也统一放在各自 `~/.cliagent-hook/hooks/` 下。
 
@@ -58,7 +59,7 @@ ssh -R 19999:127.0.0.1:19999 -o ExitOnForwardFailure=yes user@your-linux
 
 ## hook 接入方式
 
-- **Claude**：在目标 `~/.claude/settings.json` 的 `hooks.Stop`（一轮结束）与 `hooks.Notification`（需要输入）各挂一条命令 hook。合并写入、幂等，保留其他已有 hook。
+- **Claude**：在目标 `~/.claude/settings.json` 的 `hooks.Stop`（一轮结束）与 `hooks.Notification`（需要输入）各挂一条命令 hook，并设置 10 秒框架级超时。合并写入、幂等，保留其他已有 hook。
 - **Cursor**：在目标 `~/.cursor/hooks.json` 的 `stop` 事件挂一条命令 hook（应用名显示为 `Cursor Agent`）。合并写入、幂等。
 - **Codex**：在目标 `~/.codex/config.toml` 用托管块维护 `notify`，触发时发送 `codex:<type>`（如 `codex:agent_turn_complete`）。
 
@@ -70,7 +71,7 @@ ssh -R 19999:127.0.0.1:19999 -o ExitOnForwardFailure=yes user@your-linux
 
   为避免 TOML 重复键，`add` 时会移除托管块外已有的顶层 `notify`，其余配置保留。
 
-> 远端安装依赖远端具备 `python3` 与 `nc`（缺失则 hook 静默跳过）。
+> 远端安装依赖远端具备 `python3`（缺失则 hook 静默跳过）。
 
 ## 协议
 
@@ -99,7 +100,8 @@ listener 映射为系统通知（三行：title / subtitle / body）：
 - **项目名**由 listener 统一从 `cwd` 取 basename（本地/远端通用，纯字符串处理，无需访问远端文件系统）。
 - **会话标题**在 hook 里生成：Claude `stop` → transcript 首条用户消息，`notification` → Claude 的提示或 `Input Needed`；Codex 取 `input-messages`（其次 `last-assistant-message`）；Cursor `stop` → 用 `conversation_id` 读 `~/.cursor/chats/*/<id>/meta.json` 的 `title`（未文档化，尽力而为，取不到则留空）。标题为空时 subtitle 仅显示项目名。
 - `origin` 等于 Mac 本机主机名 → `Local · <本机名>`，否则 `Remote · <主机名>`。
-- hook 依赖目标机的 `python3` 与 `nc`（缺失则静默跳过，不影响 agent 运行）。
+- hook 依赖目标机的 `python3`（缺失则静默跳过，不影响 agent 运行）。发送端连接、
+  写入与关闭均有 2 秒超时；listener 收到首行后立即关闭连接，不等待发送端继续读取。
 
 ## 提示音与通知
 
@@ -143,3 +145,24 @@ Host dev-linux
 ```
 
 之后直接 `ssh dev-linux` 即可。
+
+## Issues / FAQ
+
+### 2026-07-28 — 远端 Linux 的 Agent hook 可能卡住 60 秒
+
+**表象**：Mac listener 正常监听时，从 Mac SSH 到 Linux 运行 Claude Code，`Stop`
+hook 可能一直阻塞到 Claude 的 60 秒默认超时；Codex 和 Cursor 的同类 hook 也有
+相同风险。
+
+**根因**：旧 hook 使用 `nc -w 2`。不同 `nc` 实现对 `-w` 的定义不一致；Nmap
+Ncat 的该选项不限制发送完成后的读取阶段，而旧 listener 又等待客户端 EOF，双方会
+互相等待。
+
+**解法**：发送端统一改为 Python socket，在 2 秒超时内发送单行 JSON、关闭写端并
+退出；listener 读到首行换行符后立即关闭连接。Claude 的 `Stop` 与 `Notification`
+hook 另设 10 秒框架级超时。重新运行以下命令即可幂等升级三类 hook：
+
+```bash
+cd os/macos/agent-notify
+./agent-hooks-setup.sh hook add all user@your-linux
+```

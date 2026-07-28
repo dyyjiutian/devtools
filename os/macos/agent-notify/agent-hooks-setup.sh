@@ -95,7 +95,34 @@ is_listener_running() {
 
 port_listening() {
   local host="$1" port="$2"
-  nc -G 2 -z "$host" "$port" >/dev/null 2>&1
+  CLIAGENT_HOOK_PROBE_HOST="$host" CLIAGENT_HOOK_PROBE_PORT="$port" python3 -c '
+import os
+import socket
+
+host = os.environ["CLIAGENT_HOOK_PROBE_HOST"]
+port = int(os.environ["CLIAGENT_HOOK_PROBE_PORT"])
+with socket.create_connection((host, port), timeout=2):
+    pass
+' >/dev/null 2>&1
+}
+
+send_payload() {
+  local host="$1" port="$2"
+  CLIAGENT_HOOK_SEND_HOST="$host" CLIAGENT_HOOK_SEND_PORT="$port" python3 -c '
+import os
+import socket
+import sys
+
+host = os.environ["CLIAGENT_HOOK_SEND_HOST"]
+port = int(os.environ["CLIAGENT_HOOK_SEND_PORT"])
+payload = sys.stdin.buffer.read()
+if not payload.endswith(b"\n"):
+    payload += b"\n"
+with socket.create_connection((host, port), timeout=2) as sock:
+    sock.settimeout(2)
+    sock.sendall(payload)
+    sock.shutdown(socket.SHUT_WR)
+'
 }
 
 launchctl_domain() {
@@ -292,7 +319,7 @@ cmd_test() {
   payload="$(SRC="$source" ORG="$origin" CWD="$PWD" python3 -c \
     'import os,json;print(json.dumps({"source":os.environ["SRC"],"event":"test","origin":os.environ["ORG"],"cwd":os.environ["CWD"],"message":"测试通知"},ensure_ascii=False))')"
 
-  if printf '%s\n' "$payload" | nc -w 2 127.0.0.1 "$PORT" >/dev/null 2>&1; then
+  if printf '%s\n' "$payload" | send_payload 127.0.0.1 "$PORT" >/dev/null 2>&1; then
     success "已发送测试通知"
   else
     error "无法连接 127.0.0.1:${PORT}"
@@ -301,6 +328,28 @@ cmd_test() {
 }
 
 # ────────────────────────────── hook 脚本内容 ──────────────────────────────
+
+hook_sender_content() {
+  cat <<'EOF'
+send_notification() {
+  local message="$1"
+  printf '%s\n' "$message" |
+    CLIAGENT_HOOK_SEND_HOST="$HOST" CLIAGENT_HOOK_SEND_PORT="$PORT" python3 -c '
+import os
+import socket
+import sys
+
+host = os.environ["CLIAGENT_HOOK_SEND_HOST"]
+port = int(os.environ["CLIAGENT_HOOK_SEND_PORT"])
+payload = sys.stdin.buffer.read()
+with socket.create_connection((host, port), timeout=2) as sock:
+    sock.settimeout(2)
+    sock.sendall(payload)
+    sock.shutdown(socket.SHUT_WR)
+'
+}
+EOF
+}
 
 claude_hook_content() {
   cat <<'EOF'
@@ -313,6 +362,10 @@ command -v python3 >/dev/null 2>&1 || exit 0
 PORT="${CLIAGENT_HOOK_PORT:-19999}"
 HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
 EVENT="${1:-stop}"
+
+EOF
+  hook_sender_content
+  cat <<'EOF'
 
 MSG="$(EVENT="$EVENT" python3 -c '
 import sys, os, json, socket
@@ -364,7 +417,7 @@ print(json.dumps({"source": "claude", "event": ev,
                   "cwd": cwd, "message": body}, ensure_ascii=False))
 ')"
 
-printf '%s\n' "$MSG" | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1 || true
+send_notification "$MSG" >/dev/null 2>&1 || true
 exit 0
 EOF
 }
@@ -379,6 +432,10 @@ command -v python3 >/dev/null 2>&1 || exit 0
 
 PORT="${CLIAGENT_HOOK_PORT:-19999}"
 HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
+
+EOF
+  hook_sender_content
+  cat <<'EOF'
 
 MSG="$(python3 -c '
 import sys, os, json, socket
@@ -403,7 +460,7 @@ print(json.dumps({"source": "codex", "event": event,
                   "cwd": cwd, "message": body}, ensure_ascii=False))
 ' "${1:-}")"
 
-printf '%s\n' "$MSG" | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1 || true
+send_notification "$MSG" >/dev/null 2>&1 || true
 exit 0
 EOF
 }
@@ -417,6 +474,10 @@ command -v python3 >/dev/null 2>&1 || exit 0
 
 PORT="${CLIAGENT_HOOK_PORT:-19999}"
 HOST="${CLIAGENT_HOOK_HOST:-127.0.0.1}"
+
+EOF
+  hook_sender_content
+  cat <<'EOF'
 
 MSG="$(python3 -c '
 import sys, os, json, socket, glob
@@ -452,7 +513,7 @@ print(json.dumps({"source": "cursor", "event": "stop",
                   "cwd": cwd, "message": title}, ensure_ascii=False))
 ')"
 
-printf '%s\n' "$MSG" | nc -w 2 "$HOST" "$PORT" >/dev/null 2>&1 || true
+send_notification "$MSG" >/dev/null 2>&1 || true
 exit 0
 EOF
 }
@@ -531,11 +592,33 @@ for event, arg in event_args.items():
     arr = hooks.get(event, [])
 
     def matches(item):
-        return item.get("hooks") and any(h.get("command") == hook_cmd for h in item["hooks"])
+        return (
+            isinstance(item, dict)
+            and isinstance(item.get("hooks"), list)
+            and any(
+                isinstance(hook, dict) and hook.get("command") == hook_cmd
+                for hook in item["hooks"]
+            )
+        )
 
     if action == "add":
-        if not any(matches(it) for it in arr):
-            arr.append({"hooks": [{"type": "command", "command": hook_cmd}]})
+        found = False
+        for item in arr:
+            if not matches(item):
+                continue
+            for hook in item["hooks"]:
+                if isinstance(hook, dict) and hook.get("command") == hook_cmd:
+                    hook["type"] = "command"
+                    hook["timeout"] = 10
+                    found = True
+        if not found:
+            arr.append(
+                {
+                    "hooks": [
+                        {"type": "command", "command": hook_cmd, "timeout": 10}
+                    ]
+                }
+            )
         hooks[event] = arr
     else:
         arr = [it for it in arr if not matches(it)]
@@ -948,4 +1031,6 @@ main() {
   esac
 }
 
-main "$@"
+if [[ "${SETUP_NO_MAIN:-false}" != "true" && "${SETUP_NO_MAIN:-false}" != "1" ]]; then
+  main "$@"
+fi

@@ -1,0 +1,29 @@
+load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "agent_notify_srcs",
+    srcs = [
+        "README.md",
+        "agent-hooks-setup.sh",
+        "agent-listener.sh",
+    ],
+)
+
+exports_files([
+    "agent-hooks-setup.sh",
+    "tests/agent_notify_suite.sh",
+])
+
+devtools_module_tests(
+    name = "agent_notify",
+    suite = ":tests/agent_notify_suite.sh",
+    module_root = ":agent-hooks-setup.sh",
+    module_data = [":agent_notify_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_centos",
+        "macos",
+    ],
+)

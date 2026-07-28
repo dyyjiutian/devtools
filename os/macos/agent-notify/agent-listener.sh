@@ -111,20 +111,23 @@ while True:
         conn, _ = srv.accept()
     except OSError:
         continue
+    payload = None
     try:
         conn.settimeout(2)
         data = b""
-        while True:
+        while b"\n" not in data and len(data) < 65536:
             try:
-                b = conn.recv(4096)
+                b = conn.recv(min(4096, 65536 - len(data)))
             except socket.timeout:
                 break
             if not b:
                 break
             data += b
-        handle(data.decode("utf-8", "replace"))
+        payload = data.split(b"\n", 1)[0]
     except Exception as e:
         log("error: %s" % e)
     finally:
         conn.close()
+    if payload is not None:
+        handle(payload.decode("utf-8", "replace"))
 PY
