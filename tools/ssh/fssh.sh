@@ -173,7 +173,7 @@ mssh() { ssh -o ControlMaster=no -o ControlPath="$CTRL_SOCK" "$@"; }
 # quoted for the remote shell before being passed to `bash -lc`.
 remote_tmux() {
     local ssh_args=()
-    if [[ "$1" == "-t" ]]; then
+    if [[ "${1:-}" == "-t" ]]; then
         ssh_args+=("-t")
         shift
     fi
@@ -188,16 +188,23 @@ remote_tmux() {
     done
 
     quoted_command=$(printf '%q' "$tmux_command")
-    mssh "${ssh_args[@]}" "$host" "bash -lc $quoted_command"
+    # Bash 3.2 (the macOS system Bash) raises "unbound variable" for an empty
+    # "${array[@]}" under set -u. The + expansion emits no argument when empty.
+    mssh ${ssh_args[@]+"${ssh_args[@]}"} "$host" "bash -lc $quoted_command"
 }
 
 # ── Remote tmux session lister ────────────────────────────────────────────────
 list_remote_sessions() {
     local host="$1"
-    local sessions
+    local sessions failure_detail
 
-    if ! sessions=$(remote_tmux "$host" list-sessions -F '#{session_name}' 2>/dev/null); then
-        warn "无法列出 ${host} 上的远端 tmux session，继续创建/登录会话"
+    if ! sessions=$(remote_tmux "$host" list-sessions -F '#{session_name}' 2>&1); then
+        failure_detail=$(printf '%s' "$sessions" | tr '\r\n' '  ')
+        if [[ -n "$failure_detail" ]]; then
+            warn "无法列出 ${host} 上的远端 tmux session：${failure_detail}"
+        else
+            warn "无法列出 ${host} 上的远端 tmux session"
+        fi
         return 0
     fi
 
