@@ -37,7 +37,7 @@ tmux Setup Script - 一键安装并配置 tmux ${TMUX_VERSION}
      - Linux: 从源码编译到 \${TMUX_PREFIX}（默认 ~/.local）
        并移除过旧的发行版包（如 Alinux/CentOS 的 2.7）
   2. 备份已有的 ~/.tmux.conf（如果存在）
-  3. 将本目录的 tmux.conf 软链接到 ~/.tmux.conf
+  3. 将本目录的 tmux.conf 复制到 ~/.tmux.conf（覆盖）
   4. 安装 TPM（Tmux Plugin Manager）
   5. 通过 TPM 安装所有插件（tmux-sensible、vim-tmux-navigator、
      tmux-resurrect、tmux-continuum）
@@ -320,16 +320,19 @@ deploy_config() {
         error "找不到配置文件: $TMUX_CONF_SRC"
     fi
 
-    # 备份已有配置（非软链接时才备份）
-    if [[ -f "$TMUX_CONF_DST" && ! -L "$TMUX_CONF_DST" ]]; then
+    # 备份已有普通文件；已有软链则先删除，避免 cp 写穿到源文件
+    if [[ -L "$TMUX_CONF_DST" ]]; then
+        info "移除已有软链接 ~/.tmux.conf"
+        run rm -f "$TMUX_CONF_DST"
+    elif [[ -f "$TMUX_CONF_DST" ]]; then
         local backup="${TMUX_CONF_DST}.bak.$(date +%Y%m%d%H%M%S)"
         info "备份已有 ~/.tmux.conf 到 $backup"
         run cp "$TMUX_CONF_DST" "$backup"
     fi
 
-    info "软链接 tmux.conf -> ~/.tmux.conf"
-    run ln -sf "$TMUX_CONF_SRC" "$TMUX_CONF_DST"
-    success "~/.tmux.conf -> $TMUX_CONF_SRC"
+    info "复制 tmux.conf -> ~/.tmux.conf"
+    run cp "$TMUX_CONF_SRC" "$TMUX_CONF_DST"
+    success "已安装 ~/.tmux.conf"
 }
 
 # ────────────────────────────────────────────

@@ -11,7 +11,7 @@
 脚本会自动完成以下操作：
 
 1. 安装系统依赖（vim、node、ctags、fzf、ripgrep）
-2. 备份已有的 `~/.vimrc`，然后软链接本配置
+2. 备份已有的 `~/.vimrc`（普通文件），然后复制本配置覆盖到 `~/.vimrc`
 3. 安装 vim-plug 及所有插件
 4. 安装 coc.nvim 语言服务器（Python、Go、Java、Shell、JSON、YAML）
 
@@ -155,4 +155,21 @@ vim-plug 会提示确认后删除未声明的插件目录。
 ```vim
 :CocInstall coc-<language>
 ```
+
+## Issues
+
+### 2026-07-28 — setup 将 vimrc 软链到仓库路径
+
+**问题表象**
+
+- `setup.sh` 用 `ln -sf` 把 `~/.vimrc` 指到仓库内 `vimrc`，依赖本机仓库路径；移动/删除仓库后配置失效。
+
+**根因**
+
+- 部署策略选择了软链而非复制。
+
+**解法**
+
+- 改为备份已有普通文件后 `cp` 覆盖到 `~/.vimrc`；若目标已是软链则先删除再复制。
+- 已有环境可重新执行：`bash editors/vim/setup.sh` 或 `bash editors/vim/setup.sh --restore`。
 

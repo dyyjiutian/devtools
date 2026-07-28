@@ -87,14 +87,16 @@ test_deploy_config() {
     return 1
   }
 
-  assert_symlink "$HOME/.tmux.conf" "tmux.conf should be symlink"
-  local target
-  target="$(readlink "$HOME/.tmux.conf")"
-  assert_eq "$target" "$TMUX_CONF" "symlink target"
+  assert_file_exists "$HOME/.tmux.conf" "tmux.conf should exist"
+  if [[ -L "$HOME/.tmux.conf" ]]; then
+    echo "FAIL: tmux.conf should be a regular file, not a symlink" >&2
+    return 1
+  fi
+  assert_eq "$(cat "$HOME/.tmux.conf")" "$(cat "$TMUX_CONF")" "copied content matches source"
   local backups
   backups="$(find "$HOME" -maxdepth 1 -name '.tmux.conf.bak.*' | wc -l | tr -d ' ')"
   assert_eq "$backups" "1" "exactly one backup created"
-  pass "tmux deploy_config backup+symlink ($DEVTOOLS_TEST_PROFILE)"
+  pass "tmux deploy_config backup+copy ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_help

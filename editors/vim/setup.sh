@@ -25,7 +25,7 @@ Vim Setup Script - 一键配置 Vim 开发环境
        自动回退到 GitHub 二进制（优先 cache/，安装到 ~/.local/bin）
   2. 检测 Vim 版本 (coc.nvim 需要 Vim 8.1.1719+)
   3. 备份已有的 ~/.vimrc (如果存在)
-  4. 将本目录的 vimrc 软链接到 ~/.vimrc
+  4. 将本目录的 vimrc 复制到 ~/.vimrc（覆盖）
   5. 创建 Vim 缓存目录 (~/.vim/gutentags)
   6. 安装 vim-plug 插件管理器并安装所有插件
   7. 安装 Nerd Font 字体 (用于 NERDTree 等插件显示图标)
@@ -81,8 +81,11 @@ restore_vimrc() {
         exit 1
     fi
 
-    # Backup existing ~/.vimrc if it exists and is not a symlink
-    if [ -f "$HOME/.vimrc" ] && [ ! -L "$HOME/.vimrc" ]; then
+    # Backup regular file; remove symlink first so cp does not write through
+    if [ -L "$HOME/.vimrc" ]; then
+        info "Removing existing symlink ~/.vimrc"
+        rm -f "$HOME/.vimrc"
+    elif [ -f "$HOME/.vimrc" ]; then
         BACKUP="$HOME/.vimrc.bak.$(date +%Y%m%d%H%M%S)"
         info "Backing up existing ~/.vimrc to $BACKUP"
         cp "$HOME/.vimrc" "$BACKUP"
@@ -501,17 +504,19 @@ elif [ "$VIM_STATUS" = "warn" ]; then
     warn "Vim version may be too old for some coc.nvim features"
 fi
 
-# --- Backup existing vimrc ---
-if [ -f "$HOME/.vimrc" ] && [ ! -L "$HOME/.vimrc" ]; then
+# --- Install vimrc (copy; overwrite with backup) ---
+if [ -L "$HOME/.vimrc" ]; then
+    info "Removing existing symlink ~/.vimrc"
+    rm -f "$HOME/.vimrc"
+elif [ -f "$HOME/.vimrc" ]; then
     BACKUP="$HOME/.vimrc.bak.$(date +%Y%m%d%H%M%S)"
     info "Backing up existing ~/.vimrc to $BACKUP"
     cp "$HOME/.vimrc" "$BACKUP"
 fi
 
-# --- Link vimrc ---
-info "Linking vimrc..."
-ln -sf "$SCRIPT_DIR/vimrc" "$HOME/.vimrc"
-success "~/.vimrc -> $SCRIPT_DIR/vimrc"
+info "Installing vimrc..."
+cp "$SCRIPT_DIR/vimrc" "$HOME/.vimrc"
+success "vimrc installed to ~/.vimrc"
 
 # --- Create cache directories ---
 mkdir -p "$HOME/.vim/gutentags"
