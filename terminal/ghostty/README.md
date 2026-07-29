@@ -165,6 +165,26 @@ gedit ~/Library/Application\ Support/com.mitchellh.ghostty/config
    xattr -dr com.apple.quarantine /Applications/Ghostty.app
    ```
 
+## Issues
+
+### 2026-07-29 — 机械键盘无法使用系统快捷键调整 Ghostty 窗口位置
+
+**问题表象**
+
+- 在 macOS 上使用机械键盘时，无法通过 `Control + Globe + 方向键` 调整 Ghostty 窗口在屏幕上的位置。
+
+**根因**
+
+- 机械键盘没有 Globe（地球）键，无法触发 macOS 默认的窗口移动快捷键。
+
+**解法**
+
+通过 macOS 的应用快捷键，为 Ghostty 覆盖对应的窗口移动快捷键，例如将向左移动改为 `Control + Option + ←`：
+
+1. 打开“系统设置” → “键盘” → “键盘快捷键…” → “应用快捷键”。
+2. 点击 `+`，应用选择 “Ghostty”，菜单标题填写 `Left`，快捷键按下 `Control + Option + ←`。
+3. 保存后，在 Ghostty 菜单栏中打开 “Window” → “Move & Resize” → “Halves”，确认 `Left` 的快捷键已更新并生效。
+
 ## 参考链接
 
 - [Ghostty 文档](https://ghostty.org/docs)
