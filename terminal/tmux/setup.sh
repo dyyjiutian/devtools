@@ -32,10 +32,13 @@ show_help() {
 tmux Setup Script - 一键安装并配置 tmux ${TMUX_VERSION}
 
 该脚本会执行以下步骤:
-  1. 安装 tmux ${TMUX_VERSION}
-     - macOS: Homebrew
-     - Linux: 从源码编译到 \${TMUX_PREFIX}（默认 ~/.local）
-       并移除过旧的发行版包（如 Alinux/CentOS 的 2.7）
+  1. 检测 tmux 版本，判断是否已满足目标 ${TMUX_VERSION}
+     - 已满足: 跳过安装/编译，直接部署配置
+     - 未满足 (缺失或过旧):
+       · 不带 --upgrade: 跳过强制安装/编译，仅警告并提示使用 --upgrade
+       · 带 --upgrade: 优先包管理器升级 (brew / apt-get / dnf / yum)，
+         仍不满足则回退到源码编译安装到 \${TMUX_PREFIX}（默认 ~/.local），
+         并移除过旧的发行版包（如 Alinux/CentOS 的 2.7）
   2. 备份已有的 ~/.tmux.conf（如果存在）
   3. 将本目录的 tmux.conf 复制到 ~/.tmux.conf（覆盖）
   4. 安装 TPM（Tmux Plugin Manager）
@@ -43,10 +46,14 @@ tmux Setup Script - 一键安装并配置 tmux ${TMUX_VERSION}
      tmux-resurrect、tmux-continuum）
 
 用法:
-  ./setup.sh                 运行完整安装
+  ./setup.sh                     运行完整安装（不强制升级 tmux 二进制）
+  ./setup.sh --upgrade           升级 tmux 到目标版本后完整安装
   ./setup.sh --install-bin-only  仅安装/升级 tmux 二进制
-  ./setup.sh --dry-run       试运行，只显示将要执行的操作
-  ./setup.sh --help          显示此帮助信息
+  ./setup.sh --dry-run           试运行，只显示将要执行的操作
+  ./setup.sh --help              显示此帮助信息
+
+  可组合使用，例如: ./setup.sh --upgrade --dry-run
+                   ./setup.sh --upgrade --install-bin-only
 
 环境变量:
   TMUX_VERSION   目标版本（默认 ${TMUX_VERSION}）
@@ -81,11 +88,13 @@ EOF
 # ────────────────────────────────────────────
 DRY_RUN=false
 INSTALL_BIN_ONLY=false
+DO_UPGRADE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)            show_help ;;
         -d|--dry-run)         DRY_RUN=true; shift ;;
+        -u|--upgrade)         DO_UPGRADE=true; shift ;;
         --install-bin-only)   INSTALL_BIN_ONLY=true; shift ;;
         *)
             error "未知选项: $1\n       运行 ./setup.sh --help 查看用法"
@@ -132,21 +141,72 @@ info "检测到操作系统: $OS"
 echo
 
 # ────────────────────────────────────────────
-# 版本检测
+# 版本检测与比较
 # ────────────────────────────────────────────
-tmux_current_version() {
-    # 只认目标前缀下的二进制，避免 PATH 里其它副本造成误判
-    if [[ -x "${TMUX_PREFIX}/bin/tmux" ]]; then
-        "${TMUX_PREFIX}/bin/tmux" -V 2>/dev/null | awk '{print $2}'
-        return 0
-    fi
-    return 1
+# 取某个 tmux 可执行文件的版本号原始字符串，例如 "3.7b"
+_tmux_version_string() {
+    local bin="$1"
+    [[ -n "$bin" && -x "$bin" ]] || return 1
+    "$bin" -V 2>/dev/null | awk '{print $2}'
 }
 
-tmux_is_target_version() {
+# 归一化版本号为 major.minor.patch，供数值比较；结尾字母 (a/b/c...) 映射为 patch (1/2/3...)
+# 例如: "3.7b" -> "3.7.2"，"3.9" -> "3.9.0"
+_tmux_normalize_version() {
+    local v="${1:-}" major minor letter patch
+    [[ -n "$v" ]] || { echo "0.0.0"; return 0; }
+
+    major=$(echo "$v" | sed -E 's/^([0-9]+).*/\1/')
+    minor=$(echo "$v" | sed -E 's/^[0-9]+\.([0-9]+).*/\1/')
+    letter=$(echo "$v" | sed -E 's/^[0-9]+\.[0-9]+([a-zA-Z]?).*/\1/')
+
+    patch=0
+    if [[ -n "$letter" ]]; then
+        letter=$(echo "$letter" | tr '[:upper:]' '[:lower:]')
+        patch=$(( $(printf '%d' "'$letter") - $(printf '%d' "'a") + 1 ))
+    fi
+
+    echo "${major:-0}.${minor:-0}.${patch}"
+}
+
+# 比较归一化版本；$1 >= $2 时输出 "ge"，否则 "lt"
+version_ge() {
+    local a="$1" b="$2"
+    local IFS=.
+    # shellcheck disable=SC2086
+    set -- $a
+    local a1="${1:-0}" a2="${2:-0}" a3="${3:-0}"
+    # shellcheck disable=SC2086
+    set -- $b
+    local b1="${1:-0}" b2="${2:-0}" b3="${3:-0}"
+
+    if ((a1 > b1)); then echo "ge"; return; fi
+    if ((a1 < b1)); then echo "lt"; return; fi
+    if ((a2 > b2)); then echo "ge"; return; fi
+    if ((a2 < b2)); then echo "lt"; return; fi
+    if ((a3 >= b3)); then echo "ge"; return; fi
+    echo "lt"
+}
+
+# 当前生效的 tmux 版本：优先 TMUX_PREFIX 下的托管安装，其次 PATH 中的 tmux
+tmux_effective_version() {
     local v
-    v=$(tmux_current_version 2>/dev/null) || return 1
-    [[ "$v" == "$TMUX_VERSION" ]]
+    if [[ -x "${TMUX_PREFIX}/bin/tmux" ]]; then
+        v=$(_tmux_version_string "${TMUX_PREFIX}/bin/tmux") || v=""
+        [[ -n "$v" ]] && { echo "$v"; return 0; }
+    fi
+    if command -v tmux &>/dev/null; then
+        v=$(_tmux_version_string "$(command -v tmux)") || v=""
+        [[ -n "$v" ]] && { echo "$v"; return 0; }
+    fi
+    echo ""
+}
+
+# 当前 tmux 是否已满足目标版本 (>=)
+tmux_meets_target() {
+    local cur="$1"
+    [[ -n "$cur" ]] || return 1
+    [[ "$(version_ge "$(_tmux_normalize_version "$cur")" "$(_tmux_normalize_version "$TMUX_VERSION")")" == "ge" ]]
 }
 
 # ────────────────────────────────────────────
@@ -258,11 +318,85 @@ install_tmux_from_source() {
 }
 
 # ────────────────────────────────────────────
+# macOS：优先包管理器升级/安装
+# ────────────────────────────────────────────
+upgrade_tmux_macos() {
+    if ! command -v brew &>/dev/null; then
+        error "Homebrew 未安装，请先安装: https://brew.sh"
+    fi
+    if brew list tmux &>/dev/null; then
+        run brew upgrade tmux || run brew install tmux
+    else
+        run brew install tmux
+    fi
+    hash -r 2>/dev/null || true
+
+    if [[ "$DRY_RUN" != "true" ]] && command -v tmux &>/dev/null; then
+        local brew_ver
+        brew_ver=$(tmux -V | awk '{print $2}')
+        if tmux_meets_target "$brew_ver"; then
+            success "tmux 安装完成: $(tmux -V)"
+        else
+            warn "Homebrew tmux 版本为 ${brew_ver}（目标 ${TMUX_VERSION}）；通常可用，extended-keys 需 >= 3.2"
+        fi
+    fi
+}
+
+# ────────────────────────────────────────────
+# Linux：优先包管理器升级，不足则回退源码编译
+# ────────────────────────────────────────────
+upgrade_tmux_linux() {
+    info "尝试通过包管理器升级 tmux..."
+    if command -v apt-get &>/dev/null; then
+        run_root apt-get update -y
+        run_root apt-get install -y --only-upgrade tmux || run_root apt-get install -y tmux || true
+    elif command -v dnf &>/dev/null; then
+        run_root dnf upgrade -y tmux || run_root dnf install -y tmux || true
+    elif command -v yum &>/dev/null; then
+        run_root yum update -y tmux || run_root yum install -y tmux || true
+    else
+        warn "无法识别的包管理器，跳过包管理器升级"
+    fi
+    hash -r 2>/dev/null || true
+
+    if [[ "$DRY_RUN" != "true" ]]; then
+        local pkg_ver=""
+        if command -v tmux &>/dev/null; then
+            pkg_ver=$(tmux -V 2>/dev/null | awk '{print $2}')
+        fi
+        if [[ -n "$pkg_ver" ]] && tmux_meets_target "$pkg_ver"; then
+            success "包管理器 tmux ${pkg_ver} 已满足目标 ${TMUX_VERSION}"
+            return 0
+        fi
+        if [[ -n "$pkg_ver" ]]; then
+            warn "包管理器后 tmux 仍为 ${pkg_ver}（目标 ${TMUX_VERSION}），回退到源码安装"
+        else
+            warn "包管理器未能提供 tmux，回退到源码安装"
+        fi
+    else
+        info "[试运行] 若包管理器版本不足目标 ${TMUX_VERSION}，将回退到源码编译安装"
+    fi
+
+    remove_distro_tmux
+    install_build_deps_linux
+    mkdir -p "${TMUX_PREFIX}/bin"
+    install_tmux_from_source
+    ensure_local_path
+    hash -r 2>/dev/null || true
+    if command -v tmux &>/dev/null; then
+        success "PATH 中的 tmux: $(command -v tmux) ($(tmux -V))"
+    fi
+}
+
+# ────────────────────────────────────────────
 # 安装 tmux
 # ────────────────────────────────────────────
 install_tmux() {
-    if tmux_is_target_version; then
-        success "tmux 已是目标版本: $(tmux_current_version) (${TMUX_PREFIX}/bin/tmux 或 PATH)"
+    local cur
+    cur=$(tmux_effective_version)
+
+    if tmux_meets_target "$cur"; then
+        success "tmux ${cur} 已满足目标 ${TMUX_VERSION}，跳过安装/编译"
         # 仍尝试清掉发行版旧包，避免 PATH 冲突
         remove_distro_tmux
         ensure_local_path
@@ -270,41 +404,24 @@ install_tmux() {
         return 0
     fi
 
-    local cur
-    cur=$(tmux_current_version 2>/dev/null || echo "未安装")
-    info "当前 tmux: ${cur} → 安装 ${TMUX_VERSION}"
+    if [[ "$DO_UPGRADE" != "true" ]]; then
+        if [[ -z "$cur" ]]; then
+            warn "未检测到 tmux，跳过强制安装/编译"
+        else
+            warn "当前 tmux ${cur} 低于目标 ${TMUX_VERSION}，跳过强制升级/编译"
+        fi
+        warn "如需安装/升级到 ${TMUX_VERSION}，请运行: ./setup.sh --upgrade"
+        return 0
+    fi
+
+    info "当前 tmux: ${cur:-未安装} → 升级到 ${TMUX_VERSION}"
 
     case "$OS" in
         macos)
-            if ! command -v brew &>/dev/null; then
-                error "Homebrew 未安装，请先安装: https://brew.sh"
-            fi
-            if brew list tmux &>/dev/null; then
-                run brew upgrade tmux || run brew install tmux
-            else
-                run brew install tmux
-            fi
-            if command -v tmux &>/dev/null; then
-                local brew_ver
-                brew_ver=$(tmux -V | awk '{print $2}')
-                if [[ "$brew_ver" != "$TMUX_VERSION" ]]; then
-                    warn "Homebrew tmux 版本为 ${brew_ver}（目标 ${TMUX_VERSION}）；通常可用，extended-keys 需 >= 3.2"
-                else
-                    success "tmux 安装完成: $(tmux -V)"
-                fi
-            fi
+            upgrade_tmux_macos
             ;;
         linux)
-            remove_distro_tmux
-            install_build_deps_linux
-            mkdir -p "${TMUX_PREFIX}/bin"
-            install_tmux_from_source
-            ensure_local_path
-            hash -r 2>/dev/null || true
-            # 确认 PATH 优先命中新版本
-            if command -v tmux &>/dev/null; then
-                success "PATH 中的 tmux: $(command -v tmux) ($(tmux -V))"
-            fi
+            upgrade_tmux_linux
             ;;
         *)
             error "不支持的操作系统，请手动安装 tmux ${TMUX_VERSION}"
@@ -389,7 +506,7 @@ main() {
 
     if [[ "$INSTALL_BIN_ONLY" == "true" ]]; then
         echo
-        success "tmux ${TMUX_VERSION} 二进制安装完成（--install-bin-only）"
+        success "tmux 二进制处理完成（--install-bin-only）"
         return 0
     fi
 
