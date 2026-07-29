@@ -17,10 +17,13 @@
 ```bash
 cd agents/codex
 
-./setup.sh install     # 安装 Codex CLI（npm install -g @openai/codex）
-./setup.sh sync        # 同步 config.toml、敏感命令规则和 AGENTS.md
-./setup.sh uninstall   # 卸载
-./setup.sh login       # 使用 codex login 登录（ChatGPT 订阅 / API Key）
+./setup.sh install                      # 安装 Codex CLI + 推荐插件 + sync
+./setup.sh install-plugins              # 安装全部核心 + 推荐插件
+./setup.sh install-plugins --list       # 打印可安装列表
+./setup.sh install-plugins superpowers  # 只安装指定插件（短名或 name@marketplace）
+./setup.sh sync                         # 同步 config.toml、敏感命令规则、features.apps、AGENTS.md
+./setup.sh uninstall                    # 卸载
+./setup.sh login                        # 使用 codex login 登录（ChatGPT 订阅 / API Key）
 ```
 
 > Homebrew 用户也可用 `brew install --cask codex`。
@@ -33,8 +36,25 @@ cd agents/codex
 - `rm`、`scp`、`sftp`、`rsync`、`curl`、`wget`、`nc`、`ncat`、`socat` 每次执行前请求确认。
 - `git push`、`npm` 等正常开发和发布操作保持默认允许。
 - 同步会保留现有模型、渠道、插件、MCP 和用户自定义规则；仅替换带 `devtools codex permissions` 标记的规则块。
+- 默认关闭 `features.apps`（Apps 连接器面向 ChatGPT 桌面/Work；CLI/Linux 不需要）。
 
 Codex 的原生规则按命令前缀匹配，因此 `curl` 下载和本地 `rsync` 也会触发确认。这是为了避免上传参数顺序变化导致漏检。
+
+---
+
+## 插件
+
+`install` 与无参 `install-plugins` 会从 `openai-curated` marketplace 安装以下插件；`install-plugins <name>` 可只装一项。
+
+| 类别 | 插件 | 说明 |
+|------|------|------|
+| 核心 | `superpowers` | 工作流技能（brainstorm / debugging / TDD 等） |
+| 核心 | `github` | GitHub 集成 |
+| 推荐 | `coderabbit` | 代码审查 |
+| 推荐 | `vercel` | Vercel 部署与项目 |
+| 推荐 | `sentry` | 错误追踪 |
+| 推荐 | `figma` | 设计稿协作 |
+| 推荐 | `build-web-apps` | Web 应用构建工作流 |
 
 ---
 
@@ -106,7 +126,7 @@ reasoning effort 可选：`minimal` / `low` / `medium` / `high` / `xhigh`。
 | 配置文件 | `~/.claude/settings.json`（JSON） | `~/.codex/config.toml`（TOML） |
 | 写入方式 | 合并 `env` 字段 | 在标记之间维护「托管块」，标记外的手动配置保留 |
 | API Key | 直接写入 `settings.json` 的 `env` | 通过 `env_key` 引用环境变量（`~/.codex/env.sh`） |
-| 扩展能力 | 插件（plugins） | MCP 服务器（`[mcp_servers.*]`） |
+| 扩展能力 | 插件（plugins） | 插件（`codex plugin`）+ MCP（`[mcp_servers.*]`） |
 | 全局指令 | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` |
 
 ---
@@ -139,8 +159,19 @@ cd os/macos/agent-notify
 
 ---
 
+## Issues
+
+### 2026-07-30 — 默认关闭 features.apps
+
+- **表象**：CLI（尤其 Linux）仍启用 Apps 连接器相关能力，与桌面 ChatGPT Work 场景混淆。
+- **根因**：Codex 默认 `features.apps=true`。
+- **解法**：`./setup.sh sync`（及 `install`）调用 `codex features disable apps`，并在模板 `config.toml` 中写入 `[features] apps = false`。
+
+---
+
 ## 相关链接
 
 - [Codex CLI 文档](https://developers.openai.com/codex)
 - [config.toml 配置参考](https://developers.openai.com/codex/config-reference)
+- [Plugins](https://developers.openai.com/codex/plugins)
 - [openai/codex 仓库](https://github.com/openai/codex)

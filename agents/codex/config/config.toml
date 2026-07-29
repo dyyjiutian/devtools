@@ -13,6 +13,10 @@
 approval_policy = "on-request"       # 敏感规则命中时请求确认
 sandbox_mode    = "danger-full-access" # 其余文件、网络和命令操作默认允许
 
+# Apps 连接器面向 ChatGPT 桌面/Work；CLI（尤其 Linux）默认关闭
+[features]
+apps = false
+
 # ─── 托管块示例（由 setup.sh switch/sync 生成，请勿手动编辑）────────────────
 # >>> devtools codex managed BEGIN <<<
 model = "gpt-5-codex"

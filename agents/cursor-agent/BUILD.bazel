@@ -1,0 +1,34 @@
+load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "cursor_agent_srcs",
+    srcs = glob(
+        [
+            "setup.sh",
+            "README.md",
+            "config/**",
+        ],
+        allow_empty = False,
+    ),
+)
+
+exports_files([
+    "setup.sh",
+    "tests/cursor_agent_suite.sh",
+])
+
+devtools_module_tests(
+    name = "cursor_agent",
+    suite = ":tests/cursor_agent_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [
+        ":cursor_agent_srcs",
+        "//agents/cookbook:cookbook_srcs",
+    ],
+    profiles = [
+        "linux_centos",
+        "macos",
+    ],
+)

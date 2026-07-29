@@ -20,7 +20,7 @@ _devtools_link_host_tools() {
   local tools=(
     git head grep awk sed tr find mkdir cp ln rm cat tee bash mktemp
     basename dirname readlink wc date env true false chmod touch printf
-    ls mv echo sort uniq sleep diff cut install getconf nproc gzip sha256sum tar
+    ls mv echo sort uniq sleep diff cut install getconf nproc gzip sha256sum tar node
   )
   for tool in "${tools[@]}"; do
     real="$(command -v "$tool" 2>/dev/null || true)"

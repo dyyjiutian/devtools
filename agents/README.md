@@ -10,3 +10,11 @@
 - agents/cookbook：个人编程习惯与经验配方（skills / commands 等），可同步给 Agent 消费。
 
 运行时安装与渠道配置放在各 Agent 子目录；跨 Agent 的个人配方放在 `cookbook/`，用其 `setup.sh sync` 链到本机 skills 目录。
+
+Claude / Codex / Cursor Agent 均支持统一的插件（或 skills）安装入口：
+
+```bash
+./setup.sh install-plugins           # 安装全部推荐项
+./setup.sh install-plugins --list    # 查看列表
+./setup.sh install-plugins <name>    # 只安装指定项
+```

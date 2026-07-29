@@ -39,13 +39,18 @@ ${BOLD}用法:${NC}
 
 ${BOLD}命令:${NC}
   install          安装 Claude Code（含插件）
-  install-plugins  仅安装/更新插件（需已安装 Claude Code）
+  install-plugins  安装/更新推荐插件（需已安装 Claude Code）
   uninstall        卸载 Claude Code
   sync             将 config/ 通用配置合并到本机 Claude 设置
   configure        精细配置 env 参数（API Key / Base URL / 模型）
   switch [profile] 快速切换渠道（anthropic / openrouter / proxy）
   model <name>     仅切换当前渠道的默认模型
   status           查看当前激活的渠道与配置
+
+${BOLD}install-plugins 用法:${NC}
+  ./$(basename "$0") install-plugins              安装全部核心 + 推荐插件
+  ./$(basename "$0") install-plugins --list       打印可安装列表
+  ./$(basename "$0") install-plugins <name>...    只安装指定插件（短名或 name@marketplace）
 
 ${BOLD}switch 说明:${NC}
   ./$(basename "$0") switch                  交互式选择渠道
@@ -156,11 +161,58 @@ _ensure_marketplace() {
     fi
 }
 
+_all_plugins() {
+    printf '%s\n' "${CORE_PLUGINS[@]}" "${RECOMMENDED_PLUGINS[@]}"
+}
+
+_plugin_tier() {
+    local plugin="$1"
+    local p
+    for p in "${CORE_PLUGINS[@]}"; do
+        [[ "$p" == "$plugin" ]] && { echo "核心"; return 0; }
+    done
+    for p in "${RECOMMENDED_PLUGINS[@]}"; do
+        [[ "$p" == "$plugin" ]] && { echo "推荐"; return 0; }
+    done
+    echo "?"
+}
+
+_resolve_plugin() {
+    local want="$1"
+    local plugin short
+    if [[ "$want" == *@* ]]; then
+        for plugin in $(_all_plugins); do
+            [[ "$plugin" == "$want" ]] && { printf '%s\n' "$plugin"; return 0; }
+        done
+        # Allow installing arbitrary name@marketplace not in the curated list
+        printf '%s\n' "$want"
+        return 0
+    fi
+    for plugin in $(_all_plugins); do
+        short="${plugin%%@*}"
+        [[ "$short" == "$want" ]] && { printf '%s\n' "$plugin"; return 0; }
+    done
+    return 1
+}
+
+_list_plugins() {
+    local plugin short tier
+    echo "${BOLD}可安装插件:${NC}"
+    echo ""
+    printf "  %-8s %-20s %s\n" "级别" "短名" "完整 ID"
+    printf "  %-8s %-20s %s\n" "----" "----" "--------"
+    for plugin in $(_all_plugins); do
+        short="${plugin%%@*}"
+        tier="$(_plugin_tier "$plugin")"
+        printf "  %-8s %-20s %s\n" "$tier" "$short" "$plugin"
+    done
+}
+
 _install_plugin() {
     local plugin="$1"
     local plugin_name="${plugin%%@*}"
 
-    if claude plugins list 2>/dev/null | grep -qE "❯ ${plugin_name}@"; then
+    if claude plugins list 2>/dev/null | grep -qE "(^|[[:space:]❯])${plugin_name}@"; then
         info "已安装，跳过: $plugin"
         return 0
     fi
@@ -174,6 +226,23 @@ _install_plugin() {
 }
 
 cmd_install_plugins() {
+    local list_only=0
+    local -a wants=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --list|-l) list_only=1; shift ;;
+            -h|--help) usage; exit 0 ;;
+            -*) error "未知选项: $1"; usage; exit 1 ;;
+            *) wants+=("$1"); shift ;;
+        esac
+    done
+
+    if [[ "$list_only" -eq 1 ]]; then
+        _list_plugins
+        return 0
+    fi
+
     step "安装 Claude Code 插件"
 
     if ! command -v claude &>/dev/null; then
@@ -185,15 +254,23 @@ cmd_install_plugins() {
         _ensure_marketplace "$mp"
     done
 
-    echo ""
-    info "安装核心插件..."
-    for plugin in "${CORE_PLUGINS[@]}"; do
-        _install_plugin "$plugin"
-    done
+    local -a to_install=()
+    if [[ ${#wants[@]} -eq 0 ]]; then
+        to_install=("${CORE_PLUGINS[@]}" "${RECOMMENDED_PLUGINS[@]}")
+    else
+        local want resolved
+        for want in "${wants[@]}"; do
+            if ! resolved="$(_resolve_plugin "$want")"; then
+                error "未知插件: $want（可用: $(basename "$0") install-plugins --list）"
+                exit 1
+            fi
+            to_install+=("$resolved")
+        done
+    fi
 
     echo ""
-    info "安装推荐插件..."
-    for plugin in "${RECOMMENDED_PLUGINS[@]}"; do
+    local plugin
+    for plugin in "${to_install[@]}"; do
         _install_plugin "$plugin"
     done
 

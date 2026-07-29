@@ -17,10 +17,12 @@
 ```bash
 cd agents/claude
 
-./setup.sh install           # 安装 Claude Code（npm）+ 自动安装插件
-./setup.sh install-plugins   # 仅安装/更新插件
-./setup.sh sync              # 将 config/ 中的通用配置合并到本机
-./setup.sh uninstall         # 卸载
+./setup.sh install                      # 安装 Claude Code（npm）+ 自动安装推荐插件
+./setup.sh install-plugins              # 安装全部核心 + 推荐插件
+./setup.sh install-plugins --list       # 打印可安装列表
+./setup.sh install-plugins superpowers  # 只安装指定插件（短名或 name@marketplace）
+./setup.sh sync                         # 将 config/ 中的通用配置合并到本机
+./setup.sh uninstall                    # 卸载
 ```
 
 ---
@@ -86,7 +88,7 @@ cd agents/claude
 
 ## 插件
 
-`install` 和 `install-plugins` 会自动安装以下插件：
+`install` 与无参 `install-plugins` 会安装以下插件；`install-plugins <name>` 可只装一项（短名如 `superpowers`，或完整 `superpowers@claude-plugins-official`）。
 
 | 类别 | 插件 | 说明 |
 |------|------|------|

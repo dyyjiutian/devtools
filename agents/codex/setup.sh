@@ -45,14 +45,24 @@ ${BOLD}用法:${NC}
   $(basename "$0") <command> [options]
 
 ${BOLD}命令:${NC}
-  install          安装 Codex CLI（npm）
+  install          安装 Codex CLI（npm）+ 推荐插件 + sync
+  install-plugins  安装/更新推荐插件（需已安装 Codex CLI）
   uninstall        卸载 Codex CLI
-  sync             将 config/ 通用配置合并到本机（config.toml 托管块 + AGENTS.md）
+  sync             将 config/ 通用配置合并到本机（config.toml 托管块 + AGENTS.md + features.apps）
   configure        精细配置参数（模型 / 渠道 / Base URL / reasoning 等）
   switch [profile] 快速切换渠道（openai / openrouter / proxy）
   model <name>     仅切换当前渠道的默认模型
   status           查看当前激活的渠道与配置
   login            使用 codex login 登录（ChatGPT 订阅 / API Key）
+
+${BOLD}install-plugins 用法:${NC}
+  ./$(basename "$0") install-plugins              安装全部核心 + 推荐插件
+  ./$(basename "$0") install-plugins --list       打印可安装列表
+  ./$(basename "$0") install-plugins <name>...    只安装指定插件（短名或 name@marketplace）
+
+${BOLD}插件列表 (install/install-plugins):${NC}
+  核心: superpowers  github
+  推荐: coderabbit  vercel  sentry  figma  build-web-apps
 
 ${BOLD}switch 说明:${NC}
   ./$(basename "$0") switch                 交互式选择渠道
@@ -334,6 +344,212 @@ _sync_permission_rules() {
     rm -f "$user_rules"
 }
 
+# ─── features.apps = false（CLI/Linux 不需要 Apps 连接器）─────────────────────
+_sync_features_apps_disabled() {
+    mkdir -p "$CODEX_HOME"
+
+    if command -v codex &>/dev/null; then
+        if codex features disable apps >/dev/null 2>&1; then
+            success "已关闭 features.apps（codex features disable apps）"
+            return 0
+        fi
+        warn "codex features disable apps 失败，回退到直接改 config.toml"
+    fi
+
+    local tmp
+    tmp=$(mktemp)
+    if [[ -f "$CONFIG_FILE" ]]; then
+        cp "$CONFIG_FILE" "$CONFIG_FILE.bak.$(date +%Y%m%d-%H%M%S)"
+        awk '
+            BEGIN { in_features = 0; apps_set = 0; features_seen = 0 }
+            /^[[:space:]]*\[features\][[:space:]]*$/ {
+                in_features = 1
+                features_seen = 1
+                print
+                next
+            }
+            /^[[:space:]]*\[/ {
+                if (in_features && !apps_set) {
+                    print "apps = false"
+                    apps_set = 1
+                }
+                in_features = 0
+                print
+                next
+            }
+            in_features && /^[[:space:]]*apps[[:space:]]*=/ {
+                if (!apps_set) {
+                    print "apps = false"
+                    apps_set = 1
+                }
+                next
+            }
+            { print }
+            END {
+                if (in_features && !apps_set) print "apps = false"
+                if (!features_seen) {
+                    print ""
+                    print "[features]"
+                    print "apps = false"
+                }
+            }
+        ' "$CONFIG_FILE" > "$tmp"
+    else
+        printf '[features]\napps = false\n' > "$tmp"
+    fi
+
+    if [[ ! -f "$CONFIG_FILE" ]] || ! cmp -s "$tmp" "$CONFIG_FILE"; then
+        mv "$tmp" "$CONFIG_FILE"
+        success "已写入 features.apps = false"
+    else
+        rm -f "$tmp"
+        info "features.apps 已是 false"
+    fi
+}
+
+# ─── 插件管理 ────────────────────────────────────────────────────────────────
+CORE_PLUGINS=(
+    "superpowers@openai-curated"
+    "github@openai-curated"
+)
+
+RECOMMENDED_PLUGINS=(
+    "coderabbit@openai-curated"
+    "vercel@openai-curated"
+    "sentry@openai-curated"
+    "figma@openai-curated"
+    "build-web-apps@openai-curated"
+)
+
+_all_plugins() {
+    printf '%s\n' "${CORE_PLUGINS[@]}" "${RECOMMENDED_PLUGINS[@]}"
+}
+
+_plugin_tier() {
+    local plugin="$1" p
+    for p in "${CORE_PLUGINS[@]}"; do
+        [[ "$p" == "$plugin" ]] && { echo "核心"; return 0; }
+    done
+    for p in "${RECOMMENDED_PLUGINS[@]}"; do
+        [[ "$p" == "$plugin" ]] && { echo "推荐"; return 0; }
+    done
+    echo "?"
+}
+
+_resolve_plugin() {
+    local want="$1" plugin short
+    if [[ "$want" == *@* ]]; then
+        for plugin in $(_all_plugins); do
+            [[ "$plugin" == "$want" ]] && { printf '%s\n' "$plugin"; return 0; }
+        done
+        printf '%s\n' "$want"
+        return 0
+    fi
+    for plugin in $(_all_plugins); do
+        short="${plugin%%@*}"
+        [[ "$short" == "$want" ]] && { printf '%s\n' "$plugin"; return 0; }
+    done
+    return 1
+}
+
+_list_plugins() {
+    local plugin short tier
+    echo "${BOLD}可安装插件:${NC}"
+    echo ""
+    printf "  %-8s %-20s %s\n" "级别" "短名" "完整 ID"
+    printf "  %-8s %-20s %s\n" "----" "----" "--------"
+    for plugin in $(_all_plugins); do
+        short="${plugin%%@*}"
+        tier="$(_plugin_tier "$plugin")"
+        printf "  %-8s %-20s %s\n" "$tier" "$short" "$plugin"
+    done
+}
+
+_plugin_installed() {
+    local plugin="$1"
+    local plugin_id="$plugin"
+    local json
+    json="$(codex plugin list --json 2>/dev/null || true)"
+    [[ -n "$json" ]] || return 1
+    node -e "
+        let d;
+        try { d = JSON.parse(process.argv[1]); } catch (e) { process.exit(1); }
+        const installed = d.installed || [];
+        const id = process.argv[2];
+        const short = id.split('@')[0];
+        const hit = installed.some((p) =>
+            p.pluginId === id || p.name === short ||
+            (p.name === short && p.marketplaceName && id.endsWith('@' + p.marketplaceName))
+        );
+        process.exit(hit ? 0 : 1);
+    " "$json" "$plugin_id" 2>/dev/null
+}
+
+_install_plugin() {
+    local plugin="$1"
+    if _plugin_installed "$plugin"; then
+        info "已安装，跳过: $plugin"
+        return 0
+    fi
+    info "安装插件: $plugin"
+    if codex plugin add "$plugin" >/dev/null 2>&1; then
+        success "已安装: $plugin"
+    else
+        warn "安装失败（可能需登录、授权或网络问题）: $plugin"
+    fi
+}
+
+cmd_install_plugins() {
+    local list_only=0
+    local -a wants=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --list|-l) list_only=1; shift ;;
+            -h|--help) usage; exit 0 ;;
+            -*) error "未知选项: $1"; usage; exit 1 ;;
+            *) wants+=("$1"); shift ;;
+        esac
+    done
+
+    if [[ "$list_only" -eq 1 ]]; then
+        _list_plugins
+        return 0
+    fi
+
+    step "安装 Codex CLI 插件"
+
+    if ! command -v codex &>/dev/null; then
+        error "Codex CLI 未安装，请先运行: $(basename "$0") install"
+        exit 1
+    fi
+    require_node
+
+    local -a to_install=()
+    if [[ ${#wants[@]} -eq 0 ]]; then
+        to_install=("${CORE_PLUGINS[@]}" "${RECOMMENDED_PLUGINS[@]}")
+    else
+        local want resolved
+        for want in "${wants[@]}"; do
+            if ! resolved="$(_resolve_plugin "$want")"; then
+                error "未知插件: $want（可用: $(basename "$0") install-plugins --list）"
+                exit 1
+            fi
+            to_install+=("$resolved")
+        done
+    fi
+
+    echo ""
+    local plugin
+    for plugin in "${to_install[@]}"; do
+        _install_plugin "$plugin"
+    done
+
+    echo ""
+    success "插件安装完成"
+    codex plugin list 2>/dev/null | head -n 40 || true
+}
+
 # ─── 应用 Profile ─────────────────────────────────────────────────────────────
 _apply_profile() {
     require_node
@@ -556,7 +772,14 @@ cmd_install() {
     if command -v codex &>/dev/null; then
         warn "Codex CLI 已安装: $(codex --version 2>/dev/null || echo 'unknown')"
         read -r -p "是否重新安装? [y/N] " answer
-        [[ ! "$answer" =~ ^[Yy]$ ]] && { info "跳过安装"; return 0; }
+        if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+            info "跳过安装"
+            echo ""
+            cmd_install_plugins
+            echo ""
+            cmd_sync
+            return 0
+        fi
     fi
 
     if ! command -v node &>/dev/null; then
@@ -570,11 +793,15 @@ cmd_install() {
     if command -v codex &>/dev/null; then
         success "Codex CLI 安装成功: $(codex --version 2>/dev/null || true)"
         info "提示: brew 用户也可用 'brew install --cask codex'"
-        info "下一步: ./$(basename "$0") sync  然后  ./$(basename "$0") switch"
     else
         error "安装失败，请检查错误信息"
         exit 1
     fi
+
+    echo ""
+    cmd_install_plugins
+    echo ""
+    cmd_sync
 }
 
 cmd_uninstall() {
@@ -627,7 +854,10 @@ cmd_sync() {
     _sync_permission_defaults
     _sync_permission_rules
 
-    # 3) AGENTS.md 语言规则
+    # 3) 关闭 features.apps（CLI/Linux 不需要）
+    _sync_features_apps_disabled
+
+    # 4) AGENTS.md 语言规则
     local agents_file="$CODEX_HOME/AGENTS.md"
     local template="$SCRIPT_DIR/config/AGENTS.md"
     if [[ -f "$agents_file" ]]; then
@@ -696,16 +926,17 @@ main() {
     [[ $# -eq 0 ]] && { usage; exit 1; }
     local command="$1"; shift
     case "$command" in
-        install)        cmd_install "$@" ;;
-        uninstall)      cmd_uninstall "$@" ;;
-        sync)           cmd_sync "$@" ;;
-        switch)         cmd_switch "$@" ;;
-        model)          cmd_model "$@" ;;
-        status)         cmd_status "$@" ;;
-        configure)      cmd_configure "$@" ;;
-        login)          cmd_login "$@" ;;
-        -h|--help|help) usage; exit 0 ;;
-        *)              error "未知命令: $command"; usage; exit 1 ;;
+        install)         cmd_install "$@" ;;
+        install-plugins) cmd_install_plugins "$@" ;;
+        uninstall)       cmd_uninstall "$@" ;;
+        sync)            cmd_sync "$@" ;;
+        switch)          cmd_switch "$@" ;;
+        model)           cmd_model "$@" ;;
+        status)          cmd_status "$@" ;;
+        configure)       cmd_configure "$@" ;;
+        login)           cmd_login "$@" ;;
+        -h|--help|help)  usage; exit 0 ;;
+        *)               error "未知命令: $command"; usage; exit 1 ;;
     esac
 }
 

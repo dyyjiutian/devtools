@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "cookbook_srcs",
+    srcs = glob(
+        [
+            "setup.sh",
+            "README.md",
+            "skills/**",
+        ],
+        allow_empty = False,
+    ),
+)
+
+exports_files([
+    "setup.sh",
+])

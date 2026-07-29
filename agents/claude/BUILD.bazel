@@ -1,0 +1,31 @@
+load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "claude_srcs",
+    srcs = glob(
+        [
+            "setup.sh",
+            "README.md",
+            "config/**",
+        ],
+        allow_empty = False,
+    ),
+)
+
+exports_files([
+    "setup.sh",
+    "tests/claude_suite.sh",
+])
+
+devtools_module_tests(
+    name = "claude",
+    suite = ":tests/claude_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":claude_srcs"],
+    profiles = [
+        "linux_centos",
+        "macos",
+    ],
+)

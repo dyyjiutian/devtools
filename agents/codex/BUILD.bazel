@@ -1,0 +1,31 @@
+load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "codex_srcs",
+    srcs = glob(
+        [
+            "setup.sh",
+            "README.md",
+            "config/**",
+        ],
+        allow_empty = False,
+    ),
+)
+
+exports_files([
+    "setup.sh",
+    "tests/codex_suite.sh",
+])
+
+devtools_module_tests(
+    name = "codex",
+    suite = ":tests/codex_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":codex_srcs"],
+    profiles = [
+        "linux_centos",
+        "macos",
+    ],
+)

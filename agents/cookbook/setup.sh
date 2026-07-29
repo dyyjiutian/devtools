@@ -79,7 +79,8 @@ _list_skills() {
         skill_dir="$(cd "$(dirname "$skill_md")" && pwd)"
         name="$(_skill_name "$skill_md")"
         printf '%s\t%s\n' "$name" "$skill_dir"
-    done < <(find "$SKILLS_SRC" -type f -name 'SKILL.md' -print0 | sort -z)
+    # Include symlinks (Bazel runfiles link source files into the tree).
+    done < <(find "$SKILLS_SRC" \( -type f -o -type l \) -name 'SKILL.md' -print0 | sort -z)
 }
 
 _dest_dirs_for_target() {
