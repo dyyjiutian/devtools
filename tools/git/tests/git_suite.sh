@@ -11,6 +11,7 @@ test_help() {
   local out
   out="$(bash "$SETUP_SH" --help 2>&1)"
   assert_contains "$out" "dry-run" "setup --help mentions dry-run"
+  assert_contains "$out" "--skip-gh" "setup --help mentions skip-gh"
   pass "git setup --help ($DEVTOOLS_TEST_PROFILE)"
 }
 
@@ -52,10 +53,36 @@ test_install_gh_branch() {
   pass "git install_gh branch ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_skip_gh() {
+  local out
+  out="$(bash "$SETUP_SH" --dry-run --skip-gh --skip-delta --skip-subcmd --skip-config --skip-alias 2>&1)" || {
+    echo "FAIL: setup --skip-gh failed: $out" >&2
+    return 1
+  }
+  assert_contains "$out" "跳过 GitHub CLI (gh) 安装" "skip-gh message"
+  assert_not_contains "$out" "install -y gh" "skip-gh must avoid Linux gh install"
+  assert_not_contains "$out" "brew install gh" "skip-gh must avoid macOS gh install"
+  pass "git setup --skip-gh ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_install_delta_branch() {
   local out
+  local os_release="$HOME/os-release-delta-branch"
+
+  case "$DEVTOOLS_TEST_PROFILE" in
+    linux_centos)
+      printf 'ID=centos\nVERSION_ID=9\n' >"$os_release"
+      ;;
+    linux_ubuntu)
+      printf 'ID=ubuntu\nVERSION_ID=24.04\nVERSION_CODENAME=noble\n' >"$os_release"
+      ;;
+    macos)
+      : >"$os_release"
+      ;;
+  esac
+
   out="$(
-    PATH="$PATH" SETUP_NO_MAIN=1 /bin/bash -c '
+    PATH="$PATH" SETUP_NO_MAIN=1 OS_RELEASE_FILE="$os_release" /bin/bash -c '
       setup="$1"
       set -- --dry-run
       # shellcheck disable=SC1090
@@ -71,16 +98,263 @@ test_install_delta_branch() {
 
   case "$DEVTOOLS_TEST_PROFILE" in
     linux_centos)
-      assert_contains "$out" "dnf install -y git-delta" "centos dnf install delta"
+      assert_contains "$out" "mirrors.aliyun.com/epel/9/Everything" "centos aliyun EPEL"
+      assert_contains "$out" "dnf" "centos dnf install delta"
       ;;
     linux_ubuntu)
-      assert_contains "$out" "apt-get install -y git-delta" "ubuntu apt install delta"
+      assert_contains "$out" "mirrors.aliyun.com/ubuntu" "ubuntu aliyun APT"
+      assert_contains "$out" "apt-get" "ubuntu apt install delta"
+      assert_contains "$out" "Dir::State::lists=" "ubuntu temporary APT lists"
       ;;
     macos)
       assert_contains "$out" "brew install git-delta" "macos brew install delta"
       ;;
   esac
   pass "git install_delta branch ($DEVTOOLS_TEST_PROFILE)"
+}
+
+make_alt_linux_bin() {
+  local alt_bin="$1"
+  mkdir -p "$alt_bin"
+  cp -R "$FAKE_BIN/." "$alt_bin/"
+  rm -f "$alt_bin"/{apt,apt-get,dnf,yum,pacman,zypper,cargo,curl,sudo}
+}
+
+write_os_release() {
+  local path="$1" id="$2" version="$3" codename="${4:-}"
+  {
+    printf 'ID=%s\n' "$id"
+    printf 'VERSION_ID=%s\n' "$version"
+    if [[ -n "$codename" ]]; then
+      printf 'VERSION_CODENAME=%s\n' "$codename"
+    fi
+  } >"$path"
+}
+
+test_linux_ignores_other_package_managers() {
+  case "$DEVTOOLS_TEST_PROFILE" in
+    macos) return 0 ;;
+  esac
+
+  local alt_bin="$HOME/other-package-managers"
+  local os_release="$HOME/os-release-other"
+  local out
+  make_alt_linux_bin "$alt_bin"
+  write_os_release "$os_release" arch 1
+  for tool in pacman zypper cargo; do
+    _devtools_write_exec "$alt_bin/$tool" 'printf "UNEXPECTED package manager: %s\n" "$0" >&2; exit 97'
+  done
+  _devtools_write_exec "$alt_bin/uname" '
+if [[ "${1:-}" == "-m" ]]; then printf "aarch64\n"; else printf "Linux\n"; fi
+'
+
+  out="$(
+    PATH="$alt_bin" SETUP_NO_MAIN=1 OS_RELEASE_FILE="$os_release" DEVTOOLS_ARCH=aarch64 /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      install_gh
+      install_delta
+    ' _ "$SETUP_SH" 2>&1
+  )" || {
+    echo "FAIL: alternative package manager test failed: $out" >&2
+    return 1
+  }
+
+  assert_not_contains "$out" "UNEXPECTED package manager" "Linux must ignore pacman/zypper/cargo"
+  assert_not_contains "$out" "pacman" "Linux output must not report pacman"
+  assert_not_contains "$out" "zypper" "Linux output must not report zypper"
+  assert_not_contains "$out" "cargo" "Linux output must not report cargo"
+  pass "git Linux package managers limited to apt/dnf/yum ($DEVTOOLS_TEST_PROFILE)"
+}
+
+make_delta_install_bin() {
+  local alt_bin="$1"
+  make_alt_linux_bin "$alt_bin"
+  _devtools_write_exec "$alt_bin/sudo" '
+if [[ "${1:-}" == "install" && "${5:-}" == "/usr/local/bin/delta" ]]; then
+  exec install -m 0755 "$4" "$HOME/installed-delta"
+fi
+exec "$@"
+'
+}
+
+test_centos7_prefers_valid_delta_cache() {
+  [[ "$DEVTOOLS_TEST_PROFILE" == "linux_centos" ]] || return 0
+
+  local fixture="$REPO_ROOT/cache/binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz"
+  local alt_bin="$HOME/centos7-cache-bin"
+  local os_release="$HOME/os-release-centos7-cache"
+  local out
+  assert_file_exists "$fixture" "git-delta cache fixture"
+  cp "$fixture" "$DEVTOOLS_CACHE_DIR/binaries/"
+  make_delta_install_bin "$alt_bin"
+  _devtools_write_exec "$alt_bin/yum" 'printf "yum %s\n" "$*" >&2; exit 1'
+  _devtools_write_exec "$alt_bin/curl" 'touch "$HOME/curl-was-called"; exit 1'
+  write_os_release "$os_release" centos 7
+
+  out="$(
+    PATH="$alt_bin" SETUP_NO_MAIN=1 OS_RELEASE_FILE="$os_release" DEVTOOLS_ARCH=x86_64 /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      install_delta
+    ' _ "$SETUP_SH" 2>&1
+  )" || {
+    echo "FAIL: CentOS 7 cached delta install failed: $out" >&2
+    return 1
+  }
+
+  assert_contains "$out" "使用本地缓存" "CentOS 7 cache priority"
+  assert_file_exists "$HOME/installed-delta" "cached delta installed"
+  assert_contains "$("$HOME/installed-delta" --version)" "0.19.2" "installed delta version"
+  [[ ! -e "$HOME/curl-was-called" ]] || {
+    echo "FAIL: valid cache unexpectedly accessed network" >&2
+    return 1
+  }
+  pass "git CentOS 7 prefers valid delta cache"
+}
+
+make_delta_download_curl() {
+  local alt_bin="$1"
+  _devtools_write_exec "$alt_bin/curl" '
+printf "%s\n" "$*" >>"$HOME/curl.log"
+out=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-o" ]]; then
+    out="$2"
+    shift 2
+  else
+    shift
+  fi
+done
+[[ -n "$out" ]]
+cp "$DELTA_FIXTURE_ARCHIVE" "$out"
+'
+}
+
+run_centos7_download_case() {
+  local cache_state="$1"
+  local fixture="$REPO_ROOT/cache/binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz"
+  local alt_bin="$HOME/centos7-${cache_state}-bin"
+  local os_release="$HOME/os-release-centos7-${cache_state}"
+  local archive="$DEVTOOLS_CACHE_DIR/binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz"
+  local out
+  rm -f "$HOME/installed-delta" "$HOME/curl.log" "$archive"
+  if [[ "$cache_state" == "corrupt" ]]; then
+    printf 'corrupt\n' >"$archive"
+  fi
+  make_delta_install_bin "$alt_bin"
+  _devtools_write_exec "$alt_bin/yum" 'printf "yum %s\n" "$*" >&2; exit 1'
+  make_delta_download_curl "$alt_bin"
+  write_os_release "$os_release" centos 7
+
+  out="$(
+    PATH="$alt_bin" SETUP_NO_MAIN=1 OS_RELEASE_FILE="$os_release" DEVTOOLS_ARCH=x86_64 \
+      DELTA_FIXTURE_ARCHIVE="$fixture" /bin/bash -c '
+        setup="$1"
+        set --
+        # shellcheck disable=SC1090
+        source "$setup"
+        install_delta
+      ' _ "$SETUP_SH" 2>&1
+  )" || {
+    echo "FAIL: CentOS 7 ${cache_state} cache download failed: $out" >&2
+    return 1
+  }
+
+  if [[ "$cache_state" == "corrupt" ]]; then
+    assert_contains "$out" "校验失败" "corrupt cache rejection"
+  fi
+  assert_contains "$(cat "$HOME/curl.log")" \
+    "https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz" \
+    "fixed git-delta download URL"
+  assert_file_exists "$HOME/installed-delta" "downloaded delta installed"
+  assert_contains "$("$HOME/installed-delta" --version)" "0.19.2" "downloaded delta version"
+}
+
+test_centos7_rejects_corrupt_cache_then_downloads() {
+  [[ "$DEVTOOLS_TEST_PROFILE" == "linux_centos" ]] || return 0
+  run_centos7_download_case corrupt
+  pass "git CentOS 7 rejects corrupt delta cache"
+}
+
+test_centos7_downloads_when_cache_missing() {
+  [[ "$DEVTOOLS_TEST_PROFILE" == "linux_centos" ]] || return 0
+  run_centos7_download_case missing
+  pass "git CentOS 7 downloads delta when cache is missing"
+}
+
+test_centos7_non_x86_skips_static_delta() {
+  [[ "$DEVTOOLS_TEST_PROFILE" == "linux_centos" ]] || return 0
+
+  local alt_bin="$HOME/centos7-arm-bin"
+  local os_release="$HOME/os-release-centos7-arm"
+  local out
+  make_alt_linux_bin "$alt_bin"
+  _devtools_write_exec "$alt_bin/yum" 'printf "yum %s\n" "$*" >&2; exit 1'
+  _devtools_write_exec "$alt_bin/curl" 'touch "$HOME/arm-curl-was-called"; exit 1'
+  _devtools_write_exec "$alt_bin/sudo" 'exec "$@"'
+  write_os_release "$os_release" centos 7
+
+  out="$(
+    PATH="$alt_bin" SETUP_NO_MAIN=1 OS_RELEASE_FILE="$os_release" DEVTOOLS_ARCH=aarch64 /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      install_delta
+    ' _ "$SETUP_SH" 2>&1
+  )" || {
+    echo "FAIL: CentOS 7 non-x86 delta fallback failed: $out" >&2
+    return 1
+  }
+  [[ ! -e "$HOME/arm-curl-was-called" ]] || {
+    echo "FAIL: non-x86 architecture used x86_64 static archive" >&2
+    return 1
+  }
+  pass "git CentOS 7 non-x86 skips x86_64 static delta"
+}
+
+test_epel_failure_falls_back_to_system_repo() {
+  [[ "$DEVTOOLS_TEST_PROFILE" == "linux_centos" ]] || return 0
+
+  local alt_bin="$HOME/epel-fallback-bin"
+  local os_release="$HOME/os-release-epel-fallback"
+  local tmp_root="$HOME/epel-tmp"
+  local out log
+  make_alt_linux_bin "$alt_bin"
+  mkdir -p "$tmp_root"
+  _devtools_write_exec "$alt_bin/dnf" '
+printf "%s\n" "$*" >>"$HOME/dnf.log"
+if [[ "$*" == *"--setopt=reposdir="* ]]; then exit 1; fi
+exit 0
+'
+  _devtools_write_exec "$alt_bin/sudo" 'exec "$@"'
+  write_os_release "$os_release" rocky 9
+
+  out="$(
+    PATH="$alt_bin" TMPDIR="$tmp_root" SETUP_NO_MAIN=1 OS_RELEASE_FILE="$os_release" /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      install_delta
+    ' _ "$SETUP_SH" 2>&1
+  )" || {
+    echo "FAIL: EPEL fallback test failed: $out" >&2
+    return 1
+  }
+  log="$(cat "$HOME/dnf.log")"
+  assert_contains "$log" "--setopt=reposdir=" "temporary EPEL repo attempt"
+  assert_contains "$log" "install -y git-delta" "system repository fallback"
+  if find "$tmp_root" -mindepth 1 -print -quit | grep -q .; then
+    echo "FAIL: temporary EPEL files were not cleaned up" >&2
+    return 1
+  fi
+  pass "git EPEL failure falls back and cleans temporary files"
 }
 
 test_setup_dry_run_skip_writes() {
@@ -134,6 +408,8 @@ test_config_credential_helper() {
       ;;
     linux_ubuntu|linux_centos)
       assert_contains "$out" "credential.helper = cache --timeout=86400" "linux cache helper"
+      assert_contains "$out" "apt / dnf / yum" "Linux delta install hint"
+      assert_not_contains "$out" "cargo install" "Linux delta hint excludes cargo"
       ;;
   esac
   if [[ -f "$HOME/.gitconfig" ]]; then
@@ -251,7 +527,14 @@ test_subcmd_installs_sparse_clone() {
 test_help
 test_unknown_flag
 test_install_gh_branch
+test_skip_gh
 test_install_delta_branch
+test_linux_ignores_other_package_managers
+test_epel_failure_falls_back_to_system_repo
+test_centos7_prefers_valid_delta_cache
+test_centos7_rejects_corrupt_cache_then_downloads
+test_centos7_downloads_when_cache_missing
+test_centos7_non_x86_skips_static_delta
 test_setup_dry_run_skip_writes
 test_subcmd_dry_run
 test_subcmd_install_idempotent

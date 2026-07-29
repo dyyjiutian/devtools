@@ -186,7 +186,7 @@ if command -v delta &>/dev/null; then
 else
   case "$(uname -s)" in
     Darwin) echo "  delta not found — skipping (install with: brew install git-delta)" ;;
-    Linux)  echo "  delta not found — skipping (install with your package manager or cargo install git-delta)" ;;
+    Linux)  echo "  delta not found — skipping (install with: apt / dnf / yum)" ;;
     *)      echo "  delta not found — skipping" ;;
   esac
 fi

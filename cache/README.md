@@ -44,12 +44,15 @@ cache/
 | `zoxide-0.9.4-aarch64-unknown-linux-musl.tar.gz` | https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.4/zoxide-0.9.4-aarch64-unknown-linux-musl.tar.gz | Linux arm64 |
 | `starship-x86_64-unknown-linux-musl.tar.gz` | https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-unknown-linux-musl.tar.gz | Linux x86_64 |
 | `starship-aarch64-unknown-linux-musl.tar.gz` | https://github.com/starship/starship/releases/download/v1.25.1/starship-aarch64-unknown-linux-musl.tar.gz | Linux arm64 |
+| `delta-0.19.2-x86_64-unknown-linux-musl.tar.gz` | https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz | CentOS 7 x86_64 Git 工具安装 |
 | `Xray-linux-64-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip | VPN Linux 客户端 x86_64 |
 | `Xray-linux-arm64-v8a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip | VPN Linux 客户端 arm64 |
 | `Xray-linux-arm32-v7a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm32-v7a.zip | VPN Linux 客户端 arm32 |
 | `tmux-3.7b.tar.gz` | https://github.com/tmux/tmux/releases/download/3.7b/tmux-3.7b.tar.gz | Linux 源码编译（`terminal/tmux/setup.sh`） |
 
 > **tmux**：不使用发行版包（Alinux/CentOS 常为 2.7，无 `extended-keys`）。离线时缓存上述源码包；编译仍需本机有 `gcc` / `libevent-devel` / `ncurses-devel` / `bison`。
+>
+> **git-delta**：`cache/download.sh linux` 会校验固定 SHA-256 `f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b`。已有文件校验正确时跳过；校验错误时删除并下载到同目录临时文件，校验通过后再原子替换。
 
 ---
 

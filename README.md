@@ -217,12 +217,13 @@ See [`tools/git/README.md`](tools/git/README.md) for full documentation.
 
 ### One-Shot Setup (`tools/git/setup.sh`)
 
-Installs git-delta and GitHub CLI (`gh`; then run `gh auth login` to authenticate), installs the `git rb` / `git bc` / `git wc` / `git review` / `git sparse-clone` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations.
+Installs git-delta and GitHub CLI (`gh`; then run `gh auth login` to authenticate), installs the `git rb` / `git bc` / `git wc` / `git review` / `git sparse-clone` subcommands, applies global Git defaults, adds the `gitroot` shell alias, and enables status/pull/fetch optimizations. On Linux, only APT/DNF/YUM are used; git-delta prefers temporary Alibaba Cloud mirrors, with a verified offline static cache for CentOS 7 x86_64.
 
 ```bash
 bash tools/git/setup.sh           # Full setup
 bash tools/git/setup.sh --dry-run # Preview only
 bash tools/git/setup.sh --skip-delta
+bash tools/git/setup.sh --skip-gh
 ```
 
 ### Global Configuration (`tools/git/scripts/config.sh`)
@@ -279,7 +280,7 @@ bash tools/git/scripts/alias.sh --clean # Remove
 
 ### Delta — Enhanced Diff Pager
 
-`tools/git/setup.sh` installs `git-delta` when a supported package manager is available. After running setup, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
+`tools/git/setup.sh` installs `git-delta` through Homebrew on macOS or APT/DNF/YUM on Linux. Ubuntu/Debian and RHEL-family 8/9 use temporary Alibaba Cloud mirrors first; CentOS 7 x86_64 prefers the verified `cache/binaries/` musl archive and downloads the same pinned upstream release when the cache is missing or invalid. After running setup, all `git diff`, `git log`, and `git show` output is rendered through delta with side-by-side layout and syntax highlighting.
 
 ```bash
 brew install git-delta   # or install via os/macos/setup.sh

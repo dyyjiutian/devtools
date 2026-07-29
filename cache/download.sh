@@ -47,6 +47,58 @@ download() {
   fi
 }
 
+# 下载固定校验和的文件；仅在校验成功后原子替换目标文件。
+download_verified() {
+  local url="$1"
+  local dest="$2"
+  local expected_sha256="$3"
+  local actual_sha256 tmp
+
+  if [[ -f "$dest" ]]; then
+    actual_sha256="$(sha256sum "$dest" | awk '{print $1}')" || actual_sha256=""
+    if [[ "$actual_sha256" == "$expected_sha256" ]]; then
+      info "已存在且校验通过，跳过: $(basename "$dest")"
+      return 0
+    fi
+    warn "校验失败，删除后重新下载: $(basename "$dest")"
+    rm -f "$dest"
+  fi
+
+  tmp="$(mktemp "${dest}.tmp.XXXXXX")"
+  trap 'rm -f "$tmp"' EXIT
+  trap 'exit 130' HUP INT TERM
+  info "下载并校验: $(basename "$dest") ..."
+  if ! curl -fsSL "$url" -o "$tmp"; then
+    error "失败: $url"
+    rm -f "$tmp"
+    trap - EXIT HUP INT TERM
+    return 1
+  fi
+
+  actual_sha256="$(sha256sum "$tmp" | awk '{print $1}')" || actual_sha256=""
+  if [[ "$actual_sha256" != "$expected_sha256" ]]; then
+    error "SHA-256 校验失败: $(basename "$dest")"
+    rm -f "$tmp"
+    trap - EXIT HUP INT TERM
+    return 1
+  fi
+
+  mv "$tmp" "$dest"
+  trap - EXIT HUP INT TERM
+  success "完成并校验: $(basename "$dest")"
+}
+
+download_git_delta() {
+  local version="0.19.2"
+  local target="x86_64-unknown-linux-musl"
+  local filename="delta-${version}-${target}.tar.gz"
+  local sha256="f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b"
+  download_verified \
+    "https://github.com/dandavison/delta/releases/download/${version}/${filename}" \
+    "${BINARIES_DIR}/${filename}" \
+    "$sha256"
+}
+
 pkg_version() {
   local name="$1" fallback="$2"
   local ver
@@ -73,6 +125,9 @@ download_macos() {
 
 download_linux() {
   echo -e "\n${BOLD}▶ Linux 所需文件${NC}"
+
+  # git-delta（CentOS 7 x86_64 离线兼容）
+  download_git_delta
 
   # 安装脚本
   download \
@@ -170,15 +225,21 @@ download_linux() {
     "${FONTS_DIR}/NerdFontsSymbolsOnly.tar.xz"
 }
 
-target="${1:-all}"
-case "$target" in
-  macos) download_macos ;;
-  linux) download_linux ;;
-  all)   download_macos; download_linux ;;
-  *)
-    error "未知参数: $target（支持 macos / linux / all）"
-    exit 1
-    ;;
-esac
+main() {
+  local target="${1:-all}"
+  case "$target" in
+    macos) download_macos ;;
+    linux) download_linux ;;
+    all)   download_macos; download_linux ;;
+    *)
+      error "未知参数: $target（支持 macos / linux / all）"
+      exit 1
+      ;;
+  esac
 
-echo -e "\n${GREEN}${BOLD}✓ 下载完成，可将文件 git add 后提交到仓库。${NC}\n"
+  echo -e "\n${GREEN}${BOLD}✓ 下载完成，可将文件 git add 后提交到仓库。${NC}\n"
+}
+
+if [[ "${CACHE_DOWNLOAD_NO_MAIN:-false}" != "true" && "${CACHE_DOWNLOAD_NO_MAIN:-false}" != "1" ]]; then
+  main "$@"
+fi

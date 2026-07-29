@@ -32,6 +32,7 @@ tools/git/
 bash setup.sh              # 完整配置
 bash setup.sh --dry-run    # 预览，不做任何改动
 bash setup.sh --skip-delta # 跳过 git-delta 安装
+bash setup.sh --skip-gh    # 跳过 GitHub CLI (gh) 安装
 bash setup.sh --skip-alias # 跳过 shell alias
 bash setup.sh --skip-config # 跳过 git config
 ```
@@ -44,7 +45,15 @@ bash setup.sh --skip-config # 跳过 git config
 4. `scripts/config.sh`：写入推荐的 git 全局配置与 status / pull / fetch / checkout 性能优化
 5. `scripts/alias.sh`：安装 `gitroot`
 
-`setup.sh` 支持 `--skip-delta` / `--skip-subcmd` / `--skip-config` / `--skip-alias` 分别跳过对应步骤，并会自动把 `~/.local/bin` 写入 rc 文件的 `PATH`。
+`setup.sh` 支持 `--skip-delta` / `--skip-gh` / `--skip-subcmd` / `--skip-config` / `--skip-alias` 分别跳过对应步骤，并会自动把 `~/.local/bin` 写入 rc 文件的 `PATH`。
+
+Linux 只识别 `apt`、`dnf`、`yum` 三类包管理器。安装 git-delta 时会优先使用临时镜像配置，不会改写系统仓库文件：
+
+- Ubuntu / Debian：临时使用阿里云 APT source，失败后回退当前系统 APT 仓库。
+- RHEL / CentOS / Rocky / AlmaLinux 8/9：临时使用阿里云 EPEL 仓库，失败后回退当前系统 DNF/YUM 仓库。
+- CentOS 7 x86_64：优先校验并使用仓库缓存的 git-delta 0.19.2 musl 静态包；缓存缺失或损坏时从固定上游 URL 下载并校验，最后再回退 YUM/DNF 仓库。
+
+临时 source、repo、下载和解压目录会在成功或失败后清理。静态包固定使用 SHA-256 `f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b`，安装目标为 `/usr/local/bin/delta`。
 
 ---
 
@@ -149,7 +158,7 @@ source ~/.zshrc                # 激活（或 source ~/.bashrc）
 
 ## Delta — 增强 diff 显示
 
-[git-delta](https://github.com/dandavison/delta) 是 git diff / log / show 的增强 pager，提供语法高亮和左右对比视图。`setup.sh` 会在可用包管理器上自动安装，`config.sh` 检测到 delta 后写入相关配置。
+[git-delta](https://github.com/dandavison/delta) 是 git diff / log / show 的增强 pager，提供语法高亮和左右对比视图。`setup.sh` 会在 macOS 使用 Homebrew，在 Linux 使用 APT/DNF/YUM 或 CentOS 7 x86_64 静态缓存安装；`config.sh` 检测到 delta 后写入相关配置。
 
 ```bash
 brew install git-delta          # macOS（或通过 os/macos/setup.sh 一并安装）
@@ -177,6 +186,14 @@ git sparse-clone --help
 ```
 
 ## Issues
+
+### 2026-07-30 — Linux 安装 git-delta 提示找不到软件
+
+**表象**：在部分 Ubuntu/Debian、RHEL/CentOS 系统运行 `bash tools/git/setup.sh` 时，系统仓库提示找不到 `git-delta`；首次包管理器安装失败后脚本直接跳过，CentOS 7 即使仓库内有离线资产也无法继续安装。
+
+**根因**：原安装流程只调用当前系统仓库，失败后立即返回；没有临时镜像、已校验静态包或后续仓库回退。CentOS 7 的常用仓库也不提供所需版本。
+
+**解法**：Ubuntu/Debian 临时使用阿里云 APT source，RHEL 系 8/9 临时使用阿里云 EPEL；CentOS 7 x86_64 优先使用仓库内固定版本的 musl 静态包，缓存缺失或校验失败时从上游固定 URL 重下并校验 SHA-256。所有方式失败后再尝试当前 APT/DNF/YUM 仓库。
 
 ### 2026-07-27 — 大型仓库稀疏克隆步骤多、易配错
 

@@ -23,16 +23,19 @@ exports_files([
 
 devtools_module_tests(
     name = "git",
-    suite = ":tests/git_suite.sh",
+    docker_profiles = [
+        "linux_ubuntu",
+        "linux_centos",
+    ],
+    module_data = [
+        ":git_srcs",
+        "//cache:git_delta_archive",
+    ],
     module_root = ":setup.sh",
-    module_data = [":git_srcs"],
     profiles = [
         "linux_ubuntu",
         "linux_centos",
         "macos",
     ],
-    docker_profiles = [
-        "linux_ubuntu",
-        "linux_centos",
-    ],
+    suite = ":tests/git_suite.sh",
 )
