@@ -44,9 +44,10 @@ fssh — fuzzy SSH + tmux session picker for Ghostty
 
 Usage:
   fssh                  Interactive: pick SSH host, then tmux session
-  fssh <host>           Skip host picker — go straight to tmux session picker
+  fssh <query>          Resolve Host alias: exact match, else substring;
+                        unique hit connects, multiple hits open fzf
   fssh -n               Skip tmux — plain SSH login after host pick
-  fssh <host> -n        Plain SSH directly to <host>
+  fssh <query> -n       Resolve <query>, then plain SSH
   fssh -l               List all hosts from ~/.ssh/config and exit
   fssh -h               Show this help
 
@@ -55,9 +56,14 @@ Flags (long forms also accepted):
   -l, --list            List available SSH hosts and exit
   -n, --no-tmux         Plain SSH — skip tmux session picker entirely
 
+Host query matching (Host aliases only; wildcards excluded):
+  1. Case-insensitive exact match against Host aliases
+  2. Else case-insensitive substring match
+  3. 1 hit → use it; multiple → fzf on matches; 0 → error
+
 Interactive tmux flow:
   1. Reads ~/.ssh/config for Host entries (wildcards excluded)
-  2. fzf picker → select host
+  2. Resolve query or fzf picker → select host
   3. SSH to host, list tmux sessions
   4. fzf picker → select existing session, "[新建会话]" to create one,
      or "[直接登录]" to drop into a plain shell (no tmux)
@@ -96,21 +102,6 @@ list_hosts_detail() {
     } | column -t -s $'\t'
 }
 
-# ── Flags ─────────────────────────────────────────────────────────────────────
-NO_TMUX=false
-
-DIRECT_HOST=""
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --help|-h)     show_help ;;
-        --list|-l)     list_hosts_detail; exit 0 ;;
-        --no-tmux|-n)  NO_TMUX=true; shift ;;
-        -*)            error "Unknown option: $1. Run fssh -h for usage." ;;
-        *)             DIRECT_HOST="$1"; shift ;;
-    esac
-done
-
 # ── Dependency check ──────────────────────────────────────────────────────────
 check_deps() {
     local missing=()
@@ -121,10 +112,32 @@ check_deps() {
     fi
 }
 
-# ── fzf host picker ───────────────────────────────────────────────────────────
-pick_host() {
-    local hosts
+# ── Host query matching (aliases only) ────────────────────────────────────────
+# Exact case-insensitive match wins; otherwise substring. Prints matching aliases.
+match_hosts() {
+    local query="$1"
+    local hosts exact
     hosts=$(list_hosts)
+    [[ -n "$hosts" ]] || return 0
+
+    exact=$(printf '%s\n' "$hosts" \
+        | awk -v q="$query" 'BEGIN{ql=tolower(q)} tolower($0)==ql')
+    if [[ -n "$exact" ]]; then
+        printf '%s\n' "$exact"
+        return 0
+    fi
+
+    printf '%s\n' "$hosts" \
+        | awk -v q="$query" 'BEGIN{ql=tolower(q)} ql!="" && index(tolower($0), ql)'
+}
+
+# ── fzf host picker ───────────────────────────────────────────────────────────
+# Optional $1: pre-filtered host list (newline-separated). Default: all hosts.
+pick_host() {
+    local hosts="${1:-}"
+    if [[ -z "$hosts" ]]; then
+        hosts=$(list_hosts)
+    fi
     [[ -n "$hosts" ]] || error "No hosts found in ~/.ssh/config (only wildcard entries exist)."
 
     local selected
@@ -137,6 +150,25 @@ pick_host() {
               --preview-window 'right:45%:wrap')
 
     printf '%s\n' "$selected"
+}
+
+# Resolve a query to a single Host alias (exact → substring → fzf if multiple).
+resolve_host() {
+    local query="$1"
+    local matches count
+
+    matches=$(match_hosts "$query")
+    if [[ -z "$matches" ]]; then
+        error "No SSH host matching '${query}' in ~/.ssh/config"
+    fi
+
+    count=$(printf '%s\n' "$matches" | grep -c . || true)
+    if [[ "$count" -eq 1 ]]; then
+        printf '%s\n' "$matches"
+        return 0
+    fi
+
+    pick_host "$matches"
 }
 
 # ── SSH ControlMaster ─────────────────────────────────────────────────────────
@@ -232,21 +264,6 @@ pick_session() {
         | fzf --prompt="Tmux Session ❯ " --height=40% --reverse --border --no-multi
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-check_deps
-
-if [[ -n "$DIRECT_HOST" ]]; then
-    HOST="$DIRECT_HOST"
-else
-    HOST=$(pick_host)
-fi
-if [[ -z "$HOST" ]]; then
-    warn "No host selected."
-    exit 0
-fi
-
-establish_master "$HOST"
-
 # ── Plain SSH mode (--no-tmux or [直接登录] chosen) ───────────────────────────
 connect_plain() {
     success "→ ${HOST}  (plain SSH)"
@@ -254,45 +271,81 @@ connect_plain() {
     mssh "$HOST"
 }
 
-if [[ "$NO_TMUX" == "true" ]]; then
-    connect_plain
-    exit 0
-fi
+# ── Main ──────────────────────────────────────────────────────────────────────
+fssh_main() {
+    local NO_TMUX=false
+    local DIRECT_HOST=""
+    local CHOICE SESSION _tmux_check rc
 
-CHOICE=$(pick_session "$HOST")
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help|-h)     show_help ;;
+            --list|-l)     list_hosts_detail; exit 0 ;;
+            --no-tmux|-n)  NO_TMUX=true; shift ;;
+            -*)            error "Unknown option: $1. Run fssh -h for usage." ;;
+            *)             DIRECT_HOST="$1"; shift ;;
+        esac
+    done
 
-case "$CHOICE" in
-    "")
-        warn "No session selected."
+    check_deps
+
+    # HOST is global: connect_plain reads it from the caller scope.
+    if [[ -n "$DIRECT_HOST" ]]; then
+        HOST=$(resolve_host "$DIRECT_HOST")
+    else
+        HOST=$(pick_host)
+    fi
+    if [[ -z "$HOST" ]]; then
+        warn "No host selected."
         exit 0
-        ;;
-    "$DIRECT_LOGIN_LABEL")
+    fi
+
+    establish_master "$HOST"
+
+    if [[ "$NO_TMUX" == "true" ]]; then
         connect_plain
         exit 0
-        ;;
-    "$NEW_SESSION_LABEL")
-        printf 'Session name [main]: ' >&2
-        read -r SESSION
-        SESSION="${SESSION:-main}"
-        ;;
-    *)
-        SESSION="$CHOICE"
-        ;;
-esac
+    fi
 
-success "→ ${HOST}  session: ${SESSION}"
+    CHOICE=$(pick_session "$HOST")
 
-# Probe without PTY so the shell's raw stderr (e.g. "tmux: command not found")
-# comes back through the non-PTY SSH channel and can be captured and displayed.
-if ! _tmux_check=$(remote_tmux "$HOST" -V 2>&1); then
-    [[ -n "$_tmux_check" ]] && echo "$_tmux_check" >&2
-    error "tmux not available on ${HOST}"
-fi
+    case "$CHOICE" in
+        "")
+            warn "No session selected."
+            exit 0
+            ;;
+        "$DIRECT_LOGIN_LABEL")
+            connect_plain
+            exit 0
+            ;;
+        "$NEW_SESSION_LABEL")
+            printf 'Session name [main]: ' >&2
+            read -r SESSION
+            SESSION="${SESSION:-main}"
+            ;;
+        *)
+            SESSION="$CHOICE"
+            ;;
+    esac
 
-# Do not use exec — trap must fire on exit to clean up terminal state
-INTERACTIVE_SESSION_STARTED=true
-remote_tmux -t "$HOST" new-session -As "$SESSION" || {
-    rc=$?
-    echo -e "\033[31m[ERROR]\033[0m Remote tmux exited ${rc} on ${HOST}" >&2
-    exit $rc
+    success "→ ${HOST}  session: ${SESSION}"
+
+    # Probe without PTY so the shell's raw stderr (e.g. "tmux: command not found")
+    # comes back through the non-PTY SSH channel and can be captured and displayed.
+    if ! _tmux_check=$(remote_tmux "$HOST" -V 2>&1); then
+        [[ -n "$_tmux_check" ]] && echo "$_tmux_check" >&2
+        error "tmux not available on ${HOST}"
+    fi
+
+    # Do not use exec — trap must fire on exit to clean up terminal state
+    INTERACTIVE_SESSION_STARTED=true
+    remote_tmux -t "$HOST" new-session -As "$SESSION" || {
+        rc=$?
+        echo -e "\033[31m[ERROR]\033[0m Remote tmux exited ${rc} on ${HOST}" >&2
+        exit $rc
+    }
 }
+
+if [[ "${FSSH_NO_MAIN:-}" != "1" ]]; then
+    fssh_main "$@"
+fi

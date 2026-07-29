@@ -10,6 +10,19 @@ bash tools/ssh/fssh.sh --help
 
 依赖 ssh 和 fzf；脚本会备份并更新 ~/.ssh/config。
 
+## fssh 主机查询
+
+`fssh` 无参数时打开全量 Host 选择器。带参数时对 `~/.ssh/config` 的 **Host 别名**（不含 `*?` 通配）做解析：
+
+1. 不区分大小写的精确匹配
+2. 否则不区分大小写的子串匹配
+3. 唯一命中直接连接；多个命中对候选开 fzf；零命中报错退出
+
+~~~bash
+fssh dev          # 唯一匹配 → 直连；多个 → fzf
+fssh prod -n      # 解析后 plain SSH（跳过 tmux）
+~~~
+
 ## Issues
 
 ### 2026-07-28 — fssh 无法发现用户本地路径中的远端 tmux
