@@ -247,18 +247,22 @@ list_remote_sessions() {
 NEW_SESSION_LABEL="[new session]"
 DIRECT_LOGIN_LABEL="[ssh login]"
 
+# Build session-picker lines: [ssh login], existing sessions, [new session].
+session_menu_entries() {
+    local sessions="${1:-}"
+    if [[ -n "$sessions" ]]; then
+        printf '%s\n%s\n%s\n' "$DIRECT_LOGIN_LABEL" "$sessions" "$NEW_SESSION_LABEL"
+    else
+        printf '%s\n%s\n' "$DIRECT_LOGIN_LABEL" "$NEW_SESSION_LABEL"
+    fi
+}
+
 # Returns either a session name, NEW_SESSION_LABEL, or DIRECT_LOGIN_LABEL
 pick_session() {
     local host="$1"
-    local sessions
+    local sessions entries
     sessions=$(list_remote_sessions "$host")
-
-    local entries
-    if [[ -n "$sessions" ]]; then
-        entries=$(printf '%s\n%s\n%s\n'  "$DIRECT_LOGIN_LABEL" "$NEW_SESSION_LABEL" "$sessions" )
-    else
-        entries=$(printf '%s\n%s\n' "$NEW_SESSION_LABEL" "$DIRECT_LOGIN_LABEL")
-    fi
+    entries=$(session_menu_entries "$sessions")
 
     printf '%s\n' "$entries" \
         | fzf --prompt="Tmux Session ❯ " --height=40% --reverse --border --no-multi

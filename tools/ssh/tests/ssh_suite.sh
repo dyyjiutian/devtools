@@ -143,6 +143,23 @@ EOF
   pass "fssh resolve_host multiple via fzf ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_session_menu_order_with_sessions() {
+  local out
+  out="$(run_fssh_fn session_menu_entries $'main\nwork')"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '1p')" "[ssh login]" "ssh login is first"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '2p')" "main" "sessions follow login"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '3p')" "work" "second session in middle"
+  assert_eq "$(printf '%s\n' "$out" | sed -n '4p')" "[new session]" "new session is last"
+  pass "fssh session menu order with sessions ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_session_menu_order_without_sessions() {
+  local out
+  out="$(run_fssh_fn session_menu_entries '')"
+  assert_eq "$(printf '%s\n' "$out")" $'[ssh login]\n[new session]' "login then new when empty"
+  pass "fssh session menu order without sessions ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_help
 test_fssh_help_mentions_query
 test_match_hosts_exact
@@ -153,5 +170,7 @@ test_match_hosts_ignores_wildcards
 test_resolve_host_unique
 test_resolve_host_none
 test_resolve_host_multiple_uses_fzf
+test_session_menu_order_with_sessions
+test_session_menu_order_without_sessions
 
 echo "PASS: ssh suite complete ($DEVTOOLS_TEST_PROFILE)"
