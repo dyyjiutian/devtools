@@ -1,0 +1,33 @@
+load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "vim_srcs",
+    srcs = [
+        "setup.sh",
+        "vimrc",
+        "README.md",
+    ],
+)
+
+exports_files([
+    "setup.sh",
+    "tests/vim_suite.sh",
+])
+
+devtools_module_tests(
+    name = "vim",
+    suite = ":tests/vim_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":vim_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_centos",
+        "macos",
+    ],
+    docker_profiles = [
+        "linux_ubuntu",
+        "linux_centos",
+    ],
+)

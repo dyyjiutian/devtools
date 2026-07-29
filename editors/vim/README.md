@@ -6,18 +6,29 @@
 
 ```bash
 ./setup.sh
+./setup.sh --upgrade    # Vim 过旧时升级到对应稳定版后再装 coc
+./setup.sh --dry-run    # 试运行
 ```
 
 脚本会自动完成以下操作：
 
 1. 安装系统依赖（vim、node、ctags、fzf、ripgrep）
-2. 备份已有的 `~/.vimrc`（普通文件），然后复制本配置覆盖到 `~/.vimrc`
-3. 安装 vim-plug 及所有插件
-4. 安装 coc.nvim 语言服务器（Python、Go、Java、Shell、JSON、YAML）
+2. 检测 Vim 版本；使用 `--upgrade` 时按大版本升级（见下表）
+3. 备份已有的 `~/.vimrc`（普通文件），然后复制本配置覆盖到 `~/.vimrc`
+4. 安装 vim-plug 及所有插件
+5. 安装 coc.nvim 语言服务器（Python、Go、Java、Shell、JSON、YAML）
 
 > macOS 通过 Homebrew 安装依赖；Linux 支持 apt-get / dnf / yum。
 > 在 Alinux、RHEL 等仓库没有 `fzf` / `ripgrep` 时，会自动从 GitHub 下载二进制到 `~/.local/bin`（优先使用仓库 `cache/binaries/`）。
 
+### `--upgrade` 目标版本
+
+| 当前 Vim | 目标版本（可环境变量覆盖） |
+|----------|----------------------------|
+| 8.x | `VIM_8_TARGET`（默认 `8.2.5172`） |
+| 9.x、低于 8、或未安装 | `VIM_9_TARGET`（默认 `9.2.0782`） |
+
+升级顺序：包管理器（brew / apt / dnf / yum）→ 仍不足则源码编译到 `${VIM_PREFIX:-~/.local}`，并确保 `~/.local/bin` 优先于系统 PATH。未传 `--upgrade` 且版本过低时仍会跳过 coc（与旧行为一致）。
 ## 插件列表
 
 | 插件 | 用途 |
@@ -157,6 +168,21 @@ vim-plug 会提示确认后删除未声明的插件目录。
 ```
 
 ## Issues
+
+### 2026-07-30 — Vim 过旧时只能跳过 coc，无法一键升级
+
+**问题表象**
+
+- 系统 Vim（常见于 CentOS/Alinux 的 7.x / 8.0）低于 coc.nvim 要求时，`setup.sh` 仅警告并跳过 coc，需用户自行升级。
+
+**根因**
+
+- 安装器只做版本检测，没有提供可控的升级路径。
+
+**解法**
+
+- 增加 `./setup.sh --upgrade`：按当前大版本选择钉死稳定版，优先包管理器，仍不足则源码安装到 `~/.local`。
+- 预览：`bash editors/vim/setup.sh --dry-run --upgrade`。
 
 ### 2026-07-28 — setup 将 vimrc 软链到仓库路径
 

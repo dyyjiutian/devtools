@@ -106,6 +106,8 @@ Vim configuration with vim-plug and coc.nvim language servers (Python, Go, Java,
 
 ```bash
 ./editors/vim/setup.sh
+./editors/vim/setup.sh --upgrade   # upgrade Vim (pkg manager, else ~/.local) then install
+./editors/vim/setup.sh --dry-run
 ```
 
 ### tmux (`terminal/tmux/`)
