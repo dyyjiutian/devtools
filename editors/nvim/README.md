@@ -16,7 +16,7 @@ Modern Neovim configuration with Lua-based setup using [lazy.nvim](https://githu
 
 ## Prerequisites
 
-- **Neovim** >= 0.9.0
+- **Neovim** >= 0.9.0（Linux 安装器固定 **v0.10.4** AppImage，兼容 Alinux 3 / glibc 2.32）
 - **Git**
 - **Node.js** >= 16 (for LSP servers)
 - **Ripgrep** (for Telescope grep)
@@ -31,7 +31,7 @@ cd editors/nvim
 ```
 
 This will:
-1. Install/Update Neovim if needed
+1. Install/Update Neovim if needed（Linux：优先 `cache/binaries/nvim-*-v0.10.4.appimage`）
 2. Install system dependencies
 3. Copy configuration files
 4. Install Nerd Font for icons
@@ -45,10 +45,11 @@ If you prefer to set up manually:
 # 1. Install Neovim (macOS)
 brew install neovim node ripgrep fd
 
-# 1. Install Neovim (Linux - Ubuntu/Debian)
-curl -LO https://github.com/neovim/neovim/releases/download/stable/nvim.appimage
-chmod u+x nvim.appimage
-sudo mv nvim.appimage /usr/local/bin/nvim
+# 1. Install Neovim (Linux) — pin v0.10.4 for glibc 2.32 (Alinux 3)
+curl -LO https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.appimage
+chmod u+x nvim-linux-x86_64.appimage
+mkdir -p ~/.local/bin
+mv nvim-linux-x86_64.appimage ~/.local/bin/nvim
 
 # 2. Copy config files
 mkdir -p ~/.config/nvim
@@ -264,6 +265,16 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 1. Clear plugin cache: `rm -rf ~/.local/share/nvim/lazy`
 2. Restart Neovim to re-install plugins
+
+## Issues
+
+### 2026-07-30 — Alinux 3 安装 Neovim stable 失败（glibc）
+
+**表象**：`editors/nvim/setup.sh` 在 Alinux 3 上下载/运行最新 stable AppImage 失败，提示找不到可用包或动态链接器不满足要求。
+
+**根因**：较新的 Neovim stable 需要 glibc 2.34+，Alinux 3 为 glibc 2.32。
+
+**解法**：Linux 安装固定为 v0.10.4 AppImage；优先使用仓库 `cache/binaries/nvim-linux-*-v0.10.4.appimage`，缺失时再从 GitHub 下载同版本。可用 `bash cache/download.sh linux` 预拉缓存。
 
 ## References
 

@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ============================================================
 # Neovim Setup Script
 # Installs Neovim and configures with lazy.nvim plugins
 # ============================================================
 
-set -e
+set -euo pipefail
 
 info()    { echo -e "\033[34m[INFO]\033[0m $1"; }
 success() { echo -e "\033[32m[OK]\033[0m $1"; }
@@ -12,18 +12,21 @@ warn()    { echo -e "\033[33m[WARN]\033[0m $1"; }
 error()   { echo -e "\033[31m[ERROR]\033[0m $1"; }
 step()    { echo -e "\033[36m[STEP]\033[0m $1"; }
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NVIM_CONFIG_DIR="$HOME/.config/nvim"
+# Linux AppImage 固定 v0.10.4：兼容 Alinux 3 / glibc 2.32（更新 stable 需 glibc 2.34+）
+NVIM_VERSION="${NVIM_VERSION:-0.10.4}"
+CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 
 # --- Help ---
 show_help() {
-    cat <<'EOF'
+    cat <<EOF
 Neovim Setup Script - 一键配置 Neovim 开发环境
 
 该脚本会执行以下配置:
-  1. 安装/更新 Neovim (0.9.0+)
+  1. 安装/更新 Neovim (Linux 固定 AppImage v${NVIM_VERSION}，兼容 glibc 2.32+)
      - macOS 通过 Homebrew 安装
-     - Linux 通过官方 AppImage 或包管理器安装
+     - Linux 优先 cache/binaries/，否则下载官方 AppImage；失败再试包管理器
   2. 安装依赖: node, npm, ripgrep, fd, git
   3. 备份已有的 Neovim 配置 (如果存在)
   4. 安装 lazy.nvim 插件管理器
@@ -37,6 +40,13 @@ Neovim Setup Script - 一键配置 Neovim 开发环境
   ./setup.sh --restore    从当前目录恢复配置
   ./setup.sh --update     仅更新插件
   ./setup.sh --help       显示此帮助信息
+
+环境变量:
+  NVIM_VERSION         Linux AppImage 版本（默认 ${NVIM_VERSION}）
+  DEVTOOLS_CACHE_DIR   离线缓存根目录（默认仓库 cache/）
+EOF
+    # Keep keybindings in a separate literal block for readability
+    cat <<'EOF'
 
 快捷键速查 (Leader 键为空格 <Space>):
   <Space>e     切换文件树 (nvim-tree)
@@ -112,37 +122,66 @@ install_nvim_macos() {
     success "Neovim installed"
 }
 
+_nvim_linux_arch_asset() {
+    case "$(uname -m)" in
+        aarch64|arm64) echo "linux-arm64" ;;
+        *)             echo "linux-x86_64" ;;
+    esac
+}
+
+_ensure_local_bin_path() {
+    mkdir -p "$HOME/.local/bin"
+    if [[ ":${PATH}:" != *":$HOME/.local/bin:"* ]]; then
+        if [[ -f "$HOME/.bashrc" ]] || [[ ! -e "$HOME/.bashrc" ]]; then
+            if ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+            fi
+        fi
+        if [[ -f "$HOME/.zshrc" ]]; then
+            if ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.zshrc" 2>/dev/null; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
+            fi
+        fi
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+}
+
 install_nvim_linux() {
     local current_version
-    current_version=$(get_nvim_version)
+    current_version="$(get_nvim_version)"
 
-    if [ "$(version_compare "$current_version" "0.9.0")" = "lt" ]; then
-        info "Installing Neovim via AppImage..."
-
-        # Download latest stable AppImage
-        local nvim_url="https://github.com/neovim/neovim/releases/download/stable/nvim.appimage"
-        local nvim_path="$HOME/.local/bin/nvim"
-
-        mkdir -p "$HOME/.local/bin"
-
-        if curl -fLo /tmp/nvim.appimage "$nvim_url" 2>/dev/null; then
-            chmod +x /tmp/nvim.appimage
-            mv /tmp/nvim.appimage "$nvim_path"
-            success "Neovim AppImage installed to $nvim_path"
-
-            # Add to PATH if needed
-            if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc" 2>/dev/null || true
-                export PATH="$HOME/.local/bin:$PATH"
-            fi
-        else
-            warn "Failed to download AppImage, trying package manager..."
-            install_nvim_linux_package_manager
-        fi
-    else
+    if [ "$(version_compare "$current_version" "0.9.0")" != "lt" ]; then
         success "Neovim $current_version already installed"
+        return 0
     fi
+
+    info "Installing Neovim v${NVIM_VERSION} via AppImage..."
+
+    local arch_asset filename cached url nvim_path tmp
+    arch_asset="$(_nvim_linux_arch_asset)"
+    filename="nvim-${arch_asset}-v${NVIM_VERSION}.appimage"
+    cached="${CACHE_DIR}/binaries/${filename}"
+    url="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-${arch_asset}.appimage"
+    nvim_path="$HOME/.local/bin/nvim"
+    tmp="$(mktemp "${TMPDIR:-/tmp}/nvim.appimage.XXXXXX")"
+
+    _ensure_local_bin_path
+
+    if [[ -f "$cached" ]]; then
+        info "Using local cache: binaries/${filename}"
+        cp "$cached" "$tmp"
+    elif curl -fL --retry 3 -o "$tmp" "$url"; then
+        info "Downloaded Neovim v${NVIM_VERSION} AppImage"
+    else
+        rm -f "$tmp"
+        warn "Failed to download AppImage, trying package manager..."
+        install_nvim_linux_package_manager
+        return 0
+    fi
+
+    chmod +x "$tmp"
+    mv "$tmp" "$nvim_path"
+    success "Neovim AppImage installed to $nvim_path"
 }
 
 install_nvim_linux_package_manager() {
@@ -461,10 +500,17 @@ main() {
 }
 
 # --- Parse arguments ---
-case "${1:-}" in
-    --help|-h)      show_help ;;
-    --backup|-b)    backup_config ;;
-    --restore|-r)   restore_config ;;
-    --update|-u)    update_plugins ;;
-    *)              main ;;
-esac
+if [[ "${SETUP_NO_MAIN:-}" != "1" && "${SETUP_NO_MAIN:-}" != "true" ]]; then
+    case "${1:-}" in
+        --help|-h)      show_help ;;
+        --backup|-b)    backup_config ;;
+        --restore|-r)   restore_config ;;
+        --update|-u)    update_plugins ;;
+        "")             main ;;
+        *)
+            error "Unknown option: ${1:-}"
+            echo "Run ./setup.sh --help for usage" >&2
+            exit 1
+            ;;
+    esac
+fi

@@ -219,6 +219,14 @@ download_linux() {
     "https://github.com/tmux/tmux/releases/download/${tmux_version}/tmux-${tmux_version}.tar.gz" \
     "${BINARIES_DIR}/tmux-${tmux_version}.tar.gz"
 
+  # Neovim AppImage（editors/nvim/setup.sh）— 固定 v0.10.4，兼容 Alinux 3 / glibc 2.32
+  local nvim_version="0.10.4"
+  for arch in linux-x86_64 linux-arm64; do
+    download \
+      "https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-${arch}.appimage" \
+      "${BINARIES_DIR}/nvim-${arch}-v${nvim_version}.appimage"
+  done
+
   # Nerd Fonts Symbols Only — 架构无关，yazi/终端图标字体
   download \
     "https://github.com/ryanoasis/nerd-fonts/releases/download/v${nerd_fonts_version}/NerdFontsSymbolsOnly.tar.xz" \
