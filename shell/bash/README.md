@@ -4,8 +4,14 @@
 
 ~~~bash
 bash shell/bash/setup.sh --help
-bash shell/bash/setup.sh --dry-run
+bash shell/bash/setup.sh              # 完整安装
+bash shell/bash/setup.sh install      # 同上
+bash shell/bash/setup.sh install fzf  # 只装 fzf（仍写入完整 bashrc 配置块）
+bash shell/bash/setup.sh list         # 列举插件与本机状态
+bash shell/bash/setup.sh install -n   # 试运行
 ~~~
+
+插件 ID：`blesh`（别名 `ble.sh`）、`zoxide`、`fzf`、`starship`。
 
 Linux 安装优先使用 cache/ 中的二进制缓存。
 

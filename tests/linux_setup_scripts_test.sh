@@ -247,4 +247,38 @@ assert_contains "$cli_dry" "试运行"
 [[ ! -f "$TMP_DIR/bash-dry-home/.bashrc" ]] ||
   fail "dry-run must not create .bashrc when it did not exist"
 
+# install fzf only must not invoke zoxide online installer (curl) when zoxide missing
+single_home="$TMP_DIR/bash-single-home"
+single_bin="$TMP_DIR/bash-single-bin"
+mkdir -p "$single_home/.local/share/blesh" "$single_home/.fzf" "$single_bin"
+touch "$single_home/.local/share/blesh/ble.sh"
+printf '#!/usr/bin/env bash\ntouch "$FZF_INSTALL_MARKER"\n' > "$single_home/.fzf/install"
+chmod +x "$single_home/.fzf/install"
+printf '#!/usr/bin/env bash\nif [[ "$1" == "clone" ]]; then touch "$FZF_CLONE_MARKER"; exit 99; fi\nexit 0\n' > "$single_bin/git"
+cat > "$single_bin/curl" <<'EOF'
+#!/usr/bin/env bash
+touch "$CURL_CALLED_MARKER"
+exit 97
+EOF
+chmod +x "$single_bin/git" "$single_bin/curl"
+
+FZF_INSTALL_MARKER="$TMP_DIR/bash-single-fzf-install" \
+FZF_CLONE_MARKER="$TMP_DIR/bash-single-fzf-clone" \
+CURL_CALLED_MARKER="$TMP_DIR/bash-single-curl" \
+PATH="$single_bin:/usr/bin:/bin" HOME="$single_home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" \
+  bash "$ROOT/shell/bash/setup.sh" install fzf >"$TMP_DIR/bash-single.log" 2>&1 ||
+  fail "install fzf failed: $(cat "$TMP_DIR/bash-single.log")"
+assert_file "$TMP_DIR/bash-single-fzf-install"
+[[ ! -e "$TMP_DIR/bash-single-curl" ]] || fail "install fzf must not curl-install zoxide/starship"
+assert_contains "$single_home/.bashrc" "Lightweight Bash Plugins"
+# starship.toml must NOT be written for fzf-only install
+[[ ! -f "$single_home/.config/starship.toml" ]] ||
+  fail "fzf-only install must not write starship.toml"
+
+# alias ble.sh
+alias_rc=0
+PATH="$single_bin:/usr/bin:/bin" HOME="$single_home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" \
+  bash "$ROOT/shell/bash/setup.sh" install ble.sh -n >"$TMP_DIR/bash-alias.log" 2>&1 || alias_rc=$?
+[[ "$alias_rc" -eq 0 ]] || fail "ble.sh alias dry-run failed: $(cat "$TMP_DIR/bash-alias.log")"
+
 echo "PASS: Linux setup cache and ECS repository regression tests"

@@ -168,45 +168,19 @@ parse_args "$@"
 OS="$(uname -s)"
 
 # ---- macOS: 通过 Homebrew 安装 ----
-install_macos() {
-    if ! command -v brew &>/dev/null; then
-        error "Homebrew 未安装，请先安装: https://brew.sh"
-        exit 1
+_install_macos_plugin() {
+    local brew_name="$1"
+    if brew list "$brew_name" &>/dev/null 2>&1; then
+        success "$brew_name 已安装，跳过"
+        return
     fi
-
-    local tools=(blesh fzf zoxide starship)
-    for tool in "${tools[@]}"; do
-        if brew list "$tool" &>/dev/null 2>&1; then
-            success "$tool 已安装，跳过"
-        else
-            if [[ "$DRY_RUN" == "false" ]]; then
-                info "安装 $tool ..."
-                brew install "$tool"
-                success "$tool 安装完成"
-            else
-                info "[试运行] brew install $tool"
-            fi
-        fi
-    done
-}
-
-# ---- Linux: 从 git/curl 安装 ----
-install_linux() {
-    if ! command -v git &>/dev/null; then
-        error "需要 git，请先安装"
-        exit 1
+    if [[ "$DRY_RUN" == "true" ]]; then
+        info "[试运行] brew install $brew_name"
+        return
     fi
-    if ! command -v curl &>/dev/null; then
-        error "需要 curl，请先安装"
-        exit 1
-    fi
-
-    mkdir -p "$LINUX_PLUGIN_DIR" "$LOCAL_BIN_DIR"
-
-    _install_linux_blesh
-    _install_linux_zoxide
-    _install_linux_fzf
-    _install_linux_starship
+    info "安装 $brew_name ..."
+    brew install "$brew_name"
+    success "$brew_name 安装完成"
 }
 
 _install_linux_blesh() {
@@ -529,25 +503,70 @@ configure_bashrc() {
     fi
 }
 
-# ---- 主流程 ----
-main() {
+# ---- 按插件安装 ----
+install_plugin() {
+    local id="$1"
+    case "$OS" in
+        Darwin)
+            case "$id" in
+                blesh)    _install_macos_plugin blesh ;;
+                zoxide)   _install_macos_plugin zoxide ;;
+                fzf)      _install_macos_plugin fzf ;;
+                starship) _install_macos_plugin starship ;;
+            esac
+            ;;
+        Linux)
+            mkdir -p "$LINUX_PLUGIN_DIR" "$LOCAL_BIN_DIR"
+            case "$id" in
+                blesh)    _install_linux_blesh ;;
+                zoxide)   _install_linux_zoxide ;;
+                fzf)      _install_linux_fzf ;;
+                starship) _install_linux_starship ;;
+            esac
+            ;;
+        *) error "不支持的操作系统: $OS"; exit 1 ;;
+    esac
+}
+
+cmd_install() {
+    local plugins=("$@")
+    local id want_starship_config=false
+    if [[ ${#plugins[@]} -eq 0 ]]; then
+        plugins=("${PLUGIN_IDS[@]}")
+        want_starship_config=true
+    else
+        for id in "${plugins[@]}"; do
+            [[ "$id" == "starship" ]] && want_starship_config=true
+        done
+    fi
+
     info "轻量级 Bash 插件安装脚本"
     info "运行模式: $([[ "$DRY_RUN" == "true" ]] && echo "试运行" || echo "实际执行")"
     info "操作系统: $OS"
+    info "插件: ${plugins[*]}"
     echo ""
 
+    if [[ "$OS" == "Darwin" ]] && ! command -v brew &>/dev/null; then
+        error "Homebrew 未安装，请先安装: https://brew.sh"
+        exit 1
+    fi
+    if [[ "$OS" == "Linux" ]]; then
+        command -v git &>/dev/null || { error "需要 git，请先安装"; exit 1; }
+        command -v curl &>/dev/null || { error "需要 curl，请先安装"; exit 1; }
+    fi
+
     step "安装插件..."
-    case "$OS" in
-        Darwin) install_macos ;;
-        Linux)  install_linux ;;
-        *) error "不支持的操作系统: $OS"; exit 1 ;;
-    esac
+    for id in "${plugins[@]}"; do
+        install_plugin "$id"
+    done
 
     echo ""
     configure_bashrc
 
-    echo ""
-    configure_starship_config
+    if [[ "$want_starship_config" == "true" ]]; then
+        echo ""
+        configure_starship_config
+    fi
 
     echo ""
     success "安装完成！"
@@ -572,6 +591,6 @@ main() {
 
 case "$COMMAND" in
     list) cmd_list ;;
-    install) main "${SELECTED_PLUGINS[@]}" ;;
+    install) cmd_install "${SELECTED_PLUGINS[@]}" ;;
     *) error "未知命令: $COMMAND"; exit 1 ;;
 esac
