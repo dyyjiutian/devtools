@@ -212,7 +212,8 @@ _install_plugin() {
     local plugin="$1"
     local plugin_name="${plugin%%@*}"
 
-    if claude plugins list 2>/dev/null | grep -qE "(^|[[:space:]❯])${plugin_name}@"; then
+    if grep -qE "(^|[[:space:]❯])${plugin_name}@" \
+        <<<"$(claude plugins list 2>/dev/null || true)"; then
         info "已安装，跳过: $plugin"
         return 0
     fi

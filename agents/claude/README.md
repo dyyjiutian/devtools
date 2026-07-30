@@ -131,6 +131,14 @@ cd os/macos/agent-notify
 
 ---
 
+## Issues / FAQ
+
+### 2026-07-30 — 长插件列表下可能重复安装
+
+表象：已安装全部插件后再次运行 `./setup.sh install-plugins`，偶尔仍会重复安装部分插件。根因是脚本在 `set -o pipefail` 下通过 `claude plugins list | grep -q` 判断插件是否存在；列表较长时 `grep -q` 提前退出，可能使前序命令收到 SIGPIPE，整个 pipeline 被误判为未匹配。现在会先完整读取插件列表再检查，并由长列表幂等回归测试覆盖。
+
+---
+
 ## 相关链接
 
 - [Claude Code 文档](https://code.claude.com/docs)

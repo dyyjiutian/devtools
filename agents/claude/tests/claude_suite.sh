@@ -28,6 +28,11 @@ case "$cmd" in
           echo "    Version: 0.0.0"
           echo "    Status: enabled"
         done <"$INST"
+        if [[ "${CLAUDE_FAKE_LARGE_LIST:-0}" == "1" ]]; then
+          for _ in {1..4096}; do
+            echo "    Metadata: filler to exercise long plugin-list output"
+          done
+        fi
         exit 0
         ;;
       install)
@@ -84,7 +89,7 @@ test_install_plugins_all_idempotent() {
   bash "$SETUP_SH" install-plugins >/dev/null 2>&1
   local first second
   first="$(grep -c '^install ' "$INSTALL_LOG" || true)"
-  bash "$SETUP_SH" install-plugins >/dev/null 2>&1
+  CLAUDE_FAKE_LARGE_LIST=1 bash "$SETUP_SH" install-plugins >/dev/null 2>&1
   second="$(grep -c '^install ' "$INSTALL_LOG" || true)"
   assert_eq "$second" "$first" "second install-plugins should skip already installed"
   [[ "$first" -ge 3 ]] || {
