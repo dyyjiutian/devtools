@@ -46,6 +46,37 @@ Host work-jump-*
 EOF
 }
 
+# ~50 concrete Host aliases across main + Include, with typical directive lines
+# (enough total lines to catch per-line external-process regressions).
+write_hosts_config_perf50() {
+  local i
+  mkdir -p "$HOME/.ssh/config.d"
+  {
+    echo "# perf fixture: main + Include"
+    echo "Include config.d/extra"
+    echo ""
+    for ((i = 1; i <= 40; i++)); do
+      printf 'Host host-%02d\n' "$i"
+      printf '    HostName 10.0.0.%d\n' "$i"
+      echo "    User deploy"
+      echo "    Port 22"
+      echo ""
+    done
+    echo "Host jump-*"
+    echo "    HostName 10.0.0.254"
+  } >"$HOME/.ssh/config"
+  {
+    echo "# perf fixture: included hosts"
+    for ((i = 41; i <= 50; i++)); do
+      printf 'Host host-%02d\n' "$i"
+      printf '    HostName 10.0.1.%d\n' "$i"
+      echo "    User deploy"
+      echo "    Port 22"
+      echo ""
+    done
+  } >"$HOME/.ssh/config.d/extra"
+}
+
 # Source fssh helpers without running the interactive main path.
 run_fssh_fn() {
   FSSH_NO_MAIN=1 /bin/bash -c '
@@ -219,6 +250,56 @@ test_session_menu_order_without_sessions() {
   pass "fssh session menu order without sessions ($DEVTOOLS_TEST_PROFILE)"
 }
 
+# Interactive fssh calls list_hosts before fzf; keep that path snappy.
+# Hermetic PATH links a real tr; temporarily wrap it with latency so per-line
+# `tr` usage (the previous Include-parser regression) exceeds the budget even
+# on fast CI hosts, while a fork-free parser stays well under 1.5s.
+test_list_hosts_perf_budget_50_hosts() {
+  write_hosts_config_perf50
+  local out out_file count elapsed_s elapsed_ms real_tr
+  local budget_ms=1500
+  out_file="$(mktemp "${TMPDIR:-/tmp}/fssh-perf.XXXXXX")"
+  real_tr="$(readlink "$FAKE_BIN/tr" 2>/dev/null || true)"
+  [[ -n "$real_tr" && -x "$real_tr" ]] || {
+    echo "FAIL: expected FAKE_BIN/tr symlink to a real tr" >&2
+    return 1
+  }
+
+  # Replace the symlink (do not write through it — that would target the real binary).
+  rm -f "$FAKE_BIN/tr"
+  cat >"$FAKE_BIN/tr" <<EOF
+#!/usr/bin/env bash
+# 10ms penalty per invocation — ~200 config lines ⇒ ~2s if called per line.
+sleep 0.01
+exec '$real_tr' "\$@"
+EOF
+  chmod +x "$FAKE_BIN/tr"
+
+  # Bash TIMEFORMAT reports fractional seconds portably (incl. Bash 3.2).
+  local list_rc=0
+  elapsed_s="$(
+    TIMEFORMAT='%R'
+    { time run_fssh_fn list_hosts >"$out_file"; } 2>&1
+  )" || list_rc=$?
+  out="$(cat "$out_file" 2>/dev/null || true)"
+  rm -f "$out_file"
+  ln -sf "$real_tr" "$FAKE_BIN/tr"
+  [[ "$list_rc" -eq 0 ]] || return "$list_rc"
+  elapsed_ms="$(awk -v e="$elapsed_s" 'BEGIN { printf "%d", (e * 1000) + 0.5 }')"
+
+  count="$(printf '%s\n' "$out" | grep -c . || true)"
+  assert_eq "$count" "50" "perf fixture yields 50 concrete hosts"
+  assert_contains "$out" "host-01" "perf fixture includes first host"
+  assert_contains "$out" "host-50" "perf fixture includes included host"
+  assert_not_contains "$out" "jump-*" "perf fixture still excludes wildcards"
+
+  if [[ "$elapsed_ms" -gt "$budget_ms" ]]; then
+    echo "FAIL: list_hosts took ${elapsed_ms}ms (budget ${budget_ms}ms) for ~50 hosts" >&2
+    return 1
+  fi
+  pass "fssh list_hosts perf <=${budget_ms}ms for ~50 hosts (${elapsed_ms}ms, $DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_help
 test_fssh_help_mentions_query
 test_list_hosts_follows_include
@@ -234,5 +315,6 @@ test_resolve_host_none
 test_resolve_host_multiple_uses_fzf
 test_session_menu_order_with_sessions
 test_session_menu_order_without_sessions
+test_list_hosts_perf_budget_50_hosts
 
 echo "PASS: ssh suite complete ($DEVTOOLS_TEST_PROFILE)"

@@ -116,7 +116,7 @@ _fssh_abs_path() {
 # Recursively emit Host alias tokens from a config file and its Include targets.
 _fssh_collect_hosts_from_file() {
     local file="$1"
-    local abs line key
+    local abs line
     local -a words
     [[ -f "$file" && -r "$file" ]] || return 0
 
@@ -139,9 +139,10 @@ _fssh_collect_hosts_from_file() {
         read -r -a words <<< "$line"
         [[ ${#words[@]} -ge 2 ]] || continue
 
-        key=$(printf '%s' "${words[0]}" | tr '[:upper:]' '[:lower:]')
-        case "$key" in
-            include)
+        # Match keywords with case patterns — do not fork tr/awk per line
+        # (OpenSSH keywords are case-insensitive; per-line tr previously cost seconds).
+        case "${words[0]}" in
+            [Ii][Nn][Cc][Ll][Uu][Dd][Ee])
                 local i inc
                 for ((i = 1; i < ${#words[@]}; i++)); do
                     while IFS= read -r inc || [[ -n "$inc" ]]; do
@@ -150,7 +151,7 @@ _fssh_collect_hosts_from_file() {
                     done < <(_fssh_expand_include_pattern "${words[i]}")
                 done
                 ;;
-            host)
+            [Hh][Oo][Ss][Tt])
                 local i
                 for ((i = 1; i < ${#words[@]}; i++)); do
                     printf '%s\n' "${words[i]}"

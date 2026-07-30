@@ -25,6 +25,12 @@ fssh prod -n      # 解析后 plain SSH（跳过 tmux）
 
 ## Issues
 
+### 2026-07-30 — Include 解析对每行 fork `tr`，list_hosts 变慢数秒
+
+跟随 Include 后，`list_hosts` 对配置每一行 `printf | tr` 做关键字小写化；约 250
+行时外部进程开销可达数秒，拖慢交互选主路径。现改为 Bash case 模式匹配
+`Host`/`Include`（零 fork），并用 ~50 Host + 延迟 `tr` 夹具做 ≤1.5s 回归。
+
 ### 2026-07-30 — fssh 未跟随 Include，漏掉分文件里的 Host
 
 `list_hosts` 原先只 grep 主配置 `~/.ssh/config`，`Include config.d/work` 等文件中的 Host 不会出现在 fzf / 查询匹配里。现已递归展开 Include（相对路径、`~`、glob），并继续排除带 `*?` 的通配别名。
