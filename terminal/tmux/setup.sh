@@ -73,7 +73,7 @@ tmux Setup Script - 一键安装并配置 tmux ${TMUX_VERSION}
 复制模式（Vi 风格）:
   Ctrl+Space [    进入复制模式
   v              开始选择
-  y              复制到系统剪贴板（macOS pbcopy）
+  y              复制到系统剪贴板（macOS: pbcopy；Linux: OSC52）
   Ctrl+v         切换矩形选择
 
 插件:

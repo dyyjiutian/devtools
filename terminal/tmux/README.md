@@ -13,6 +13,8 @@ bash terminal/tmux/setup.sh --upgrade --install-bin-only
 
 Linux 可能从源码构建；macOS 使用 Homebrew。配置以复制方式写入 `~/.tmux.conf`（覆盖前备份已有普通文件）。
 
+复制模式 `y`：macOS 走 `pbcopy`；Linux 启用 `set-clipboard on`（OSC52），便于 SSH 远端复制到本机剪贴板。
+
 默认（不带 `--upgrade`）：脚本只检测当前 tmux 版本是否已满足目标版本（`TMUX_VERSION`，默认
 3.7b）。已满足则跳过安装/编译直接部署配置；缺失或过旧则仅警告并提示使用 `--upgrade`，不会
 强制重新编译或移除现有 tmux，仍会继续部署 `~/.tmux.conf` 与 TPM 插件。

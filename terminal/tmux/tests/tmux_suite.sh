@@ -173,8 +173,19 @@ test_deploy_config() {
   pass "tmux deploy_config backup+copy ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_clipboard_bindings() {
+  local conf
+  conf="$(cat "$TMUX_CONF")"
+  assert_contains "$conf" 'uname | grep -qi Darwin' "clipboard binding is OS-conditional"
+  assert_contains "$conf" 'copy-pipe-and-cancel "pbcopy"' "macOS path uses pbcopy"
+  assert_contains "$conf" 'set -s set-clipboard on' "Linux path enables OSC52"
+  assert_contains "$conf" 'copy-selection-and-cancel' "Linux path uses copy-selection"
+  pass "tmux.conf clipboard OS split ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_unknown_flag
+test_clipboard_bindings
 test_dry_run_default_no_upgrade
 test_dry_run_upgrade_branch
 test_no_upgrade_old_tmux_skips_rebuild

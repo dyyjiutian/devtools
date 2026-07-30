@@ -60,6 +60,11 @@ Plug 'jiangmiao/auto-pairs'
 " Comment toggle
 Plug 'tpope/vim-commentary'
 
+" OSC52 clipboard for Linux (SSH remote → local clipboard)
+if has('unix') && !has('macunix')
+  Plug 'ojroques/vim-oscyank', {'branch': 'main'}
+endif
+
 call plug#end()
 
 " ============================================================
@@ -207,9 +212,16 @@ nnoremap <Leader>w :w<CR>
 nnoremap <Leader>q :q<CR>
 
 " System clipboard (y/p 仍只用 vim 寄存器；,y/,P 走系统剪贴板)
-vnoremap <Leader>y "+y
-nnoremap <Leader>y "+y
-nnoremap <Leader>Y "+yg_
+" Linux/SSH: OSC52 via vim-oscyank；macOS: "+ 寄存器
+if has('unix') && !has('macunix')
+  nmap <Leader>y <Plug>OSCYankOperator
+  nmap <Leader>Y <Leader>y$
+  vmap <Leader>y <Plug>OSCYankVisual
+else
+  vnoremap <Leader>y "+y
+  nnoremap <Leader>y "+y
+  nnoremap <Leader>Y "+yg_
+endif
 vnoremap <Leader>P "+p
 nnoremap <Leader>P "+p
 

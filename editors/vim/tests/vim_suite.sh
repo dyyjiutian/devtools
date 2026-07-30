@@ -37,6 +37,15 @@ test_help() {
   pass "vim setup --help ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_vimrc_oscyank_linux_only() {
+  local vimrc
+  vimrc="$(cat "$MODULE_ROOT/vimrc")"
+  assert_contains "$vimrc" "ojroques/vim-oscyank" "declares vim-oscyank"
+  assert_contains "$vimrc" "has('unix') && !has('macunix')" "oscyank gated to Linux"
+  assert_contains "$vimrc" "OSCYankOperator" "maps OSCYank operator"
+  pass "vimrc oscyank Linux-only ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_unknown_flag() {
   local rc=0
   bash "$SETUP_SH" --not-a-real-flag >/dev/null 2>&1 || rc=$?
@@ -118,6 +127,7 @@ test_skip_coc_without_upgrade() {
 }
 
 test_help
+test_vimrc_oscyank_linux_only
 test_unknown_flag
 test_resolve_targets
 test_dry_run_upgrade_old_vim

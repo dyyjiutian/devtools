@@ -40,6 +40,7 @@
 | [vim-polyglot](https://github.com/sheerun/vim-polyglot) | 多语言语法高亮 |
 | [auto-pairs](https://github.com/jiangmiao/auto-pairs) | 括号自动配对 |
 | [vim-commentary](https://github.com/tpope/vim-commentary) | 快捷注释 |
+| [vim-oscyank](https://github.com/ojroques/vim-oscyank)（仅 Linux） | OSC52 远程剪贴板（SSH 下 `,y` 复制到本机） |
 
 ## 快捷键
 
@@ -90,6 +91,8 @@ Leader 键为 `,`（逗号）。
 | `,w` | 保存 |
 | `,q` | 退出 |
 | `,Space` | 清除搜索高亮 |
+| `,y` | 复制到系统剪贴板（Linux: OSC52；macOS: `"+`） |
+| `,P` | 从系统剪贴板粘贴 |
 
 ## 插件管理
 
