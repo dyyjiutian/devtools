@@ -6,7 +6,7 @@
 
 官方 Superpowers 插件保留，仅在用户明确要求时使用。
 
-命名：总入口为 `dev-loop`（开发闭环 / 快速迭代）；子步骤为 ask → design → workspace → execute → simply → verify。
+命名：总入口为 `dev-loop`（开发闭环 / 快速迭代）；子步骤为 ask → design → workspace → execute → simply → verify → submit。
 
 ## 决策摘要
 
@@ -15,8 +15,8 @@
 | 落地方式 | Router + 薄包装 skill（方案 1） |
 | 总入口名 | `dev-loop`（原 dev-pipeline） |
 | 模式选择 | Agent 按复杂度自动选；用户可随时覆盖 |
-| 完整模式 | ask → design → workspace → execute → simply → verify |
-| 简单模式 | ask(轻量) → workspace → execute → verify（无长 design、无 simply） |
+| 完整模式 | ask → design → workspace → execute → simply → verify → submit |
+| 简单模式 | ask(轻量) → workspace → execute → verify → submit（无长 design、无 simply） |
 | Workspace | full：`.worktrees/<topic>`；simple：在主干则建临时分支；默认不在主干实现 |
 | Workspace 后 | 新建隔离后 rebase `origin/main`；结构漂移大则退回 ask |
 | Worktree 使用方式 | 留在当前 Cursor 窗口；读写强制 worktree 绝对路径（方案 A） |
@@ -39,6 +39,7 @@
 | `dev-execute` | 按已确认意图/design 实现；完整模式且多步任务时可先写短 plan |
 | `dev-simply` | 仅完整模式、execute 之后：精简过度设计 |
 | `dev-verify` | 验证门禁（两种模式共用；含 UT / 场景 / dry-run 等） |
+| `dev-submit` | verify 后可选收尾：询问是否提交；确认 local/remote 后委托 `git-submit` |
 
 可选：`agents/cookbook/rules/prefer-dev-loop.mdc`，声明开发任务优先 `dev-loop`。
 
@@ -139,6 +140,14 @@ ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认
 
 完成前遵守 verification-before-completion 精神：有证据再宣称通过；缺工具则如实说明未跑。
 
+## 提交收尾（`dev-submit`）
+
+验证通过后进入可选收尾（两种模式共用）：
+
+- 默认不主动 commit / push；本轮已明确「做完自己提交」可跳过「是否提交」一问，但仍须确认范围
+- 范围：`local`（仅本地 commit）或 `remote`（commit → rebase 主干 → 开 PR/MR）
+- 细节委托 `git-submit`；rebase 冲突仅自动处理明显可判项，拿不准则人工确认
+
 ## 与官方 Superpowers 的关系
 
 | 场景 | 行为 |
@@ -184,3 +193,9 @@ ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认
 - **表象：** `dev-pipeline` / brainstorm / spec / exec / test 偏重流程与单测用语。
 - **根因：** 初版沿用 Superpowers 词汇。
 - **解法：** 总入口改为 `dev-loop`；子 skill 改为 ask / design / execute / verify（workspace、simply 保留）。
+
+### 2026-07-30 — 验证通过后缺少提交收尾
+
+- **表象：** `dev-verify` 结束后闭环停止，不会询问整理 commit / 开 PR；也易与「主动自动提交」混淆。
+- **根因：** 初版未定义 submit 步骤；提交能力只在独立 `git-submit`。
+- **解法：** 增加 `dev-submit`（verify 之后）；默认先问；确认 `local`/`remote` 后委托 `git-submit`；rebase 冲突仅安全自动解决。

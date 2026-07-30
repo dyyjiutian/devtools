@@ -18,9 +18,12 @@ description: >-
 
 未明确要求提交时，不要主动 commit 或 push。
 
+由 `dev-submit` 调用时：按其确认的 Scope 裁剪——`local` 只做到 Commit；`remote` 走完整流程（含 rebase 与 review）。
+
 ## Workflow
 
 严格按顺序执行；任一步失败则停止并说明原因，不要跳过 rebase 直接 review。
+`local` scope：完成第 3 步后结束，不要执行第 4–5 步。
 
 ### 1. Inspect
 
@@ -131,7 +134,12 @@ git fetch origin
 git rebase "origin/$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo main)"
 ```
 
-有冲突：解决 → 相关测试/校验 → `git rebase --continue`。不要 `rebase --skip` 除非用户同意。用户未授权时不要 `--force` 推送。
+有冲突时：
+
+- **可自动解决：** 仅我方改动、纯格式/空白、明显可机械合并且语义清晰
+- **必须停下人工确认：** 双方改了同逻辑、删改意图不清、测试含义变化、或任何拿不准的情况
+
+自动或人工解决后：相关测试/校验 → `git rebase --continue`。不要 `rebase --skip` 除非用户同意。用户未授权时不要 `--force` 推送。
 
 ### 5. Open merge request / review
 

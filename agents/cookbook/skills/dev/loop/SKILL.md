@@ -4,7 +4,7 @@ description: >-
   Use when starting development work, implementing features, fixing bugs,
   or choosing a delivery workflow. Prefer this over official Superpowers
   as the default entry. Triggers: 开发, 实现, 修 bug, 加功能, 简单流程,
-  完整流程, dev-loop, ask, design, execute, verify, TDD, worktree.
+  完整流程, dev-loop, ask, design, execute, verify, submit, TDD, worktree.
   Do not use only when the user explicitly asks for official Superpowers.
 ---
 
@@ -31,11 +31,13 @@ description: >-
 ## Loops
 
 **full:** 依次 Read 并遵循
-`dev-ask` → `dev-design` → `dev-workspace` → `dev-execute` → `dev-simply` → `dev-verify`
+`dev-ask` → `dev-design` → `dev-workspace` → `dev-execute` → `dev-simply` → `dev-verify` → `dev-submit`
 
 **simple:** 依次 Read 并遵循
-`dev-ask`（传入 simple）→ `dev-workspace` → `dev-execute` → `dev-verify`
+`dev-ask`（传入 simple）→ `dev-workspace` → `dev-execute` → `dev-verify` → `dev-submit`
 无长 design 文档、无 simply；ask 仍必须澄清意图与需求。
+
+`dev-submit`：验证通过后询问是否整理 commit；默认不自动提交（除非本轮已授权）；先确认 `local`（仅本地 commit）或 `remote`（rebase + 开 PR/MR），细节委托 `git-submit`。
 
 `dev-workspace` 负责：完整模式建 `.worktrees/`；简单模式在主干时建临时分支；新建隔离后 rebase 主干；结构漂移大则退回 `dev-ask`。
 

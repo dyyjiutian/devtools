@@ -38,3 +38,8 @@ bash agents/cookbook/tests/skills_structure_test.sh
 - 相关测试/检查已执行并记录结果
 - 失败已修复或已向用户说明阻塞
 - 未宣称“全部通过”若实际跳过了关键检查
+
+## After verify
+
+验证通过（或已向用户说明可接受的未跑项且对方认可）后，进入 `dev-submit`：
+询问是否整理 commit / 开 PR（默认不自动提交），再按范围委托 `git-submit`。

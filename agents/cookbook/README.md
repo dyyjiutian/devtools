@@ -81,12 +81,14 @@ cd agents/cookbook
 | `dev-execute` | 按已确认意图/design 实现；每次改文件前 Preflight 检测未知脏改动 |
 | `dev-simply` | 完整模式、execute 之后：按 Clean Architecture 精简过度设计 |
 | `dev-verify` | 验证门禁：行为/逻辑走 TDD；配置/文档/幂等脚本走实现后验证 |
+| `dev-submit` | verify 通过后可选收尾：询问是否提交；确认 local/remote 后委托 `git-submit` |
 
 ### Dev Loop 模式
 
-- **完整：** ask → design → workspace → execute → simply → verify
-- **简单：** ask → workspace → execute → verify（无长 design、无 simply）
+- **完整：** ask → design → workspace → execute → simply → verify → submit
+- **简单：** ask → workspace → execute → verify → submit（无长 design、无 simply）
 - **隔离：** 默认不在主干实现；full 建 `.worktrees/<topic>`（当前窗口 + 绝对路径）；新建隔离后 rebase，结构漂移大则退回 ask
+- **提交：** 默认先问再提交（本轮已授权「做完自己提交」可跳过是否提交）；先确认仅本地 commit 或 rebase + 开 PR/MR
 - **覆盖口令：** `用完整流程` / `用简单流程` / `跳过 simply` / `跳过 worktree` / `就在当前分支做` / `用官方 superpowers`
 
 设计见 `docs/superpowers/specs/2026-07-30-dev-pipeline-design.md`（文档文件名历史保留；内容已对齐 `dev-loop`）。

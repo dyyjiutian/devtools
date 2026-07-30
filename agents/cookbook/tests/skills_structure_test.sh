@@ -38,6 +38,7 @@ REQUIRED_DEV_SKILLS=(
   "dev/execute/SKILL.md"
   "dev/simply/SKILL.md"
   "dev/verify/SKILL.md"
+  "dev/submit/SKILL.md"
 )
 
 for rel in "${REQUIRED_DEV_SKILLS[@]}"; do
@@ -61,6 +62,7 @@ for rel in "${REQUIRED_DEV_SKILLS[@]}"; do
     */execute/*) assert_heading "$f" "Preflight"; assert_heading "$f" "Process"; assert_heading "$f" "When to stop" ;;
     */simply/*) assert_heading "$f" "Default actions"; assert_heading "$f" "Ask first" ;;
     */verify/*) assert_heading "$f" "Strategy"; assert_heading "$f" "Evidence" ;;
+    */submit/*) assert_heading "$f" "Gate"; assert_heading "$f" "Scope"; assert_heading "$f" "Handoff" ;;
   esac
 done
 
