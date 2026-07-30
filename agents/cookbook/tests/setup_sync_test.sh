@@ -78,6 +78,13 @@ else
   fail_msg "help should mention codex target"
 fi
 
+# macOS bash 3.2 + set -u：紧贴全角 ）的未花括号 $VAR 会把 UTF-8 字节算进变量名
+if grep -nE '\$[A-Za-z_][A-Za-z0-9_]*）' "$SETUP"; then
+  fail_msg "unbraced \$VAR before fullwidth ） breaks macOS bash 3.2 + set -u (use \${VAR})"
+else
+  pass "no unbraced \$VAR before fullwidth ）"
+fi
+
 # 未知 target 应失败
 if bash "$SETUP" sync --target nope >"$TMP_DIR/bad.out" 2>&1; then
   fail_msg "unknown --target should fail"

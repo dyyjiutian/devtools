@@ -9,8 +9,8 @@ devtools/
 ├── os/
 │   ├── macos/                    # macOS 初始化、电源、通知、远程桌面
 │   └── linux/                    # Ubuntu/Debian/CentOS/RHEL 初始化
-├── languages/                    # Python / Go / Java / Rust 运行时
-├── shell/                        # Bash / Zsh / Oh My Zsh / Starship
+├── languages/                    # Python / Go / Java / Rust 运行时；bash/ 为脚本语言笔记
+├── shell/                        # 交互用 Bash / Zsh / Oh My Zsh / Starship
 ├── terminal/
 │   ├── ghostty/                  # Ghostty terminal
 │   ├── iterm2/                   # iTerm2 config and SSH login scripts

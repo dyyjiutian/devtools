@@ -13,8 +13,8 @@ os/
 ├── macos/                  # macOS initialization, power, notifications, remote desktop
 └── linux/                  # Ubuntu/Debian/CentOS/RHEL initialization
 
-languages/                       # Python / Go / Java / Rust runtimes
-shell/                      # Bash / Zsh / Oh My Zsh / Starship
+languages/                  # Python / Go / Java / Rust runtimes; bash/ = Bash language notes
+shell/                      # Interactive Bash / Zsh / Oh My Zsh / Starship (not script-language docs)
 terminal/                   # Ghostty / iTerm2 / tmux / Yazi
 editors/                    # Neovim / Vim / Cursor / VS Code
 network/                    # FRP / proxy / VPN infrastructure
@@ -26,7 +26,7 @@ tests/                      # Shell regression tests
 
 ## OS Initialization Scripts
 
-Both scripts follow the same architecture: bash 3.2+ compatible, color-coded output functions (`info()`, `success()`, `warn()`, `error()`, `step()`), system info detection, confirmation prompts, skip flags, and post-install notes.
+Both scripts follow the same architecture: bash 3.2+ compatible, color-coded output functions (`info()`, `success()`, `warn()`, `error()`, `step()`), system info detection, confirmation prompts, skip flags, and post-install notes. Bash script-language baseline, pitfalls, patterns, and testing notes live under `languages/bash/` (interactive shell config remains in `shell/`).
 
 **macOS** (`os/macos/setup.sh` + `packages.list`):
 ```bash
@@ -110,12 +110,15 @@ Provides only `gitroot` (cd to repo root); it stays an alias because `cd` must r
 
 ## Common Patterns
 
-All setup scripts:
-- Use `set -euo pipefail` for strict error handling
+All `.sh` scripts in this repository:
+- **Must** start with `set -euo pipefail` (after shebang / file header) for strict error handling
+- Target macOS Bash 3.2+; prefer `${VAR}` when a parameter expansion is adjacent to multibyte characters (see `languages/bash/pitfalls.md`)
 - Include `--help` flag with usage information
 - Create backups before modifying existing files
 - Support `--dry-run` or similar preview modes where applicable
 - Output color-coded status messages
+
+Language notes for writing Bash (pitfalls, compatibility, patterns, testing): `languages/bash/`.
 
 ## Repository Conventions
 
@@ -135,7 +138,10 @@ have their own entry points and are not necessarily included by
 
 For new or changed shell functionality:
 
-- Keep scripts Bash-compatible and safe to rerun. Configuration changes must
+- Follow `AGENTS.md` Shell conventions and `languages/bash/` (especially
+  `compatibility.md` and `pitfalls.md`). Every `.sh` file must use
+  `set -euo pipefail`.
+- Keep scripts Bash 3.2-compatible and safe to rerun. Configuration changes must
   be idempotent and use markers, backups, or an equivalent managed update
   strategy; repeated runs must not duplicate or damage correct state.
 - Prefer existing interfaces and markers over global state or copied logic.

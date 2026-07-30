@@ -23,8 +23,8 @@
 |---|---|---|
 | `setup.sh` | 根入口：交互式、全量或按模块编排初始化 | 新增模块时同步更新帮助、菜单、模块分派与 dry-run 行为 |
 | `os/` | macOS、Ubuntu/Debian、CentOS/RHEL 的系统初始化 | 分「基础配置」与 `packages*.list` 驱动安装；共享解析在 `os/lib/` |
-| `languages/` | Python、Go、Java、Rust 等语言运行时 | 保持各语言安装器独立，不把语言特有逻辑塞进根入口 |
-| `shell/` | Bash、Zsh、Oh My Zsh、Starship 等 Shell 配置 | 注意 shell 启动文件的幂等修改 |
+| `languages/` | Python / Go / Java / Rust 运行时安装；`languages/bash/` 为 Bash 脚本语言笔记 | 安装器保持独立；Bash 编写约定细节见 `languages/bash/`，勿与 `shell/` 混淆 |
+| `shell/` | Bash、Zsh、Oh My Zsh、Starship 等 **交互** Shell 配置 | 注意 shell 启动文件的幂等修改；脚本语言约束不放这里 |
 | `terminal/` | Ghostty、iTerm2、tmux、Yazi 等终端工具 | 配置文件与安装脚本分离 |
 | `editors/` | Neovim、Vim、Cursor、VS Code 等编辑器 | 修改配置格式时同步检查对应 README |
 | `network/` | FRP、代理、VPN 等网络与基础设施脚本 | 网络、服务、防火墙和远程节点操作必须显式说明风险 |
@@ -57,14 +57,14 @@
 
 ### Shell 脚本约定
 
-除非目标脚本已有明确例外，遵循仓库现有模式：
+除非目标脚本已有明确例外，遵循仓库现有模式。细节与陷阱见 [`languages/bash/`](languages/bash/)（[`compatibility.md`](languages/bash/compatibility.md)、[`pitfalls.md`](languages/bash/pitfalls.md)、[`patterns.md`](languages/bash/patterns.md)、[`testing.md`](languages/bash/testing.md)）。
 
-- 使用 `set -euo pipefail`，正确引用变量并处理空值、失败状态和临时文件。
+- **所有本仓 `.sh` 脚本必须**在 shebang 与文件头注释之后启用 `set -euo pipefail`（不得省略）；并正确引用变量、处理空值、失败状态和临时文件。
 - 提供 `--help`；有副作用的脚本尽量提供 `--dry-run`、`--info-only` 或等价的预览模式。
 - **`setup.sh`（及同类安装/配置脚本）必须可重入（幂等）**：重复执行不得重复追加配置、破坏已有正确状态或留下半成品；写入 shell rc、服务配置和编辑器配置前使用 marker / BEGIN-END 托管块、备份或等价幂等更新。
 - 修改或新增上述安装逻辑时，**必须补充配套 Bazel 测试**（优先 OS-profile × module 矩阵，见 `tests/common/`、`tests/README.md`、`BAZEL.md`），并在模块适用的 **`macos`**、**`linux_ubuntu`**、**`linux_alinux3`**、**`linux_alinux4`** profile 上通过（例如 `bazel test //path/to/module:...`）。当前兼容基线只覆盖 x86_64。
 - 破坏性操作、系统服务、代理/VPN、iptables、防火墙和远程节点操作必须明确权限、目标和回滚方式。
-- 保持现有 Bash 兼容性；不要无必要地引入仅新版本 Bash 支持的语法。
+- **兼容基线为 macOS Bash 3.2+**：不要无必要地引入仅 Bash 4+ 支持的语法；注意 `set -u` 下空数组展开、以及 `$VAR` 紧贴多字节字符等坑（见 `languages/bash/pitfalls.md`）。多字节邻接处使用 `${VAR}`。
 - 下载外部脚本或二进制时优先使用 `cache/` 中已有资产；变更下载源、版本、校验和或架构时补充测试。
 - 不提交 API Key、密码、UUID、私钥、个人机器路径或临时生成的配置。
 - 命令和帮助文本使用简洁、易懂、接近业界惯用表达的名称；选项命名保持一致，例如 `--help`、`--dry-run`、`--skip-*`。
@@ -166,7 +166,7 @@ gh pr create --fill --base main
 
 - [ ] 变更只涉及任务范围，且没有覆盖用户已有改动。
 - [ ] 新增行为遵循清晰边界，根入口没有承载不属于它的具体实现细节。
-- [ ] 相关脚本有 `--help`，有副作用时有安全预览或明确限制；`setup.sh` 类逻辑可重入（幂等）。
+- [ ] 相关脚本有 `--help`，有副作用时有安全预览或明确限制；**所有 `.sh` 含 `set -euo pipefail`**；`setup.sh` 类逻辑可重入（幂等）。
 - [ ] 安装/配置逻辑变更已补充 Bazel 测试，并在适用的 `macos` / `linux_ubuntu` / `linux_alinux3` / `linux_alinux4` profile 上通过（或已说明未跑原因）。
 - [ ] Shell 语法、相关回归测试和可用的 Bazel/Bats 检查已执行。
 - [ ] 文档、缓存版本、测试和脚本行为保持一致；修复已有模块 issue 时已在对应 README 的 Issues 中记录。

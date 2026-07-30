@@ -115,7 +115,7 @@ _sync_rules_for_cursor() {
         count=$((count + 1))
     done < <(_list_rules)
     if [[ "$count" -eq 0 ]]; then
-        info "未找到任何 rules（*.mdc 在 $RULES_SRC）"
+        info "未找到任何 rules（*.mdc 在 ${RULES_SRC}）"
     fi
 }
 
@@ -246,7 +246,7 @@ cmd_sync() {
     done < <(_list_skills)
 
     if [[ "$count" -eq 0 ]]; then
-        warn "未找到任何 SKILL.md（在 $SKILLS_SRC）"
+        warn "未找到任何 SKILL.md（在 ${SKILLS_SRC}）"
     else
         success "skills 完成（处理 $count 项）"
     fi
@@ -258,7 +258,7 @@ cmd_sync() {
             _sync_rules_for_cursor
             ;;
         claude|codex)
-            info "跳过 rules 同步（--target $TARGET）"
+            info "跳过 rules 同步（--target ${TARGET}）"
             ;;
     esac
 }
@@ -280,7 +280,7 @@ cmd_unlink() {
             _unlink_rules_for_cursor
             ;;
         claude|codex)
-            info "跳过 rules unlink（--target $TARGET）"
+            info "跳过 rules unlink（--target ${TARGET}）"
             ;;
     esac
 }
