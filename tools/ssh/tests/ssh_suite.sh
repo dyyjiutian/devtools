@@ -250,6 +250,51 @@ test_session_menu_order_without_sessions() {
   pass "fssh session menu order without sessions ($DEVTOOLS_TEST_PROFILE)"
 }
 
+# bash -lc may print nvm/npmrc warnings on stderr; they must not become fzf rows.
+test_list_remote_sessions_ignores_stderr_noise() {
+  local out
+  out="$(
+    FSSH_NO_MAIN=1 /bin/bash -c '
+      set -euo pipefail
+      # shellcheck disable=SC1090
+      source "$1"
+      remote_tmux() {
+        printf "%s\n" "nvm is not compatible with the npm config \"prefix\" option: currently set to \"/home/x/.npm-global\"" >&2
+        printf "%s\n" "Run '\''nvm use --delete-prefix'\'' to unset it." >&2
+        printf "%s\n" "main"
+        printf "%s\n" "work"
+        return 0
+      }
+      list_remote_sessions some-host
+    ' _ "$FSSH_SH"
+  )"
+  assert_eq "$out" $'main\nwork' "session list uses tmux stdout only"
+  assert_not_contains "$out" "nvm" "nvm stderr is not treated as a session"
+  pass "fssh list_remote_sessions ignores stderr noise ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_list_remote_sessions_failure_warns_from_stderr() {
+  local out err
+  err="$(mktemp "${TMPDIR:-/tmp}/fssh-sess-err.XXXXXX")"
+  out="$(
+    FSSH_NO_MAIN=1 /bin/bash -c '
+      set -euo pipefail
+      # shellcheck disable=SC1090
+      source "$1"
+      remote_tmux() {
+        printf "%s\n" "tmux: command not found" >&2
+        return 1
+      }
+      list_remote_sessions some-host
+    ' _ "$FSSH_SH" 2>"$err"
+  )" || true
+  assert_eq "$out" "" "failed list yields no session stdout"
+  assert_contains "$(cat "$err")" "tmux: command not found" "warn includes remote stderr"
+  assert_not_contains "$out" "tmux: command not found" "stderr is not session stdout"
+  rm -f "$err"
+  pass "fssh list_remote_sessions failure uses stderr ($DEVTOOLS_TEST_PROFILE)"
+}
+
 # Interactive fssh calls list_hosts before fzf; keep that path snappy.
 # Hermetic PATH links a real tr; temporarily wrap it with latency so per-line
 # `tr` usage (the previous Include-parser regression) exceeds the budget even
@@ -315,6 +360,8 @@ test_resolve_host_none
 test_resolve_host_multiple_uses_fzf
 test_session_menu_order_with_sessions
 test_session_menu_order_without_sessions
+test_list_remote_sessions_ignores_stderr_noise
+test_list_remote_sessions_failure_warns_from_stderr
 test_list_hosts_perf_budget_50_hosts
 
 echo "PASS: ssh suite complete ($DEVTOOLS_TEST_PROFILE)"

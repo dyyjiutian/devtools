@@ -25,6 +25,13 @@ fssh prod -n      # 解析后 plain SSH（跳过 tmux）
 
 ## Issues
 
+### 2026-07-30 — fssh session 列表混入 nvm/npmrc 警告
+
+远端通过 `bash -lc` 跑 `tmux list-sessions` 以补齐 PATH；登录式 Bash 会初始化
+nvm，而与 `~/.npmrc` prefix 冲突时警告写在 stderr。原先 `2>&1` 把警告并进
+stdout，fzf 菜单里出现 nvm 文案。现仅用 stdout 作为 session 名；失败时才把
+stderr 拼进 warning。
+
 ### 2026-07-30 — Include 解析对每行 fork `tr`，list_hosts 变慢数秒
 
 跟随 Include 后，`list_hosts` 对配置每一行 `printf | tr` 做关键字小写化；约 250

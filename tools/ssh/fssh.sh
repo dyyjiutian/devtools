@@ -311,10 +311,20 @@ remote_tmux() {
 # ── Remote tmux session lister ────────────────────────────────────────────────
 list_remote_sessions() {
     local host="$1"
-    local sessions failure_detail
+    local sessions failure_detail stderr_file rc=0
 
-    if ! sessions=$(remote_tmux "$host" list-sessions -F '#{session_name}' 2>&1); then
-        failure_detail=$(printf '%s' "$sessions" | tr '\r\n' '  ')
+    # Keep stdout (session names) separate from stderr (login-shell noise such as
+    # nvm/npmrc warnings from bash -lc). Merging with 2>&1 polluted the fzf menu.
+    stderr_file=$(mktemp "${TMPDIR:-/tmp}/fssh-tmux-stderr.XXXXXX") || {
+        warn "无法创建临时文件以捕获远端 stderr"
+        return 0
+    }
+
+    sessions=$(remote_tmux "$host" list-sessions -F '#{session_name}' 2>"$stderr_file") || rc=$?
+
+    if [[ "$rc" -ne 0 ]]; then
+        failure_detail=$(tr '\r\n' '  ' <"$stderr_file")
+        rm -f "$stderr_file"
         if [[ -n "$failure_detail" ]]; then
             warn "无法列出 ${host} 上的远端 tmux session：${failure_detail}"
         else
@@ -323,6 +333,7 @@ list_remote_sessions() {
         return 0
     fi
 
+    rm -f "$stderr_file"
     printf '%s\n' "$sessions" | grep -v '^$' || true
 }
 
