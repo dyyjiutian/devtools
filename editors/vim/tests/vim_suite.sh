@@ -126,10 +126,35 @@ test_skip_coc_without_upgrade() {
   pass "vim skip coc without --upgrade ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_version_ge_leading_zeros() {
+  # Vim tags zero-pad patches (9.2.0782); --version reports unpadded (9.2.782).
+  # ((0782)) is invalid octal in bash — version_ge must force decimal.
+  local out rc
+  source_setup
+
+  rc=0
+  out="$(version_ge "9.2.782" "9.2.0782" 2>&1)" || rc=$?
+  assert_eq "$rc" "0" "version_ge should not fail on leading-zero patch"
+  assert_eq "$out" "ge" "9.2.782 >= 9.2.0782 (numeric)"
+
+  rc=0
+  out="$(version_ge "9.2.0782" "9.2.782" 2>&1)" || rc=$?
+  assert_eq "$rc" "0" "version_ge reverse should not fail"
+  assert_eq "$out" "ge" "9.2.0782 >= 9.2.782 (numeric)"
+
+  rc=0
+  out="$(version_ge "9.2.100" "9.2.0782" 2>&1)" || rc=$?
+  assert_eq "$rc" "0" "version_ge lt path should not fail"
+  assert_eq "$out" "lt" "9.2.100 < 9.2.0782"
+
+  pass "vim version_ge leading zeros ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_vimrc_oscyank_linux_only
 test_unknown_flag
 test_resolve_targets
+test_version_ge_leading_zeros
 test_dry_run_upgrade_old_vim
 test_skip_coc_without_upgrade
 

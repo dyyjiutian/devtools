@@ -482,6 +482,14 @@ version_ge() {
     set -- $b
     local b1="${1:-0}" b2="${2:-0}" b3="${3:-0}"
 
+    # Force base-10: Vim tags zero-pad patches (e.g. 9.2.0782); ((0782)) is invalid octal.
+    a1=$((10#$a1))
+    a2=$((10#$a2))
+    a3=$((10#$a3))
+    b1=$((10#$b1))
+    b2=$((10#$b2))
+    b3=$((10#$b3))
+
     if ((a1 > b1)); then echo "ge"; return; fi
     if ((a1 < b1)); then echo "lt"; return; fi
     if ((a2 > b2)); then echo "ge"; return; fi
