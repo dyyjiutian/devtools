@@ -99,9 +99,62 @@ test_install_plugins_all_idempotent() {
   pass "claude install-plugins idempotent ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_template_deny_excludes_root_glob() {
+  local settings="$MODULE_ROOT/config/settings.json"
+  assert_file_exists "$settings"
+  # Broad /* deny matches /tmp/... and permanently blocks cleanup after ask.
+  assert_not_contains "$(cat "$settings")" '"Bash(rm -rf /*)"' \
+    "template must not deny Bash(rm -rf /*)"
+  assert_not_contains "$(cat "$settings")" '"Bash(rm -fr /*)"' \
+    "template must not deny Bash(rm -fr /*)"
+  assert_contains "$(cat "$settings")" '"Bash(rm -rf /)"' \
+    "template still denies exact rm -rf /"
+  assert_contains "$(cat "$settings")" '"Bash(rm -rf *)"' \
+    "template still asks for general rm -rf"
+  pass "claude template deny excludes root glob ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_sync_strips_obsolete_root_glob_deny() {
+  mkdir -p "$HOME/.claude"
+  cat >"$HOME/.claude/settings.json" <<'EOF'
+{
+  "permissions": {
+    "allow": ["Bash"],
+    "ask": ["Bash(rm -rf *)"],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -fr /*)",
+      "Bash(/bin/rm -rf /*)",
+      "Bash(sudo rm -rf /*)",
+      "Bash(rm -rf /)"
+    ]
+  },
+  "customKeep": true
+}
+EOF
+  bash "$SETUP_SH" sync >/dev/null 2>&1
+  local cfg="$HOME/.claude/settings.json"
+  assert_file_exists "$cfg"
+  assert_not_contains "$(cat "$cfg")" '"Bash(rm -rf /*)"' \
+    "sync strips obsolete Bash(rm -rf /*)"
+  assert_not_contains "$(cat "$cfg")" '"Bash(rm -fr /*)"' \
+    "sync strips obsolete Bash(rm -fr /*)"
+  assert_not_contains "$(cat "$cfg")" '"Bash(/bin/rm -rf /*)"' \
+    "sync strips obsolete /bin/rm -rf /*"
+  assert_not_contains "$(cat "$cfg")" '"Bash(sudo rm -rf /*)"' \
+    "sync strips obsolete sudo rm -rf /*"
+  assert_contains "$(cat "$cfg")" '"Bash(rm -rf /)"' \
+    "sync keeps exact root deny"
+  assert_contains "$(cat "$cfg")" '"customKeep": true' \
+    "sync preserves unrelated user fields"
+  pass "claude sync strips obsolete root-glob deny ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_install_plugins_list
 test_install_plugins_single
 test_install_plugins_all_idempotent
+test_template_deny_excludes_root_glob
+test_sync_strips_obsolete_root_glob_deny
 
 echo "PASS: claude suite complete ($DEVTOOLS_TEST_PROFILE)"

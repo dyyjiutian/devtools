@@ -320,11 +320,21 @@ cmd_sync() {
             try { existing = JSON.parse(fs.readFileSync('$settings_file', 'utf8')); } catch(e) {}
         }
 
+        // Bash(rm -rf /*) matches /tmp/... and permanently blocks cleanup; strip on sync.
+        const obsoleteDeny = new Set([
+            'Bash(rm -rf /*)',
+            'Bash(rm -fr /*)',
+            'Bash(/bin/rm -rf /*)',
+            'Bash(/bin/rm -fr /*)',
+            'Bash(sudo rm -rf /*)',
+            'Bash(sudo rm -fr /*)',
+        ]);
         const mergePermissions = (tpl, ex) => {
             if (!tpl && !ex) return undefined;
             const t = tpl || {}, e = ex || {};
             const dedup = (a, b) => [...new Set([...(a||[]), ...(b||[])])];
-            return { ...t, ...e, allow: dedup(t.allow, e.allow), deny: dedup(t.deny, e.deny) };
+            const deny = dedup(t.deny, e.deny).filter((p) => !obsoleteDeny.has(p));
+            return { ...t, ...e, allow: dedup(t.allow, e.allow), deny };
         };
 
         const merged = {

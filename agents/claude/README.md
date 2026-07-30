@@ -133,6 +133,10 @@ cd os/macos/agent-notify
 
 ## Issues / FAQ
 
+### 2026-07-30 — `rm -rf /tmp/...` 确认后仍被 deny
+
+表象：用户同意删除 `/tmp` 下临时目录后，Claude 仍报 Permission denied。根因是 deny 中的 `Bash(rm -rf /*)`（及 `-fr` / `/bin/rm` / `sudo` 变体）把 `*` 通配成任意根下路径，连 `/tmp/...` 一并永久拒绝（deny 优先于 ask）。解法：模板去掉这些过宽规则，仅保留精确的 `rm -rf /`、`~`、`$HOME` 等；`sync` 会从本机 deny 列表剔除旧规则。普通 `rm -rf`（含 `/tmp`）继续走 ask。修复后执行 `./setup.sh sync`。
+
 ### 2026-07-30 — 长插件列表下可能重复安装
 
 表象：已安装全部插件后再次运行 `./setup.sh install-plugins`，偶尔仍会重复安装部分插件。根因是脚本在 `set -o pipefail` 下通过 `claude plugins list | grep -q` 判断插件是否存在；列表较长时 `grep -q` 提前退出，可能使前序命令收到 SIGPIPE，整个 pipeline 被误判为未匹配。现在会先完整读取插件列表再检查，并由长列表幂等回归测试覆盖。
