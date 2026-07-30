@@ -314,6 +314,31 @@ nvim --headless -c "Lazy! sync" -c "qa!"
 cd editors/nvim && ./setup.sh --restore
 ```
 
+### 2026-07-30 — mason-lspconfig 报错导致所有 LSP 都未注册（gr 无结果）
+
+**表象**：`gr`（`textDocument/references`）没有任何结果，`:LspInfo` 里没有 client attach。
+
+**根因**：`require("mason-lspconfig").setup{...}` 抛错后，`config` 函数整体中断，其中的 `handlers` 从未执行，
+`require("lspconfig")[server].setup(...)` 一次都没被调用，因此没有任何 server 注册、没有 client attach。
+`gr` 是在 `LspAttach` 里才绑定的，所以按键也表现为「未映射」。
+
+**解法**：`mason-lspconfig.setup` 用 `pcall` 包裹；失败时回退遍历 `servers`，对二进制已在 PATH 的 server
+直接调用 `lspconfig[...].setup()`，保证单个插件报错不会拖垮整套 LSP。
+
+### 2026-07-30 — Go / C 无 LSP，以及 bashls references 的两个限制
+
+**表象**：`.go`、`.c` 文件里 `gr` 毫无反应（`clients=[]`）。
+
+**根因**：`servers` 表里没有 `gopls`；`clangd` 虽在表内但不在自动安装名单，未安装就不会 attach。
+
+**解法**：`servers` 增加 `gopls`，并把 `gopls` / `clangd` 加入 `ensure_installed`。
+更重的 `jdtls` / `rust_analyzer` 仍按需在 `:Mason` 里手装。
+
+`bashls` 的 references 有两个已知限制（属上游行为，未做改动）：
+
+- 刚 attach 就请求会返回 `null`，需等其完成 background analysis（大仓库更明显）。
+- 它是纯文本同名匹配而非作用域感知，不同文件中的同名函数/变量也会被算作引用。
+
 ## References
 
 - [Neovim Documentation](https://neovim.io/doc/)

@@ -191,6 +191,26 @@ test_lsp_pins_for_nvim_010() {
   pass "nvim lsp pins for 0.10 ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_lsp_registers_servers_when_mason_fails() {
+  local lsp
+  lsp="$(cat "$MODULE_ROOT/lua/plugins/lsp.lua")"
+  assert_contains "$lsp" 'local ok, err = pcall(function()' "wraps mason-lspconfig setup in pcall"
+  assert_contains "$lsp" 'handlers = { setup_server }' "handler reuses setup_server"
+  assert_contains "$lsp" 'if not ok then' "falls back when mason-lspconfig errors"
+  assert_contains "$lsp" 'pcall(setup_server, server_name)' "registers servers directly on fallback"
+  assert_contains "$lsp" 'server_installed(server_name)' "fallback only registers installed servers"
+  pass "nvim lsp survives mason-lspconfig failure ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_lsp_covers_go_and_c() {
+  local lsp
+  lsp="$(cat "$MODULE_ROOT/lua/plugins/lsp.lua")"
+  assert_contains "$lsp" "gopls = {}" "declares gopls server config"
+  assert_contains "$lsp" '"gopls",' "auto-installs gopls"
+  assert_contains "$lsp" '"clangd",' "auto-installs clangd"
+  pass "nvim lsp covers Go and C/C++ ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_quotes_lazy_sync() {
   local setup
   setup="$(cat "$SETUP_SH")"
@@ -217,6 +237,8 @@ test_linux_prefers_nvim_cache
 test_linux_download_uses_pinned_url
 test_linux_skips_when_nvim_present
 test_lsp_pins_for_nvim_010
+test_lsp_registers_servers_when_mason_fails
+test_lsp_covers_go_and_c
 test_setup_quotes_lazy_sync
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"

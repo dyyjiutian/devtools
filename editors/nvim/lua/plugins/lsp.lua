@@ -62,6 +62,7 @@ return {
         },
       },
       pyright = {},
+      gopls = {},
       jdtls = {},
       bashls = {},
       jsonls = {},
@@ -78,11 +79,35 @@ return {
     local ensure_lsp = {
       "lua_ls",
       "pyright",
+      "gopls",
+      "clangd",
       "bashls",
       "jsonls",
       "yamlls",
       "ts_ls",
     }
+
+    local function setup_server(server_name)
+      local server = vim.deepcopy(servers[server_name] or {})
+      server.capabilities = vim.tbl_deep_extend("force", {}, capabilities, server.capabilities or {})
+      require("lspconfig")[server_name].setup(server)
+    end
+
+    -- Only register servers whose binary is on PATH (mason bin included).
+    local function server_installed(server_name)
+      local ok, config = pcall(function()
+        return require("lspconfig")[server_name]
+      end)
+      if not ok or not config then
+        return false
+      end
+      local default_config = (config.document_config or {}).default_config or {}
+      local cmd = default_config.cmd
+      if type(cmd) ~= "table" or not cmd[1] then
+        return false
+      end
+      return vim.fn.executable(cmd[1]) == 1
+    end
 
     require("mason").setup()
 
@@ -98,16 +123,26 @@ return {
       debounce_hours = 24,
     })
 
-    require("mason-lspconfig").setup({
-      ensure_installed = ensure_lsp,
-      automatic_installation = false,
-      handlers = {
-        function(server_name)
-          local server = servers[server_name] or {}
-          server.capabilities = vim.tbl_deep_extend("force", {}, capabilities, server.capabilities or {})
-          require("lspconfig")[server_name].setup(server)
-        end,
-      },
-    })
+    -- A mason-lspconfig error must not abort this config: without a fallback the
+    -- handlers never run, no server attaches, and gr/gd silently do nothing.
+    local ok, err = pcall(function()
+      require("mason-lspconfig").setup({
+        ensure_installed = ensure_lsp,
+        automatic_installation = false,
+        handlers = { setup_server },
+      })
+    end)
+
+    if not ok then
+      vim.notify(
+        "mason-lspconfig setup failed, registering installed servers directly: " .. tostring(err),
+        vim.log.levels.WARN
+      )
+      for server_name in pairs(servers) do
+        if server_installed(server_name) then
+          pcall(setup_server, server_name)
+        end
+      end
+    end
   end,
 }
