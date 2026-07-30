@@ -30,22 +30,78 @@ error()   { echo -e "\033[31m[ERROR]\033[0m $1"; }
 step()    { echo -e "\033[36m[STEP]\033[0m $1"; }
 
 DRY_RUN=false
+COMMAND=""
+SELECTED_PLUGINS=()
+PLUGIN_IDS=(blesh zoxide fzf starship)
+
+plugin_description() {
+    case "$1" in
+        blesh)    echo "命令历史自动建议 + 实时语法高亮" ;;
+        zoxide)   echo "智能目录跳转" ;;
+        fzf)      echo "模糊搜索" ;;
+        starship) echo "跨 shell 提示符" ;;
+        *) return 1 ;;
+    esac
+}
+
+normalize_plugin_id() {
+    case "$1" in
+        ble.sh|blesh) echo "blesh" ;;
+        zoxide|fzf|starship) echo "$1" ;;
+        *) return 1 ;;
+    esac
+}
+
+plugin_is_installed() {
+    case "$1" in
+        blesh)
+            if [[ "$OS" == "Darwin" ]]; then
+                local brew_prefix
+                brew_prefix="$(brew --prefix 2>/dev/null || true)"
+                [[ -n "$brew_prefix" && -f "${brew_prefix}/share/blesh/ble.sh" ]]
+            else
+                [[ -f "$HOME/.local/share/blesh/ble.sh" ]]
+            fi
+            ;;
+        zoxide)   command -v zoxide &>/dev/null ;;
+        fzf)      command -v fzf &>/dev/null ;;
+        starship) command -v starship &>/dev/null ;;
+        *) return 1 ;;
+    esac
+}
+
+cmd_list() {
+    local id desc status
+    for id in "${PLUGIN_IDS[@]}"; do
+        desc="$(plugin_description "$id")"
+        if plugin_is_installed "$id"; then
+            status="[installed]"
+        else
+            status="[missing]"
+        fi
+        printf '%-10s %-36s %s\n' "$id" "$desc" "$status"
+    done
+}
 
 show_help() {
     cat << 'EOF'
-用法: ./setup.sh [选项]
+用法: ./setup.sh [子命令] [选项] [插件...]
 
 轻量级 Bash 插件安装配置脚本
 
-安装内容:
-    ble.sh                   命令历史自动建议 + 实时语法高亮
-    zoxide                   智能目录跳转（替代 z/autojump）
-    fzf                      模糊搜索（历史命令、文件查找）
-    starship                 跨 shell 提示符（含 git 分支/状态）
+子命令:
+    install             安装插件（默认子命令）
+    list                列出插件及安装状态
+
+插件:
+    blesh (ble.sh)      命令历史自动建议 + 实时语法高亮
+    zoxide              智能目录跳转（替代 z/autojump）
+    fzf                 模糊搜索（历史命令、文件查找）
+    starship            跨 shell 提示符（含 git 分支/状态）
 
 选项:
-    -h, --help      显示此帮助信息并退出
-    -d, --dry-run   试运行模式，只显示将要执行的操作，不实际修改
+    -h, --help          显示此帮助信息并退出
+    -n, --dry-run       试运行模式，只显示将要执行的操作，不实际修改
 
 安装后常用快捷键:
     Ctrl+R          fzf 模糊搜索历史命令
@@ -54,19 +110,60 @@ show_help() {
     z <关键词>       zoxide 智能跳转到常用目录
 
 示例:
-    ./setup.sh           # 完整安装
-    ./setup.sh --dry-run # 预览将要执行的操作
-    ./setup.sh --help    # 显示帮助
+    ./setup.sh                  # 完整安装
+    ./setup.sh install          # 完整安装
+    ./setup.sh list             # 查看插件安装状态
+    ./setup.sh install -n       # 预览将要执行的操作
+    ./setup.sh --help           # 显示帮助
 EOF
 }
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -h|--help)    show_help; exit 0 ;;
-        -d|--dry-run) DRY_RUN=true; shift ;;
-        *) error "未知选项: $1"; show_help; exit 1 ;;
-    esac
-done
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -n|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            install|list)
+                if [[ -n "$COMMAND" ]]; then
+                    error "重复子命令: $1"
+                    exit 1
+                fi
+                COMMAND="$1"
+                shift
+                ;;
+            -*)
+                error "未知选项: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                if [[ -z "$COMMAND" || "$COMMAND" == "install" ]]; then
+                    COMMAND="${COMMAND:-install}"
+                    local pid
+                    pid="$(normalize_plugin_id "$1")" || {
+                        error "未知插件: $1（运行: $(basename "$0") list）"
+                        exit 1
+                    }
+                    SELECTED_PLUGINS+=("$pid")
+                    shift
+                else
+                    error "list 不接受额外参数: $1"
+                    exit 1
+                fi
+                ;;
+        esac
+    done
+
+    COMMAND="${COMMAND:-install}"
+}
+
+parse_args "$@"
 
 OS="$(uname -s)"
 
@@ -473,4 +570,8 @@ main() {
     echo ""
 }
 
-main
+case "$COMMAND" in
+    list) cmd_list ;;
+    install) main "${SELECTED_PLUGINS[@]}" ;;
+    *) error "未知命令: $COMMAND"; exit 1 ;;
+esac

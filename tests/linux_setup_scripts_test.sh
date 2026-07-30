@@ -16,12 +16,12 @@ assert_file() {
 
 assert_contains() {
   local file="$1" expected="$2"
-  grep -Fq "$expected" "$file" || fail "expected '$expected' in $file"
+  grep -Fq -- "$expected" "$file" || fail "expected '$expected' in $file"
 }
 
 assert_not_contains() {
   local file="$1" unexpected="$2"
-  ! grep -Fq "$unexpected" "$file" || fail "did not expect '$unexpected' in $file"
+  ! grep -Fq -- "$unexpected" "$file" || fail "did not expect '$unexpected' in $file"
 }
 
 # Starship cache must be used before the online installer.
@@ -197,5 +197,54 @@ bash "$ROOT/os/linux/setup_ubuntu.sh" --dry-run --packages-only --kind tui >"$ub
   fail "setup_ubuntu --kind tui dry-run failed: $(cat "$ubuntu_filter_dry")"
 assert_contains "$ubuntu_filter_dry" "[dry-run] tmux"
 assert_not_contains "$ubuntu_filter_dry" "[dry-run] docker"
+
+# --- shell/bash setup.sh plugin CLI ---
+bash -n "$ROOT/shell/bash/setup.sh" || fail "bash -n shell/bash/setup.sh"
+
+cli_help="$TMP_DIR/bash-cli-help.log"
+bash "$ROOT/shell/bash/setup.sh" --help >"$cli_help" 2>&1 || fail "setup.sh --help failed"
+assert_contains "$cli_help" "install"
+assert_contains "$cli_help" "list"
+assert_contains "$cli_help" "-n"
+assert_not_contains "$cli_help" "-d, --dry-run"
+
+cli_list_home="$TMP_DIR/bash-list-home"
+mkdir -p "$cli_list_home/.local/share/blesh" "$cli_list_home/.local/bin"
+touch "$cli_list_home/.local/share/blesh/ble.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$cli_list_home/.local/bin/zoxide"
+chmod +x "$cli_list_home/.local/bin/zoxide"
+# fzf and starship intentionally missing
+cli_list="$TMP_DIR/bash-cli-list.log"
+PATH="$cli_list_home/.local/bin:/usr/bin:/bin" HOME="$cli_list_home" \
+  bash "$ROOT/shell/bash/setup.sh" list >"$cli_list" 2>&1 ||
+  fail "setup.sh list failed: $(cat "$cli_list")"
+assert_contains "$cli_list" "blesh"
+assert_contains "$cli_list" "zoxide"
+assert_contains "$cli_list" "fzf"
+assert_contains "$cli_list" "starship"
+assert_contains "$cli_list" "[installed]"
+assert_contains "$cli_list" "[missing]"
+grep -E 'blesh[[:space:]].*\[installed\]' "$cli_list" >/dev/null ||
+  fail "blesh should be installed in list output"
+grep -E 'zoxide[[:space:]].*\[installed\]' "$cli_list" >/dev/null ||
+  fail "zoxide should be installed in list output"
+grep -E 'fzf[[:space:]].*\[missing\]' "$cli_list" >/dev/null ||
+  fail "fzf should be missing in list output"
+grep -E 'starship[[:space:]].*\[missing\]' "$cli_list" >/dev/null ||
+  fail "starship should be missing in list output"
+
+cli_unknown_rc=0
+bash "$ROOT/shell/bash/setup.sh" install nope >"$TMP_DIR/bash-cli-unknown.log" 2>&1 || cli_unknown_rc=$?
+[[ "$cli_unknown_rc" -ne 0 ]] || fail "unknown plugin should fail"
+assert_contains "$TMP_DIR/bash-cli-unknown.log" "list"
+
+cli_dry="$TMP_DIR/bash-cli-dry.log"
+HOME="$TMP_DIR/bash-dry-home" mkdir -p "$TMP_DIR/bash-dry-home"
+HOME="$TMP_DIR/bash-dry-home" PATH="/usr/bin:/bin" \
+  bash "$ROOT/shell/bash/setup.sh" install -n >"$cli_dry" 2>&1 ||
+  fail "setup.sh install -n failed: $(cat "$cli_dry")"
+assert_contains "$cli_dry" "试运行"
+[[ ! -f "$TMP_DIR/bash-dry-home/.bashrc" ]] ||
+  fail "dry-run must not create .bashrc when it did not exist"
 
 echo "PASS: Linux setup cache and ECS repository regression tests"
