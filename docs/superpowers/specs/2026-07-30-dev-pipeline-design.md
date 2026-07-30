@@ -100,8 +100,10 @@
 1. 目标
 2. 决策摘要
 3. 方案 / 边界
-4. 测试要点
+4. 测试要点（必填：层级 UT/场景、mock/夹具/环境、兼容性或性能等特别点、完成证据）
 5. 非目标
+
+brainstorm 阶段就必须与用户对齐测试策略；simple 模式至少口头确认「怎么测」，full 写入 spec。`dev-test` 按该约定执行，不得无说明降级。
 
 **短 plan**（可选）：`docs/superpowers/plans/YYYY-MM-DD-<topic>.md`，仅在完整模式且任务明显多步时编写。
 
@@ -167,3 +169,9 @@
 - **表象：** 完整/简单模式可直接在主干或当前脏工作区改代码，易污染主 checkout。
 - **根因：** 初版刻意不强制 worktree，未定义分支策略。
 - **解法：** 增加 `dev-workspace`；full → `.worktrees/` + 绝对路径；simple → 主干则建临时分支；新建隔离后 rebase，漂移大则退回 brainstorm。
+
+### 2026-07-30 — 设计阶段测试策略过粗
+
+- **表象：** spec「测试要点」可写成空话，实现后才决定测什么。
+- **根因：** brainstorm/spec 未强制对齐 UT vs 场景/mock/环境及兼容性/性能点。
+- **解法：** brainstorm 增加 Testing strategy；spec `## 测试要点` 必填层级/方法/环境/特别点/完成证据；`dev-test` 按设计执行不得无说明降级。

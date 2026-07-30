@@ -75,8 +75,8 @@ cd agents/cookbook
 |-------|----------|
 | `git-submit` | 整理本地 commit、按 Conventional Commits 提交、rebase 主干并创建 MR/PR |
 | `dev-pipeline` | 开发任务默认总入口：自动选完整/简单模式并编排子 skill |
-| `dev-brainstorm` | 澄清意图与需求（简单/完整模式都要做） |
-| `dev-spec` | 完整模式：写中等短 spec 到 `docs/superpowers/specs/` |
+| `dev-brainstorm` | 澄清意图、需求与测试策略（简单/完整模式都要做） |
+| `dev-spec` | 完整模式：写中等短 spec（含可执行的测试要点）到 `docs/superpowers/specs/` |
 | `dev-workspace` | exec 前隔离：full 用 `.worktrees/`；simple 在主干建临时分支；rebase + 漂移检查 |
 | `dev-exec` | 按已确认意图/spec 实现；每次改文件前 Preflight 检测未知脏改动 |
 | `dev-simply` | 完整模式、exec 之后：按 Clean Architecture 精简过度设计 |

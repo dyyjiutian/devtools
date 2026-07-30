@@ -55,7 +55,7 @@ for rel in "${REQUIRED_DEV_SKILLS[@]}"; do
   [[ -f "$f" ]] || continue
   case "$rel" in
     */pipeline/*) assert_heading "$f" "Mode selection"; assert_heading "$f" "Pipelines" ;;
-    */brainstorm/*) assert_heading "$f" "Modes"; assert_heading "$f" "Checklist" ;;
+    */brainstorm/*) assert_heading "$f" "Modes"; assert_heading "$f" "Testing strategy"; assert_heading "$f" "Checklist" ;;
     */spec/*) assert_heading "$f" "Spec template"; assert_heading "$f" "Path" ;;
     */workspace/*) assert_heading "$f" "Isolation rules"; assert_heading "$f" "Rebase and drift check" ;;
     */exec/*) assert_heading "$f" "Preflight"; assert_heading "$f" "Process"; assert_heading "$f" "When to stop" ;;
