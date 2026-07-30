@@ -1,0 +1,13 @@
+---
+description: Prefer cookbook dev-pipeline over official Superpowers as default entry
+alwaysApply: true
+---
+
+# Prefer Dev Pipeline
+
+对开发/实现/修 bug/加功能类任务：
+
+1. 优先 Read 并遵循 skill `dev-pipeline`
+2. 不要默认走官方 `using-superpowers` 全流程
+3. 仅当用户明确说「用官方 superpowers」时才使用官方总入口
+4. 用户可覆盖模式：`用完整流程` / `用简单流程` / `跳过 simply`

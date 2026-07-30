@@ -6,8 +6,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SRC="$SCRIPT_DIR/skills"
+RULES_SRC="$SCRIPT_DIR/rules"
 CURSOR_SKILLS="${CURSOR_SKILLS_DIR:-$HOME/.cursor/skills}"
 CLAUDE_SKILLS="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+CURSOR_RULES="${CURSOR_RULES_DIR:-$HOME/.cursor/rules}"
 
 DRY_RUN=0
 TARGET="cursor"
@@ -34,15 +36,19 @@ ${BOLD}用法:${NC}
   $(basename "$0") <command> [options]
 
 ${BOLD}命令:${NC}
-  sync      将 cookbook skills 同步到本机 Agent skills 目录
-  status    查看已发现的 skills 与本机链接状态
-  unlink    移除由本脚本创建的 skills 链接（不删仓库源文件）
+  sync      将 cookbook skills（及 Cursor rules）同步到本机
+  status    查看已发现的 skills / rules 与本机链接状态
+  unlink    移除由本脚本创建的 skills / rules 链接（不删仓库源文件）
 
 ${BOLD}选项:${NC}
   --dry-run         只预览，不改动文件系统
   --target <name>   cursor（默认）| claude | all
   --copy            复制目录而非符号链接
   -h, --help        显示帮助
+
+${BOLD}说明:${NC}
+  skills 同步到 ~/.cursor/skills/ 或 ~/.claude/skills/
+  rules（*.mdc）仅同步到 ~/.cursor/rules/（claude / all 时 skills 仍同步，rules 只写 Cursor）
 
 ${BOLD}示例:${NC}
   $(basename "$0") sync
@@ -81,6 +87,37 @@ _list_skills() {
         printf '%s\t%s\n' "$name" "$skill_dir"
     # Include symlinks (Bazel runfiles link source files into the tree).
     done < <(find "$SKILLS_SRC" \( -type f -o -type l \) -name 'SKILL.md' -print0 | sort -z)
+}
+
+# 列出 rules：每行 "basename<TAB>abs_file"
+_list_rules() {
+    local rule_file
+    if [[ ! -d "$RULES_SRC" ]]; then
+        return 0
+    fi
+    while IFS= read -r -d '' rule_file; do
+        printf '%s\t%s\n' "$(basename "$rule_file")" "$(cd "$(dirname "$rule_file")" && pwd)/$(basename "$rule_file")"
+    done < <(find "$RULES_SRC" -type f -name '*.mdc' -print0 | sort -z)
+}
+
+_sync_rules_for_cursor() {
+    local name src count=0
+    while IFS=$'\t' read -r name src; do
+        [[ -z "${name:-}" ]] && continue
+        _sync_one "$name" "$src" "$CURSOR_RULES"
+        count=$((count + 1))
+    done < <(_list_rules)
+    if [[ "$count" -eq 0 ]]; then
+        info "未找到任何 rules（*.mdc 在 $RULES_SRC）"
+    fi
+}
+
+_unlink_rules_for_cursor() {
+    local name src
+    while IFS=$'\t' read -r name src; do
+        [[ -z "${name:-}" ]] && continue
+        _unlink_one "$name" "$src" "$CURSOR_RULES"
+    done < <(_list_rules)
 }
 
 _dest_dirs_for_target() {
@@ -191,9 +228,20 @@ cmd_sync() {
 
     if [[ "$count" -eq 0 ]]; then
         warn "未找到任何 SKILL.md（在 $SKILLS_SRC）"
-        return 0
+    else
+        success "skills 完成（处理 $count 项）"
     fi
-    success "完成（处理 $count 项）"
+
+    # rules 仅写入 Cursor（claude/all 时 skills 仍按 target，rules 固定 Cursor）
+    case "$TARGET" in
+        cursor|all)
+            step "同步 cookbook rules → cursor ($CURSOR_RULES)"
+            _sync_rules_for_cursor
+            ;;
+        claude)
+            info "跳过 rules 同步（--target claude）"
+            ;;
+    esac
 }
 
 cmd_unlink() {
@@ -206,6 +254,16 @@ cmd_unlink() {
             _unlink_one "$name" "$src" "$dest_root"
         done < <(_dest_dirs_for_target "$TARGET")
     done < <(_list_skills)
+
+    case "$TARGET" in
+        cursor|all)
+            step "移除 cookbook rules 链接 → cursor"
+            _unlink_rules_for_cursor
+            ;;
+        claude)
+            info "跳过 rules unlink（--target claude）"
+            ;;
+    esac
 }
 
 cmd_status() {
@@ -237,6 +295,31 @@ cmd_status() {
 
     if [[ "$found" -eq 0 ]]; then
         warn "未找到任何 SKILL.md"
+    fi
+
+    step "Cookbook rules 状态"
+    found=0
+    echo -e "${BOLD}源目录:${NC} $RULES_SRC"
+    echo -e "${BOLD}Cursor rules:${NC} $CURSOR_RULES"
+    echo
+
+    while IFS=$'\t' read -r name src; do
+        [[ -z "${name:-}" ]] && continue
+        found=1
+        dest="$CURSOR_RULES/$name"
+        echo -e "${BOLD}$name${NC}"
+        echo "  src: $src"
+        if _is_cookbook_link "$dest" "$src"; then
+            echo -e "  ${GREEN}linked${NC}: $dest"
+        elif [[ -e "$dest" || -L "$dest" ]]; then
+            echo -e "  ${YELLOW}exists${NC}:  $dest (非本 cookbook 链接)"
+        else
+            echo -e "  ${YELLOW}missing${NC}: $dest"
+        fi
+    done < <(_list_rules)
+
+    if [[ "$found" -eq 0 ]]; then
+        warn "未找到任何 rules（*.mdc）"
     fi
 }
 
