@@ -413,13 +413,13 @@ generate_bashrc_config() {
         echo "    source \"${brew_prefix}/share/blesh/ble.sh\" --noattach --noinputrc"
         echo ""
         echo "# zoxide (z <关键词> 跳转，zi 交互式选择)"
-        echo 'eval "$(zoxide init bash)"'
+        echo 'command -v zoxide &>/dev/null && eval "$(zoxide init bash)"'
         echo ""
         echo "# fzf (Ctrl+R 历史搜索，Ctrl+T 文件搜索，Alt+C 目录跳转)"
-        echo 'eval "$(fzf --bash)"'
+        echo 'command -v fzf &>/dev/null && eval "$(fzf --bash)"'
         echo ""
         echo "# starship prompt"
-        echo 'eval "$(starship init bash)"'
+        echo 'command -v starship &>/dev/null && eval "$(starship init bash)"'
         echo ""
         echo "# ble.sh attach (必须在所有插件加载后)"
         echo '[[ ${BLE_VERSION-} ]] && ble-attach'
@@ -573,7 +573,9 @@ cmd_install() {
     echo ""
     echo "  后续操作:"
     echo "  1. 运行 'source ~/.bashrc' 或重新打开终端以应用配置"
-    echo "  2. Starship 已默认初始化为 tokyo 样式"
+    if [[ "$want_starship_config" == "true" ]]; then
+        echo "  2. Starship 已默认初始化为 tokyo 样式"
+    fi
     echo ""
     echo "  关于 zoxide (z 命令):"
     echo "  zoxide 需要先记录你访问过的目录，才能使用 'z' 跳转。"
@@ -591,6 +593,6 @@ cmd_install() {
 
 case "$COMMAND" in
     list) cmd_list ;;
-    install) cmd_install "${SELECTED_PLUGINS[@]}" ;;
+    install) cmd_install ${SELECTED_PLUGINS[@]+"${SELECTED_PLUGINS[@]}"} ;;
     *) error "未知命令: $COMMAND"; exit 1 ;;
 esac
