@@ -50,7 +50,7 @@ test_resolve_targets() {
   install_fake_vim "8.0" "1"
   source_setup
   target="$(resolve_vim_target)"
-  assert_eq "$target" "8.2.5172" "8.x maps to VIM_8_TARGET"
+  assert_eq "$target" "9.2.0782" "8.x maps to VIM_9_TARGET"
 
   install_fake_vim "9.0" "1"
   # Re-source not required; resolve reads live vim
@@ -77,7 +77,7 @@ test_dry_run_upgrade_old_vim() {
   }
 
   assert_contains "$out" "试运行" "dry-run marker"
-  assert_contains "$out" "8.2.5172" "targets 8.2.5172 for Vim 8.0"
+  assert_contains "$out" "9.2.0782" "targets 9.2.0782 for Vim 8.0"
 
   case "$DEVTOOLS_TEST_PROFILE" in
     macos)

@@ -6,14 +6,14 @@
 
 ```bash
 ./setup.sh
-./setup.sh --upgrade    # Vim 过旧时升级到对应稳定版后再装 coc
+./setup.sh --upgrade    # Vim 过旧时升级到 9.2.x 后再装 coc
 ./setup.sh --dry-run    # 试运行
 ```
 
 脚本会自动完成以下操作：
 
 1. 安装系统依赖（vim、node、ctags、fzf、ripgrep）
-2. 检测 Vim 版本；使用 `--upgrade` 时按大版本升级（见下表）
+2. 检测 Vim 版本；使用 `--upgrade` 时统一升级到 `VIM_9_TARGET`（默认 `9.2.0782`）
 3. 备份已有的 `~/.vimrc`（普通文件），然后复制本配置覆盖到 `~/.vimrc`
 4. 安装 vim-plug 及所有插件
 5. 安装 coc.nvim 语言服务器（Python、Go、Java、Shell、JSON、YAML）
@@ -23,10 +23,7 @@
 
 ### `--upgrade` 目标版本
 
-| 当前 Vim | 目标版本（可环境变量覆盖） |
-|----------|----------------------------|
-| 8.x | `VIM_8_TARGET`（默认 `8.2.5172`） |
-| 9.x、低于 8、或未安装 | `VIM_9_TARGET`（默认 `9.2.0782`） |
+`--upgrade` 一律升级到 `VIM_9_TARGET`（默认 `9.2.0782`，可用环境变量覆盖），不再按当前 8.x / 9.x 分流。
 
 升级顺序：包管理器（brew / apt / dnf / yum）→ 仍不足则源码编译到 `${VIM_PREFIX:-~/.local}`，并确保 `~/.local/bin` 优先于系统 PATH。未传 `--upgrade` 且版本过低时仍会跳过 coc（与旧行为一致）。
 ## 插件列表

@@ -13,8 +13,7 @@ error()   { echo -e "\033[31m[ERROR]\033[0m $1"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Pinned upgrade targets (override via env). Tags on github.com/vim/vim.
-VIM_8_TARGET="${VIM_8_TARGET:-8.2.5172}"
+# Pinned upgrade target (override via env). Tags on github.com/vim/vim.
 VIM_9_TARGET="${VIM_9_TARGET:-9.2.0782}"
 VIM_PREFIX="${VIM_PREFIX:-$HOME/.local}"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
@@ -35,9 +34,8 @@ Vim Setup Script - 一键配置 Vim 开发环境
      - Linux 通过 apt-get / dnf / yum 安装；fzf、ripgrep 在仓库缺失时
        自动回退到 GitHub 二进制（优先 cache/，安装到 ~/.local/bin）
   2. 检测 Vim 版本 (coc.nvim 需要 Vim 8.1.1719+)
-     - 使用 --upgrade 时：优先包管理器升级，仍不足则源码安装到 ~/.local
-       · 当前 8.x → 目标 ${VIM_8_TARGET}
-       · 当前 9.x 或更旧 → 目标 ${VIM_9_TARGET}
+     - 使用 --upgrade 时：统一升级到 ${VIM_9_TARGET}
+       优先包管理器，仍不足则源码安装到 ~/.local
   3. 备份已有的 ~/.vimrc (如果存在)
   4. 将本目录的 vimrc 复制到 ~/.vimrc（覆盖）
   5. 创建 Vim 缓存目录 (~/.vim/gutentags)
@@ -48,15 +46,14 @@ Vim Setup Script - 一键配置 Vim 开发环境
 
 用法:
   ./setup.sh              运行完整安装
-  ./setup.sh --upgrade    升级 Vim 到对应稳定版本后完整安装
+  ./setup.sh --upgrade    升级 Vim 到 ${VIM_9_TARGET} 后完整安装
   ./setup.sh --dry-run    试运行，只显示将要执行的操作
   ./setup.sh --backup     将 ~/.vimrc 备份到当前目录的 vimrc
   ./setup.sh --restore    将当前目录的 vimrc 覆盖到 ~/.vimrc 并安装插件
   ./setup.sh --help       显示此帮助信息
 
 环境变量:
-  VIM_8_TARGET       8.x 升级目标（默认 ${VIM_8_TARGET}）
-  VIM_9_TARGET       9.x / <8 升级目标（默认 ${VIM_9_TARGET}）
+  VIM_9_TARGET       --upgrade 目标版本（默认 ${VIM_9_TARGET}）
   VIM_PREFIX         源码安装前缀（默认 \$HOME/.local）
   DEVTOOLS_CACHE_DIR 离线缓存根目录（默认仓库 cache/）
 
@@ -493,21 +490,9 @@ version_ge() {
     echo "lt"
 }
 
-# Resolve upgrade target version (no leading v) from current major.
+# Resolve upgrade target version (no leading v). Always pin to VIM_9_TARGET.
 resolve_vim_target() {
-    local current major
-    current=$(get_vim_version)
-    if [[ -z "$current" ]]; then
-        echo "$VIM_9_TARGET"
-        return 0
-    fi
-    major=$(echo "$current" | cut -d. -f1)
-    if [[ "$major" -eq 8 ]]; then
-        echo "$VIM_8_TARGET"
-    else
-        # major >= 9 or major < 8
-        echo "$VIM_9_TARGET"
-    fi
+    echo "$VIM_9_TARGET"
 }
 
 # --- Check Vim version for coc.nvim ---
