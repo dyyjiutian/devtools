@@ -1,3 +1,4 @@
+# Container portability fixture used by module integration tests.
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive

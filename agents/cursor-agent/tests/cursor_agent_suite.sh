@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cursor Agent module suite — fake agent/git + isolated HOME
+# Cursor Agent module suite — fake agent and git commands + isolated HOME
 set -euo pipefail
 
 SETUP_SH="$MODULE_ROOT/setup.sh"

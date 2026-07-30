@@ -50,7 +50,7 @@ test_dry_run_upgrade_branch() {
       assert_contains "$out" "macos" "detects macos"
       assert_contains "$out" "brew install tmux" "macos brew install"
       ;;
-    linux_ubuntu|linux_centos)
+    linux_ubuntu|linux_centos|linux_alinux3|linux_alinux4)
       assert_contains "$out" "linux" "detects linux"
       assert_contains "$out" "试运行" "dry-run marker"
       # Package-manager-first, then fallback to source build intent.

@@ -3,13 +3,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TESTING_LIB="$SCRIPT_DIR"
-TESTING_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TEST_COMMON_LIB="$SCRIPT_DIR"
+TEST_COMMON_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 _is_repo_root() {
   local candidate="$1"
-  # Prefer testing/lib marker; do not require unrelated modules (Bazel runfiles are sparse).
-  [[ -f "$candidate/testing/lib/run_module_test.sh" && -f "$candidate/testing/lib/profile.sh" ]]
+  # Prefer tests/common marker; do not require unrelated modules (Bazel runfiles are sparse).
+  [[ -f "$candidate/tests/common/lib/run_module_test.sh" &&
+     -f "$candidate/tests/common/lib/profile.sh" ]]
 }
 
 resolve_repo_root() {
@@ -26,15 +27,15 @@ resolve_repo_root() {
     done
   fi
 
-  # Non-Bazel: testing/lib -> repo root
-  candidate="$(cd "$TESTING_ROOT/.." && pwd)"
+  # Non-Bazel: tests/common/lib -> repo root
+  candidate="$(cd "$TEST_COMMON_ROOT/../.." && pwd)"
   if _is_repo_root "$candidate"; then
     printf '%s\n' "$candidate"
     return 0
   fi
 
-  # Script-adjacent fallback (runfiles: .../testing/lib/run_module_test.sh)
-  candidate="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  # Script-adjacent fallback (runfiles: .../tests/common/lib/run_module_test.sh)
+  candidate="$(cd "$SCRIPT_DIR/../../.." && pwd)"
   if _is_repo_root "$candidate"; then
     printf '%s\n' "$candidate"
     return 0
@@ -91,9 +92,9 @@ fi
 
 REPO_ROOT="$(resolve_repo_root)"
 export REPO_ROOT
-TESTING_LIB="$REPO_ROOT/testing/lib"
-TESTING_ROOT="$REPO_ROOT/testing"
-export TESTING_LIB TESTING_ROOT
+TEST_COMMON_LIB="$REPO_ROOT/tests/common/lib"
+TEST_COMMON_ROOT="$REPO_ROOT/tests/common"
+export TEST_COMMON_LIB TEST_COMMON_ROOT
 
 resolve_path() {
   local p="$1"
@@ -140,10 +141,10 @@ export DEVTOOLS_CACHE_DIR="$CACHE_DIR"
 export FAKE_BIN
 mkdir -p "$HOME" "$CACHE_DIR/binaries"
 
-# shellcheck source=testing/lib/profile.sh
-source "$TESTING_LIB/profile.sh"
-# shellcheck source=testing/lib/assert.sh
-source "$TESTING_LIB/assert.sh"
+# shellcheck source=tests/common/lib/profile.sh
+source "$TEST_COMMON_LIB/profile.sh"
+# shellcheck source=tests/common/lib/assert.sh
+source "$TEST_COMMON_LIB/assert.sh"
 
 # Sets PATH to $FAKE_BIN only (linked host tools + profile fakes).
 setup_os_profile "$PROFILE" "$FAKE_BIN"

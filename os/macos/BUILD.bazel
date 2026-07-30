@@ -1,12 +1,22 @@
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["packages.list"])
+
 sh_test(
     name = "macos_setup_bats_test",
     srcs = ["run_bats.sh"],
     data = [
         "setup.bats",
         "setup.sh",
+        "packages.list",
+        "//os/lib:packages_list.sh",
         "@bats_core//:bats_tree",
     ],
     size = "small",
+    tags = [
+        "check",
+        "smoke",
+    ],
 )

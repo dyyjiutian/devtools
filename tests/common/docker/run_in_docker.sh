@@ -3,11 +3,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TESTING_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+TEST_COMMON_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 _is_repo_root() {
   local candidate="$1"
-  [[ -f "$candidate/testing/lib/run_module_test.sh" && -f "$candidate/testing/lib/profile.sh" ]]
+  [[ -f "$candidate/tests/common/lib/run_module_test.sh" &&
+     -f "$candidate/tests/common/lib/profile.sh" ]]
 }
 
 resolve_repo_root() {
@@ -27,12 +28,12 @@ resolve_repo_root() {
       fi
     done
   fi
-  candidate="$(cd "$TESTING_ROOT/.." && pwd)"
+  candidate="$(cd "$TEST_COMMON_ROOT/../.." && pwd)"
   if _is_repo_root "$candidate"; then
     printf '%s\n' "$candidate"
     return 0
   fi
-  candidate="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  candidate="$(cd "$SCRIPT_DIR/../../.." && pwd)"
   if _is_repo_root "$candidate"; then
     printf '%s\n' "$candidate"
     return 0
@@ -46,7 +47,7 @@ resolve_repo_root() {
 # are invisible inside the container unless the target tree is mounted).
 resolve_source_root() {
   local runfiles_root="$1"
-  local marker="$runfiles_root/testing/lib/run_module_test.sh"
+  local marker="$runfiles_root/tests/common/lib/run_module_test.sh"
   local real candidate
 
   if [[ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]] && _is_repo_root "$BUILD_WORKSPACE_DIRECTORY"; then
@@ -57,7 +58,7 @@ resolve_source_root() {
   if [[ -L "$marker" || -f "$marker" ]]; then
     real="$(readlink -f "$marker" 2>/dev/null || true)"
     if [[ -n "$real" ]]; then
-      candidate="$(cd "$(dirname "$real")/../.." && pwd)"
+      candidate="$(cd "$(dirname "$real")/../../.." && pwd)"
       if _is_repo_root "$candidate"; then
         printf '%s\n' "$candidate"
         return 0
@@ -168,9 +169,9 @@ rel_module="$MODULE_ROOT"
 [[ "$rel_suite" = /* ]] && rel_suite="${rel_suite#"$SOURCE_ROOT"/}"
 [[ "$rel_module" = /* ]] && rel_module="${rel_module#"$SOURCE_ROOT"/}"
 
-DOCKER_DIR="$SOURCE_ROOT/testing/docker"
+DOCKER_DIR="$SOURCE_ROOT/tests/common/docker"
 if [[ ! -f "$DOCKER_DIR/$DOCKERFILE" ]]; then
-  DOCKER_DIR="$RUNFILES_ROOT/testing/docker"
+  DOCKER_DIR="$RUNFILES_ROOT/tests/common/docker"
 fi
 if [[ ! -f "$DOCKER_DIR/$DOCKERFILE" ]]; then
   echo "run_in_docker.sh: missing $DOCKERFILE (source=$SOURCE_ROOT runfiles=$RUNFILES_ROOT)" >&2
@@ -191,7 +192,7 @@ docker run --rm \
   -w /workspace \
   -e DEVTOOLS_TEST_PROFILE="$PROFILE" \
   "$IMAGE_TAG" \
-  bash /workspace/testing/lib/run_module_test.sh \
+  bash /workspace/tests/common/lib/run_module_test.sh \
     --profile "$PROFILE" \
     --suite "$rel_suite" \
     --module-root "$rel_module"

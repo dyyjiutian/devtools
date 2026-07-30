@@ -1,3 +1,56 @@
+load("//tests/common/rules:devtools_tests.bzl", "devtools_module_tests", "devtools_unit_test")
+
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["packages.centos.list"])
+filegroup(
+    name = "linux_setup_srcs",
+    srcs = [
+        "README.md",
+        "packages.centos.list",
+        "packages.ubuntu.list",
+        "setup_centos.sh",
+        "setup_ubuntu.sh",
+    ],
+)
+
+exports_files([
+    "packages.centos.list",
+    "packages.ubuntu.list",
+    "setup_centos.sh",
+    "setup_ubuntu.sh",
+    "tests/integration/linux_setup_suite.sh",
+    "tests/unit/repository_suite.sh",
+])
+
+devtools_unit_test(
+    name = "repository_unit_test",
+    suite = ":tests/unit/repository_suite.sh",
+    data = [
+        ":linux_setup_srcs",
+        "//os/lib:packages_list.sh",
+    ],
+    tags = [
+        "compatibility",
+        "contract",
+    ],
+)
+
+devtools_module_tests(
+    name = "linux_setup",
+    suite = ":tests/integration/linux_setup_suite.sh",
+    module_root = ":setup_centos.sh",
+    module_data = [
+        ":linux_setup_srcs",
+        "//os/lib:packages_list.sh",
+        "//terminal/tmux:tmux_srcs",
+    ],
+    profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
+    tags = [
+        "cli",
+        "smoke",
+    ],
+)

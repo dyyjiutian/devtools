@@ -86,7 +86,7 @@ test_dry_run_upgrade_old_vim() {
     linux_ubuntu)
       assert_contains "$out" "apt-get" "ubuntu tries apt-get"
       ;;
-    linux_centos)
+    linux_centos|linux_alinux3|linux_alinux4)
       # dnf or yum upgrade path
       if ! echo "$out" | grep -qE 'dnf|yum'; then
         echo "FAIL: expected dnf/yum in output" >&2

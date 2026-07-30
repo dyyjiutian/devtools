@@ -62,7 +62,7 @@
 - 使用 `set -euo pipefail`，正确引用变量并处理空值、失败状态和临时文件。
 - 提供 `--help`；有副作用的脚本尽量提供 `--dry-run`、`--info-only` 或等价的预览模式。
 - **`setup.sh`（及同类安装/配置脚本）必须可重入（幂等）**：重复执行不得重复追加配置、破坏已有正确状态或留下半成品；写入 shell rc、服务配置和编辑器配置前使用 marker / BEGIN-END 托管块、备份或等价幂等更新。
-- 修改或新增上述安装逻辑时，**必须补充配套 Bazel 测试**（优先 OS-profile × module 矩阵，见 `testing/`、`BAZEL.md`），并至少在 **`macos`** 与 **`linux_centos`** profile 上通过（例如 `bazel test //path/to/module:...`）；有 Ubuntu 矩阵时一并覆盖。
+- 修改或新增上述安装逻辑时，**必须补充配套 Bazel 测试**（优先 OS-profile × module 矩阵，见 `tests/common/`、`tests/README.md`、`BAZEL.md`），并在模块适用的 **`macos`**、**`linux_ubuntu`**、**`linux_alinux3`**、**`linux_alinux4`** profile 上通过（例如 `bazel test //path/to/module:...`）。当前兼容基线只覆盖 x86_64。
 - 破坏性操作、系统服务、代理/VPN、iptables、防火墙和远程节点操作必须明确权限、目标和回滚方式。
 - 保持现有 Bash 兼容性；不要无必要地引入仅新版本 Bash 支持的语法。
 - 下载外部脚本或二进制时优先使用 `cache/` 中已有资产；变更下载源、版本、校验和或架构时补充测试。
@@ -114,8 +114,8 @@ bash languages/python/setup.sh --dry-run
 bash -n setup.sh
 bash -n languages/python/setup.sh
 
-# Linux 回归测试
-bash tests/linux_setup_scripts_test.sh
+# Linux 与 Bash 模块回归测试
+bazel test //os/linux/... //shell/bash/...
 
 # macOS Bats 测试（本地需要 bats；也可使用 Bazel）
 bash os/macos/run_bats.sh
@@ -131,7 +131,7 @@ bazel test //tools/git/... //terminal/tmux/...
 bazel test --config=docker //tools/git/... //terminal/tmux/...
 ```
 
-若环境没有 `bazel` 或 `bats`，明确记录未执行原因；不要把工具缺失误报为代码通过。对安装逻辑优先测试 `--help`、`--dry-run`、已有缓存路径、**重复执行（幂等）**和失败回滚路径；涉及 `setup.sh` 行为变更时，确认相关 Bazel 目标在 `macos` / `linux_centos` 上通过。
+若环境没有 `bazel` 或 `bats`，明确记录未执行原因；不要把工具缺失误报为代码通过。对安装逻辑优先测试 `--help`、`--dry-run`、已有缓存路径、**重复执行（幂等）**和失败回滚路径；涉及 `setup.sh` 行为变更时，确认相关 Bazel 目标在适用的 `macos` / `linux_ubuntu` / `linux_alinux3` / `linux_alinux4` profile 上通过。
 
 ## Git 提交与 PR
 
@@ -167,7 +167,7 @@ gh pr create --fill --base main
 - [ ] 变更只涉及任务范围，且没有覆盖用户已有改动。
 - [ ] 新增行为遵循清晰边界，根入口没有承载不属于它的具体实现细节。
 - [ ] 相关脚本有 `--help`，有副作用时有安全预览或明确限制；`setup.sh` 类逻辑可重入（幂等）。
-- [ ] 安装/配置逻辑变更已补充 Bazel 测试，并在 `macos` / `linux_centos` 上通过（或已说明未跑原因）。
+- [ ] 安装/配置逻辑变更已补充 Bazel 测试，并在适用的 `macos` / `linux_ubuntu` / `linux_alinux3` / `linux_alinux4` profile 上通过（或已说明未跑原因）。
 - [ ] Shell 语法、相关回归测试和可用的 Bazel/Bats 检查已执行。
 - [ ] 文档、缓存版本、测试和脚本行为保持一致；修复已有模块 issue 时已在对应 README 的 Issues 中记录。
 - [ ] `git diff --check` 通过，提交前已确认没有敏感信息。

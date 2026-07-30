@@ -5,9 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -n "${TEST_SRCDIR:-}" ]]; then
   REPO_ROOT="${TEST_SRCDIR}/${TEST_WORKSPACE:-_main}"
 else
-  REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 fi
 DOWNLOAD_SH="$REPO_ROOT/cache/download.sh"
+NODESOURCE_SCRIPT="$REPO_ROOT/cache/scripts/nodesource-setup-20.x"
 DELTA_FIXTURE="$REPO_ROOT/cache/binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz"
 DELTA_SHA256="f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/cache-download-test.XXXXXX")"
@@ -133,9 +134,17 @@ test_linux_download_includes_delta() {
   echo "PASS: Linux cache download includes git-delta"
 }
 
+bash -n "$DOWNLOAD_SH"
+if grep -Fq '! [ -f /etc/redhat-release ] && ! grep -q "Amazon Linux" /etc/system-release' \
+    "$NODESOURCE_SCRIPT"; then
+  fail "cached NodeSource script rejects ALinux without /etc/redhat-release"
+fi
+grep -Fq 'command -v rpm' "$NODESOURCE_SCRIPT" ||
+  fail "cached NodeSource script does not detect RPM systems"
+
 test_valid_cache_skips_download
 test_corrupt_cache_is_replaced_atomically
 test_failed_redownload_leaves_no_corrupt_target
 test_linux_download_includes_delta
 
-echo "PASS: cache download suite"
+echo "PASS: cache download unit suite"

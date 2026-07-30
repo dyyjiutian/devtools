@@ -2,6 +2,36 @@
 
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
+def devtools_unit_test(
+        name,
+        suite,
+        data = [],
+        tags = [],
+        size = "small"):
+    """Create a hermetic shell unit test.
+
+    Args:
+      name: Bazel target name.
+      suite: Label of the shell suite.
+      data: Extra labels needed by the suite.
+      tags: Extra tags added to the test.
+      size: Bazel test size.
+    """
+    sh_test(
+        name = name,
+        srcs = ["//tests/common:lib/run_unit_test.sh"],
+        args = [
+            "--suite",
+            "$(rootpath %s)" % suite,
+        ],
+        data = [
+            "//tests/common:lib_files",
+            suite,
+        ] + data,
+        size = size,
+        tags = tags + ["unit"],
+    )
+
 def devtools_module_tests(
         name,
         suite,
@@ -9,6 +39,7 @@ def devtools_module_tests(
         module_data,
         profiles,
         docker_profiles = [],
+        tags = [],
         size = "small"):
     """Create L1 host profile tests and optional L2 Docker tests.
 
@@ -19,10 +50,11 @@ def devtools_module_tests(
       module_data: Extra labels needed at runtime (scripts, configs, bins).
       profiles: OS profiles for L1 host tests.
       docker_profiles: Subset of profiles for L2 Docker tests.
+      tags: Extra tags added to every generated test.
       size: Bazel test size.
     """
     common_data = [
-        "//testing:lib_files",
+        "//tests/common:lib_files",
         suite,
         module_root,
     ] + module_data
@@ -30,7 +62,7 @@ def devtools_module_tests(
     for profile in profiles:
         sh_test(
             name = "%s_%s_test" % (name, profile),
-            srcs = ["//testing:lib/run_module_test.sh"],
+            srcs = ["//tests/common:lib/run_module_test.sh"],
             args = [
                 "--profile",
                 profile,
@@ -41,12 +73,17 @@ def devtools_module_tests(
             ],
             data = common_data,
             size = size,
+            tags = tags + [
+                "integration",
+                "compatibility",
+                "profile-%s" % profile,
+            ],
         )
 
     for profile in docker_profiles:
         sh_test(
             name = "%s_%s_docker_test" % (name, profile),
-            srcs = ["//testing:docker/run_in_docker.sh"],
+            srcs = ["//tests/common:docker/run_in_docker.sh"],
             args = [
                 "--profile",
                 profile,
@@ -56,10 +93,13 @@ def devtools_module_tests(
                 "$(rootpath %s)" % module_root,
             ],
             data = common_data + [
-                "//testing:docker_files",
+                "//tests/common:docker_files",
             ],
             size = "large",
-            tags = [
+            tags = tags + [
+                "integration",
+                "compatibility",
+                "profile-%s" % profile,
                 "requires-docker",
                 "no-sandbox",
                 "requires-network",

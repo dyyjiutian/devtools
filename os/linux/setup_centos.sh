@@ -151,10 +151,10 @@ detect_system_info() {
   step "系统基本信息"
 
   local os_id os_version os_pretty_name
-  if [[ -f /etc/os-release ]]; then
-    os_id=$(grep '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
-    os_version=$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
-    os_pretty_name=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
+  if [[ -f "$OS_RELEASE_FILE" ]]; then
+    os_id=$(grep '^ID=' "$OS_RELEASE_FILE" | cut -d'=' -f2 | tr -d '"')
+    os_version=$(grep '^VERSION_ID=' "$OS_RELEASE_FILE" | cut -d'=' -f2 | tr -d '"')
+    os_pretty_name=$(grep '^PRETTY_NAME=' "$OS_RELEASE_FILE" | cut -d'=' -f2 | tr -d '"')
   else
     os_id="unknown"
     os_version="unknown"

@@ -142,9 +142,9 @@ For new or changed shell functionality:
   Keep CLI handling, use-case orchestration, and system/package/network
   adapters separated.
 - Add or update Bazel tests for installer and configuration behavior. Prefer
-  OS-profile × module coverage and run at least the `macos` and
-  `linux_centos` profiles when available; include Ubuntu coverage when the
-  module has an Ubuntu matrix.
+  OS-profile × module coverage and run the applicable `macos`,
+  `linux_ubuntu`, `linux_alinux3`, and `linux_alinux4` profiles. The current
+  compatibility baseline is x86_64 only.
 - Prefer cached installation assets under `cache/`. If a source, version,
   checksum, or architecture changes, update the corresponding tests.
 - Do not commit API keys, passwords, UUIDs, private keys, personal machine
@@ -192,7 +192,7 @@ paths.
 
 ```bash
 bash -n setup.sh
-bash tests/linux_setup_scripts_test.sh
+bazel test //os/linux/... //shell/bash/...
 bash os/macos/run_bats.sh
 bazel test //...
 bazel test //os/macos:macos_setup_bats_test

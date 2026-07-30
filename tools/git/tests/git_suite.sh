@@ -39,9 +39,9 @@ test_install_gh_branch() {
   }
 
   case "$DEVTOOLS_TEST_PROFILE" in
-    linux_centos)
-      assert_contains "$out" "cli.github.com/packages/rpm/gh-cli.repo" "centos gh repo"
-      assert_contains "$out" "dnf install -y gh" "centos dnf install gh"
+    linux_centos|linux_alinux3|linux_alinux4)
+      assert_contains "$out" "cli.github.com/packages/rpm/gh-cli.repo" "dnf gh repo"
+      assert_contains "$out" "dnf install -y gh" "dnf install gh"
       ;;
     linux_ubuntu)
       assert_contains "$out" "apt-get install -y gh" "ubuntu apt install gh"
@@ -73,6 +73,12 @@ test_install_delta_branch() {
     linux_centos)
       printf 'ID=centos\nVERSION_ID=9\n' >"$os_release"
       ;;
+    linux_alinux3)
+      printf 'ID=alinux\nVERSION_ID=3\n' >"$os_release"
+      ;;
+    linux_alinux4)
+      printf 'ID=alinux\nVERSION_ID=4\n' >"$os_release"
+      ;;
     linux_ubuntu)
       printf 'ID=ubuntu\nVERSION_ID=24.04\nVERSION_CODENAME=noble\n' >"$os_release"
       ;;
@@ -100,6 +106,10 @@ test_install_delta_branch() {
     linux_centos)
       assert_contains "$out" "mirrors.aliyun.com/epel/9/Everything" "centos aliyun EPEL"
       assert_contains "$out" "dnf" "centos dnf install delta"
+      ;;
+    linux_alinux3|linux_alinux4)
+      assert_contains "$out" "dnf install -y git-delta" "ALinux dnf install delta"
+      assert_not_contains "$out" "mirrors.aliyun.com/epel" "ALinux does not use CentOS EPEL mapping"
       ;;
     linux_ubuntu)
       assert_contains "$out" "mirrors.aliyun.com/ubuntu" "ubuntu aliyun APT"
@@ -406,7 +416,7 @@ test_config_credential_helper() {
     macos)
       assert_contains "$out" "credential.helper = osxkeychain" "macos keychain helper"
       ;;
-    linux_ubuntu|linux_centos)
+    linux_ubuntu|linux_centos|linux_alinux3|linux_alinux4)
       assert_contains "$out" "credential.helper = cache --timeout=86400" "linux cache helper"
       assert_contains "$out" "apt / dnf / yum" "Linux delta install hint"
       assert_not_contains "$out" "cargo install" "Linux delta hint excludes cargo"

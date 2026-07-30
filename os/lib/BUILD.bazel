@@ -1,3 +1,20 @@
+load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["packages_list.sh"])
+
+devtools_unit_test(
+    name = "packages_list_unit_test",
+    suite = ":tests/unit/packages_list_suite.sh",
+    data = [
+        "packages_list.sh",
+        "//os/linux:packages.centos.list",
+        "//os/linux:packages.ubuntu.list",
+        "//os/macos:packages.list",
+    ],
+    tags = [
+        "contract",
+        "smoke",
+    ],
+)

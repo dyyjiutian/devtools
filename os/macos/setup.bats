@@ -18,3 +18,13 @@
   run "$SETUP_SH" --not-a-real-flag-xyz 2>/dev/null
   [ "$status" -eq 1 ]
 }
+
+@test "packages.list satisfies shared manifest contract" {
+  run bash -c '
+    source "$1"
+    packages_list_has "$2" git
+    packages_list_has "$2" rg
+    [[ "$(packages_list_brew_formula rg)" == "ripgrep" ]]
+  ' _ "$PACKAGES_LIB" "$PACKAGES_LIST"
+  [ "$status" -eq 0 ]
+}

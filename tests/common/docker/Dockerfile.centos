@@ -1,3 +1,4 @@
+# Container portability fixture; not an ALinux or E2E environment.
 FROM almalinux:9
 
 # AlmaLinux minimal images already ship curl-minimal / coreutils-single.

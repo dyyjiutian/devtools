@@ -1,0 +1,15 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "repository_structure_check",
+    srcs = ["repository_structure_test.sh"],
+    size = "small",
+    tags = [
+        "check",
+        "local",
+        "no-sandbox",
+        "smoke",
+    ],
+)

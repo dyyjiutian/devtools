@@ -25,6 +25,7 @@ is_installed() { command -v "$1" &>/dev/null; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 PACKAGES_LIST="${SCRIPT_DIR}/packages.ubuntu.list"
+OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 # shellcheck source=../lib/packages_list.sh
 source "${SCRIPT_DIR}/../lib/packages_list.sh"
 
@@ -79,10 +80,10 @@ detect_system_info() {
   step "系统基本信息"
 
   local os_id os_version os_pretty_name
-  if [[ -f /etc/os-release ]]; then
-    os_id=$(grep '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
-    os_version=$(grep '^VERSION_ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
-    os_pretty_name=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
+  if [[ -f "$OS_RELEASE_FILE" ]]; then
+    os_id=$(grep '^ID=' "$OS_RELEASE_FILE" | cut -d'=' -f2 | tr -d '"')
+    os_version=$(grep '^VERSION_ID=' "$OS_RELEASE_FILE" | cut -d'=' -f2 | tr -d '"')
+    os_pretty_name=$(grep '^PRETTY_NAME=' "$OS_RELEASE_FILE" | cut -d'=' -f2 | tr -d '"')
   else
     os_id="unknown"; os_version="unknown"; os_pretty_name="unknown"
   fi
@@ -183,7 +184,7 @@ install_docker() {
 
   info "添加 Docker 软件源..."
   local arch; arch=$(dpkg --print-architecture)
-  local codename; codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+  local codename; codename=$(. "$OS_RELEASE_FILE" && echo "$VERSION_CODENAME")
   echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${codename} stable" | \
     run_cmd tee /etc/apt/sources.list.d/docker.list > /dev/null
 

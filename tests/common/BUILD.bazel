@@ -1,9 +1,16 @@
+# Shared test infrastructure for repository modules.
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "lib/run_unit_test.sh",
     "lib/run_module_test.sh",
     "docker/run_in_docker.sh",
 ])
+
+filegroup(
+    name = "run_unit_test",
+    srcs = ["lib/run_unit_test.sh"],
+)
 
 filegroup(
     name = "run_module_test",

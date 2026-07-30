@@ -1,7 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+resolve_source_path() {
+  local path="$1" dir target
+  while [[ -L "$path" ]]; do
+    dir="$(cd "$(dirname "$path")" && pwd -P)"
+    target="$(readlink "$path")"
+    if [[ "$target" = /* ]]; then
+      path="$target"
+    else
+      path="$dir/$target"
+    fi
+  done
+  dir="$(cd "$(dirname "$path")" && pwd -P)"
+  printf '%s/%s\n' "$dir" "$(basename "$path")"
+}
+
+SCRIPT_PATH="$(resolve_source_path "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
+if ! git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1; then
+  echo "repository_structure_test.sh: cannot locate source Git worktree from $SCRIPT_PATH" >&2
+  exit 1
+fi
 
 failures=0
 required_dirs=(
@@ -26,7 +46,7 @@ for dir in "${required_dirs[@]}"; do
   fi
 done
 
-obsolete_pattern='(^|[^[:alnum:]_-])(agent/|agent-cli/|ai/coding/|ai/local-llm/|ai/testing/|terminal/bash/|terminal/zsh/|terminal/oh-my-zsh/|terminal/starship/|terminal/nvim/|terminal/vim/|terminal/ssh/|tools/frp/|tools/proxy/|tools/vpn/|vcs/git/|mac/remote/|os/macos/nosleep\.sh)'
+obsolete_pattern='(^|[^[:alnum:]_-])(agent/|agent-cli/|ai/coding/|ai/local-llm/|ai/testing/|terminal/bash/|terminal/zsh/|terminal/oh-my-zsh/|terminal/starship/|terminal/nvim/|terminal/vim/|terminal/ssh/|tools/frp/|tools/proxy/|tools/vpn/|vcs/git/|mac/remote/|os/macos/nosleep\.sh|//testing[:/]|testing/)'
 obsolete_refs=$(cd "$ROOT" && git grep -n -E "$obsolete_pattern" -- ':!docs/superpowers/**' ':!tests/repository_structure_test.sh' || true)
 if [[ -n "$obsolete_refs" ]]; then
   echo "OBSOLETE PATH REFERENCES:" >&2

@@ -1,4 +1,4 @@
-load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_module_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -28,7 +28,9 @@ devtools_module_tests(
         "//agents/cookbook:cookbook_srcs",
     ],
     profiles = [
-        "linux_centos",
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
         "macos",
     ],
 )

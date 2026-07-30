@@ -10,6 +10,8 @@ WS_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RUNFILES_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 export SETUP_SH="${WS_ROOT}/os/macos/setup.sh"
+export PACKAGES_LIST="${WS_ROOT}/os/macos/packages.list"
+export PACKAGES_LIB="${WS_ROOT}/os/lib/packages_list.sh"
 SETUP_BATS="${WS_ROOT}/os/macos/setup.bats"
 
 BATS_BIN=""
@@ -45,6 +47,10 @@ fi
 
 if [[ ! -f "${SETUP_SH}" ]]; then
   echo "run_bats.sh: setup.sh not found at ${SETUP_SH}" >&2
+  exit 1
+fi
+if [[ ! -f "${PACKAGES_LIST}" || ! -f "${PACKAGES_LIB}" ]]; then
+  echo "run_bats.sh: package manifest inputs are missing" >&2
   exit 1
 fi
 if [[ -z "${BATS_BIN}" ]]; then

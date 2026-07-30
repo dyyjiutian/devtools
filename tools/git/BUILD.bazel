@@ -1,4 +1,4 @@
-load("//testing/rules:devtools_tests.bzl", "devtools_module_tests")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_module_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -35,6 +35,8 @@ devtools_module_tests(
     profiles = [
         "linux_ubuntu",
         "linux_centos",
+        "linux_alinux3",
+        "linux_alinux4",
         "macos",
     ],
     suite = ":tests/git_suite.sh",

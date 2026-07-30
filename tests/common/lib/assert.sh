@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared assertions for module suite tests.
+# Shared assertions for module integration suites.
 # shellcheck shell=bash
 
 assert_eq() {

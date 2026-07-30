@@ -1,4 +1,4 @@
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -12,14 +12,15 @@ exports_files([
     "binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz",
 ])
 
-sh_test(
-    name = "download_test",
-    size = "small",
-    srcs = ["tests/download_suite.sh"],
+devtools_unit_test(
+    name = "download_unit_test",
+    suite = ":tests/unit/download_suite.sh",
     data = [
         "binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz",
         "download.sh",
+        "scripts/nodesource-setup-20.x",
         "//os/lib:packages_list.sh",
         "//os/linux:packages.centos.list",
     ],
+    tags = ["contract"],
 )
