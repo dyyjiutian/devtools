@@ -16,7 +16,7 @@ description: >-
 - 默认 ≤3 个关键问题（一次一个）
 - 对话内确认目标/约束/成功标准即可
 - 默认不写 spec 文件；用户要求再落盘
-- 确认后交给 `dev-exec`
+- 确认后交给 `dev-workspace`（再 `dev-exec`）
 
 **full**
 - 可多轮；必要时给 2–3 个方案与取舍（YAGNI）
@@ -29,7 +29,12 @@ description: >-
 2. 澄清目的、约束、成功标准（一次一问）
 3. 需要时提出简短方案对比与推荐
 4. 复述已确认结论，等用户认可
-5. 按 mode 进入 `dev-spec` 或 `dev-exec`
+5. 按 mode 进入 `dev-spec` 或 `dev-workspace`
+6. 若因 rebase 结构漂移而退回：重新评估设计假设，再走后续步骤
+
+## Drift re-entry
+
+从 `dev-workspace` 因主干结构漂移退回时：对照新树重新核对边界与方案，更新结论（full 时改 spec），再交给 `dev-workspace`。
 
 ## Hard gate
 

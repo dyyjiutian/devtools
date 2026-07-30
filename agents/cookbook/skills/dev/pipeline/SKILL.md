@@ -4,7 +4,7 @@ description: >-
   Use when starting development work, implementing features, fixing bugs,
   or choosing a delivery workflow. Prefer this over official Superpowers
   as the default entry. Triggers: 开发, 实现, 修 bug, 加功能, 简单流程,
-  完整流程, brainstorm, spec, exec, TDD. Do not use only when the user
+  完整流程, brainstorm, spec, exec, TDD, worktree. Do not use only when the user
   explicitly asks for official Superpowers.
 ---
 
@@ -26,19 +26,23 @@ description: >-
 | 多文件 / 跨模块 / 需设计取舍 | 范围清晰、改动面小 |
 | 用户说「设计一下 / 写 spec」 | 用户说「直接改 / 快点」 |
 
-覆盖口令：`用完整流程` / `用简单流程` / `跳过 simply` / `用官方 superpowers`。
+覆盖口令：`用完整流程` / `用简单流程` / `跳过 simply` / `跳过 worktree` / `就在当前分支做` / `用官方 superpowers`。
 
 ## Pipelines
 
-**full:** 依次 Read 并遵循  
-`dev-brainstorm` → `dev-spec` → `dev-exec` → `dev-simply` → `dev-test`
+**full:** 依次 Read 并遵循
+`dev-brainstorm` → `dev-spec` → `dev-workspace` → `dev-exec` → `dev-simply` → `dev-test`
 
-**simple:** 依次 Read 并遵循  
-`dev-brainstorm`（传入 simple）→ `dev-exec` → `dev-test`  
+**simple:** 依次 Read 并遵循
+`dev-brainstorm`（传入 simple）→ `dev-workspace` → `dev-exec` → `dev-test`
 无长 spec、无 simply；brainstorm 仍必须澄清意图与需求。
+
+`dev-workspace` 负责：完整模式建 `.worktrees/`；简单模式在主干时建临时分支；新建隔离后 rebase 主干；结构漂移大则退回 `dev-brainstorm`。
 
 ## Hard rules
 
 - 未澄清意图前不要写生产代码（simple 也一样）
+- 未完成 `dev-workspace`（或用户明确跳过隔离）前不要 `dev-exec`
+- 默认不在主干上实现，除非用户明确要求
 - 不要默认调用官方 `using-superpowers` / 完整官方 brainstorm 门禁
 - 子 skill 按序执行；失败则停下说明，不要静默跳步

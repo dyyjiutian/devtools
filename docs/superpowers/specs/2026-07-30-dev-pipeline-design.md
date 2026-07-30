@@ -12,8 +12,11 @@
 |---|---|
 | 落地方式 | Router + 薄包装 skill（方案 1） |
 | 模式选择 | Agent 按复杂度自动选；用户可随时覆盖 |
-| 完整模式 | brainstorm → spec → exec → simply → test |
-| 简单模式 | brainstorm(轻量) → exec → test（无长 spec、无 simply） |
+| 完整模式 | brainstorm → spec → workspace → exec → simply → test |
+| 简单模式 | brainstorm(轻量) → workspace → exec → test（无长 spec、无 simply） |
+| Workspace | full：`.worktrees/<topic>`；simple：在主干则建临时分支；默认不在主干实现 |
+| Workspace 后 | 新建隔离后 rebase `origin/main`；结构漂移大则退回 brainstorm |
+| Worktree 使用方式 | 留在当前 Cursor 窗口；读写强制 worktree 绝对路径（方案 A） |
 | Simply 强度 | 默认自动精简；有争议再问 |
 | Spec 正式度 | 中等：短结构落盘到 `docs/superpowers/specs/` |
 | 测试策略 | 行为/逻辑 → TDD；配置/文档/幂等脚本 → 实现后验证 |
@@ -29,6 +32,7 @@
 | `dev-pipeline` | 总入口：判复杂度 → 选模式 → 编排子 skill；处理用户覆盖 |
 | `dev-brainstorm` | 澄清意图与需求。完整模式可更深；简单模式同样必须把意图/需求问清，但更快收敛、默认不落长文档 |
 | `dev-spec` | 仅完整模式：写中等短 spec |
+| `dev-workspace` | exec 前隔离：full 用 `.worktrees/`；simple 在主干建分支；rebase + 漂移检查 |
 | `dev-exec` | 按已确认意图/spec 实现；完整模式且多步任务时可先写短 plan |
 | `dev-simply` | 仅完整模式、exec 之后：精简过度设计 |
 | `dev-test` | 测试门禁（两种模式共用） |
@@ -58,14 +62,34 @@
 ### 流水线
 
 ```text
-完整: brainstorm → spec → exec → simply → test
-简单: brainstorm → exec → test
+完整: brainstorm → spec → workspace → exec → simply → test
+简单: brainstorm → workspace → exec → test
 ```
 
 两种模式的 brainstorm **都必须**把意图和需求搞清楚。差异仅在于：
 
-- 完整：可多轮取舍；产出短 spec；exec 后跑 simply
-- 简单：少问快收敛（建议默认 ≤3 个关键问题）；对话内确认即可，默认不落盘；无 simply
+- 完整：可多轮取舍；产出短 spec；`.worktrees/` 隔离；exec 后跑 simply
+- 简单：少问快收敛（建议默认 ≤3 个关键问题）；对话内确认即可，默认不落盘；主干上则建临时分支；无 simply
+
+## Workspace 隔离
+
+在意图/spec 确认之后、`dev-exec` 之前执行。
+
+| 模式 | 行为 |
+|---|---|
+| full | `git worktree add .worktrees/<topic> -b <branch> origin/main`；已在 linked worktree 则不嵌套 |
+| simple | 当前为 `main`/`master` 则 `checkout -b` 临时分支；已在功能分支则留下 |
+| 例外 | 用户明确「就在当前分支 / 主干上做」时可跳过新建隔离 |
+
+**新建 worktree 或新建分支后：**
+
+1. `git fetch` + `git rebase origin/main`
+2. 对照已确认设计做结构漂移检查：关键路径/模块消失或搬迁、与设计冲突的主干改动 → **退回 `dev-brainstorm`**（full 时更新 spec）；小冲突则解决后继续
+3. 完整模式：留在当前 Cursor 窗口，但所有读写使用 worktree **绝对路径**
+
+脏工作区在主干建分支前须警告，避免夹带无关改动。
+
+**`dev-exec` Preflight：** 每次改文件前在当前 workspace 跑 `git status` / `git diff`；若出现未知改动或目标文件被外部改写，先停下确认，避免与其它操作叠成内容不一致。
 
 ## Spec 与 Plan 产物
 
@@ -130,6 +154,16 @@
 
 - 不禁用或卸载官方 Superpowers 插件
 - 不完整复制官方 skill 套件
-- 不强制 git worktree、visual companion、冗长多轮章节审批
+- 不强制 visual companion、冗长多轮章节审批
+- 不要求用户改开 Cursor 窗口到新 worktree（用绝对路径方案 A）
 - 不在简单模式执行 simply
-- 本设计阶段不改根 `setup.sh` 安装逻辑（cookbook 已有独立 sync）
+- 不在简单模式强制创建 `.worktrees/`（仅分支隔离）
+- 本设计不改根 `setup.sh` 安装逻辑（cookbook 已有独立 sync）
+
+## Issues
+
+### 2026-07-30 — 完整流程缺少实现前隔离与主干保护
+
+- **表象：** 完整/简单模式可直接在主干或当前脏工作区改代码，易污染主 checkout。
+- **根因：** 初版刻意不强制 worktree，未定义分支策略。
+- **解法：** 增加 `dev-workspace`；full → `.worktrees/` + 绝对路径；simple → 主干则建临时分支；新建隔离后 rebase，漂移大则退回 brainstorm。

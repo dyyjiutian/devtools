@@ -77,15 +77,17 @@ cd agents/cookbook
 | `dev-pipeline` | 开发任务默认总入口：自动选完整/简单模式并编排子 skill |
 | `dev-brainstorm` | 澄清意图与需求（简单/完整模式都要做） |
 | `dev-spec` | 完整模式：写中等短 spec 到 `docs/superpowers/specs/` |
-| `dev-exec` | 按已确认意图/spec 实现 |
+| `dev-workspace` | exec 前隔离：full 用 `.worktrees/`；simple 在主干建临时分支；rebase + 漂移检查 |
+| `dev-exec` | 按已确认意图/spec 实现；每次改文件前 Preflight 检测未知脏改动 |
 | `dev-simply` | 完整模式、exec 之后：按 Clean Architecture 精简过度设计 |
 | `dev-test` | 测试门禁：行为/逻辑走 TDD；配置/文档/幂等脚本走实现后验证 |
 
 ### Dev Pipeline 模式
 
-- **完整：** brainstorm → spec → exec → simply → test  
-- **简单：** brainstorm → exec → test（无长 spec、无 simply）  
-- **覆盖口令：** `用完整流程` / `用简单流程` / `跳过 simply` / `用官方 superpowers`
+- **完整：** brainstorm → spec → workspace → exec → simply → test
+- **简单：** brainstorm → workspace → exec → test（无长 spec、无 simply）
+- **隔离：** 默认不在主干实现；full 建 `.worktrees/<topic>`（当前窗口 + 绝对路径）；新建隔离后 rebase，结构漂移大则退回 brainstorm
+- **覆盖口令：** `用完整流程` / `用简单流程` / `跳过 simply` / `跳过 worktree` / `就在当前分支做` / `用官方 superpowers`
 
 设计见 `docs/superpowers/specs/2026-07-30-dev-pipeline-design.md`。
 

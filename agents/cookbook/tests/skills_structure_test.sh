@@ -34,6 +34,7 @@ REQUIRED_DEV_SKILLS=(
   "dev/pipeline/SKILL.md"
   "dev/brainstorm/SKILL.md"
   "dev/spec/SKILL.md"
+  "dev/workspace/SKILL.md"
   "dev/exec/SKILL.md"
   "dev/simply/SKILL.md"
   "dev/test/SKILL.md"
@@ -56,7 +57,8 @@ for rel in "${REQUIRED_DEV_SKILLS[@]}"; do
     */pipeline/*) assert_heading "$f" "Mode selection"; assert_heading "$f" "Pipelines" ;;
     */brainstorm/*) assert_heading "$f" "Modes"; assert_heading "$f" "Checklist" ;;
     */spec/*) assert_heading "$f" "Spec template"; assert_heading "$f" "Path" ;;
-    */exec/*) assert_heading "$f" "Process"; assert_heading "$f" "When to stop" ;;
+    */workspace/*) assert_heading "$f" "Isolation rules"; assert_heading "$f" "Rebase and drift check" ;;
+    */exec/*) assert_heading "$f" "Preflight"; assert_heading "$f" "Process"; assert_heading "$f" "When to stop" ;;
     */simply/*) assert_heading "$f" "Default actions"; assert_heading "$f" "Ask first" ;;
     */test/*) assert_heading "$f" "Strategy"; assert_heading "$f" "Evidence" ;;
   esac
