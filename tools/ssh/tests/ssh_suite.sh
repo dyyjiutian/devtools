@@ -25,6 +25,27 @@ Host jump-*
 EOF
 }
 
+# Main config plus a single-file Include (relative to ~/.ssh).
+write_hosts_config_with_include() {
+  mkdir -p "$HOME/.ssh/config.d"
+  cat >"$HOME/.ssh/config" <<'EOF'
+Include config.d/work
+
+Host foo-dev
+    HostName 10.0.0.1
+
+Host jump-*
+    HostName 10.0.0.5
+EOF
+  cat >"$HOME/.ssh/config.d/work" <<'EOF'
+Host work-box
+    HostName 10.0.0.9
+
+Host work-jump-*
+    HostName 10.0.0.8
+EOF
+}
+
 # Source fssh helpers without running the interactive main path.
 run_fssh_fn() {
   FSSH_NO_MAIN=1 /bin/bash -c '
@@ -49,6 +70,44 @@ test_fssh_help_mentions_query() {
   assert_contains "$out" "query" "fssh help mentions query matching"
   assert_contains "$out" "substring" "fssh help mentions substring matching"
   pass "fssh --help mentions fuzzy query ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_list_hosts_follows_include() {
+  write_hosts_config_with_include
+  local out
+  out="$(run_fssh_fn list_hosts)"
+  assert_contains "$out" "foo-dev" "lists Host from main config"
+  assert_contains "$out" "work-box" "lists Host from Include file"
+  assert_not_contains "$out" "jump-*" "excludes main-config wildcards"
+  assert_not_contains "$out" "work-jump-*" "excludes Include wildcards"
+  pass "fssh list_hosts follows Include ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_list_hosts_follows_tilde_include() {
+  mkdir -p "$HOME/.ssh/config.d"
+  cat >"$HOME/.ssh/config" <<'EOF'
+Include ~/.ssh/config.d/extra
+
+Host main-host
+    HostName 10.0.0.1
+EOF
+  cat >"$HOME/.ssh/config.d/extra" <<'EOF'
+Host from-tilde
+    HostName 10.0.0.2
+EOF
+  local out
+  out="$(run_fssh_fn list_hosts)"
+  assert_contains "$out" "main-host" "lists Host from main config"
+  assert_contains "$out" "from-tilde" "lists Host from tilde Include path"
+  pass "fssh list_hosts follows tilde Include ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_match_hosts_from_include() {
+  write_hosts_config_with_include
+  local out
+  out="$(run_fssh_fn match_hosts work)"
+  assert_eq "$out" "work-box" "query matches Host from Include file"
+  pass "fssh match_hosts from Include ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_match_hosts_exact() {
@@ -162,6 +221,9 @@ test_session_menu_order_without_sessions() {
 
 test_setup_help
 test_fssh_help_mentions_query
+test_list_hosts_follows_include
+test_list_hosts_follows_tilde_include
+test_match_hosts_from_include
 test_match_hosts_exact
 test_match_hosts_exact_beats_substring
 test_match_hosts_substring_unique

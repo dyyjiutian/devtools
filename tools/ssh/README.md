@@ -12,7 +12,7 @@ bash tools/ssh/fssh.sh --help
 
 ## fssh 主机查询
 
-`fssh` 无参数时打开全量 Host 选择器。带参数时对 `~/.ssh/config` 的 **Host 别名**（不含 `*?` 通配）做解析：
+`fssh` 无参数时打开全量 Host 选择器。带参数时对 SSH **Host 别名**（不含 `*?` 通配）做解析；会递归跟随 `~/.ssh/config` 中的 `Include`（相对路径按 OpenSSH 规则解析到 `~/.ssh/`，支持 `~` 与通配）：
 
 1. 不区分大小写的精确匹配
 2. 否则不区分大小写的子串匹配
@@ -24,6 +24,10 @@ fssh prod -n      # 解析后 plain SSH（跳过 tmux）
 ~~~
 
 ## Issues
+
+### 2026-07-30 — fssh 未跟随 Include，漏掉分文件里的 Host
+
+`list_hosts` 原先只 grep 主配置 `~/.ssh/config`，`Include config.d/work` 等文件中的 Host 不会出现在 fzf / 查询匹配里。现已递归展开 Include（相对路径、`~`、glob），并继续排除带 `*?` 的通配别名。
 
 ### 2026-07-28 — fssh 无法发现用户本地路径中的远端 tmux
 

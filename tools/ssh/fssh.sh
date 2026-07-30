@@ -48,7 +48,7 @@ Usage:
                         unique hit connects, multiple hits open fzf
   fssh -n               Skip tmux — plain SSH login after host pick
   fssh <query> -n       Resolve <query>, then plain SSH
-  fssh -l               List all hosts from ~/.ssh/config and exit
+  fssh -l               List all hosts from SSH config (incl. Include) and exit
   fssh -h               Show this help
 
 Flags (long forms also accepted):
@@ -62,7 +62,7 @@ Host query matching (Host aliases only; wildcards excluded):
   3. 1 hit → use it; multiple → fzf on matches; 0 → error
 
 Interactive tmux flow:
-  1. Reads ~/.ssh/config for Host entries (wildcards excluded)
+  1. Reads ~/.ssh/config Host entries, following Include (wildcards excluded)
   2. Resolve query or fzf picker → select host
   3. SSH to host, list tmux sessions
   4. fzf picker → select existing session, "[新建会话]" to create one,
@@ -78,11 +78,93 @@ EOF
 }
 
 # ── List hosts ────────────────────────────────────────────────────────────────
+# Track visited config paths (newline-delimited) to avoid Include cycles.
+_FSSH_SEEN_CONFIGS=""
+
+# Resolve one Include path pattern to concrete files (OpenSSH user-config rules:
+# ~ expands; relative paths are under ~/.ssh; globs expand in lexical order).
+_fssh_expand_include_pattern() {
+    local pattern="$1"
+    local expanded tilde_slash='~/'
+    case "$pattern" in
+        # Use a variable for the # removal pattern so bash does not tilde-expand ~/
+        # inside ${param#~/} (which would leave the leading ~ unstripped).
+        "~/"*) expanded="${HOME}/${pattern#"$tilde_slash"}" ;;
+        "~")   expanded="${HOME}" ;;
+        /*)    expanded="$pattern" ;;
+        *)     expanded="${HOME}/.ssh/${pattern}" ;;
+    esac
+
+    # compgen -G expands globs; plain paths must exist to be listed.
+    if compgen -G "$expanded" >/dev/null 2>&1; then
+        compgen -G "$expanded" | LC_ALL=C sort
+    fi
+}
+
+# Canonical path for cycle detection (best-effort; Bash 3.2 compatible).
+_fssh_abs_path() {
+    local file="$1"
+    local dir base
+    if command -v realpath >/dev/null 2>&1; then
+        realpath "$file" 2>/dev/null && return 0
+    fi
+    dir=$(cd "$(dirname "$file")" 2>/dev/null && pwd) || { printf '%s\n' "$file"; return 0; }
+    base=$(basename "$file")
+    printf '%s/%s\n' "$dir" "$base"
+}
+
+# Recursively emit Host alias tokens from a config file and its Include targets.
+_fssh_collect_hosts_from_file() {
+    local file="$1"
+    local abs line key
+    local -a words
+    [[ -f "$file" && -r "$file" ]] || return 0
+
+    abs=$(_fssh_abs_path "$file")
+    if printf '%s\n' "$_FSSH_SEEN_CONFIGS" | grep -Fxq -- "$abs"; then
+        return 0
+    fi
+    _FSSH_SEEN_CONFIGS="${_FSSH_SEEN_CONFIGS}${abs}"$'\n'
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        # trim leading whitespace
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ -n "$line" ]] || continue
+
+        # Split into words (SSH config is whitespace-separated).
+        # Bash 3.2: avoid mapfile; use read -a.
+        words=()
+        # shellcheck disable=SC2086
+        read -r -a words <<< "$line"
+        [[ ${#words[@]} -ge 2 ]] || continue
+
+        key=$(printf '%s' "${words[0]}" | tr '[:upper:]' '[:lower:]')
+        case "$key" in
+            include)
+                local i inc
+                for ((i = 1; i < ${#words[@]}; i++)); do
+                    while IFS= read -r inc || [[ -n "$inc" ]]; do
+                        [[ -n "$inc" ]] || continue
+                        _fssh_collect_hosts_from_file "$inc"
+                    done < <(_fssh_expand_include_pattern "${words[i]}")
+                done
+                ;;
+            host)
+                local i
+                for ((i = 1; i < ${#words[@]}; i++)); do
+                    printf '%s\n' "${words[i]}"
+                done
+                ;;
+        esac
+    done < "$file"
+}
+
 list_hosts() {
     local config="${HOME}/.ssh/config"
     [[ -f "$config" ]] || error "~/.ssh/config not found."
-    grep -E '^[[:space:]]*Host[[:space:]]' "$config" \
-        | awk '{for(i=2;i<=NF;i++) print $i}' \
+    _FSSH_SEEN_CONFIGS=""
+    _fssh_collect_hosts_from_file "$config" \
         | grep -v '[*?]' \
         | sort -u
 }
