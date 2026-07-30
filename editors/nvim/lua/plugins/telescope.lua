@@ -28,12 +28,18 @@ return {
             ["<C-q>"] = require("telescope.actions").send_to_qflist + require("telescope.actions").open_qflist,
           },
         },
+        -- Lua patterns, not globs: an unescaped "." matches any character, so
+        -- ".git" also matched paths like ~/workspace/github/ and silently
+        -- dropped every result in them.
         file_ignore_patterns = {
-          "node_modules",
-          ".git",
-          "__pycache__",
-          "*.pyc",
-          ".DS_Store",
+          "^%.git/",
+          "/%.git/",
+          "^node_modules/",
+          "/node_modules/",
+          "^__pycache__/",
+          "/__pycache__/",
+          "%.pyc$",
+          "%.DS_Store$",
         },
       },
       pickers = {

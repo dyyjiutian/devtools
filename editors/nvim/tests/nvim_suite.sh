@@ -211,6 +211,19 @@ test_lsp_covers_go_and_c() {
   pass "nvim lsp covers Go and C/C++ ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_telescope_ignore_patterns_are_escaped() {
+  local telescope
+  # Comments mention the buggy patterns, so assert against code lines only.
+  telescope="$(grep -v '^[[:space:]]*--' "$MODULE_ROOT/lua/plugins/telescope.lua")"
+  assert_contains "$telescope" '"/%.git/"' "escapes the dot in .git"
+  assert_contains "$telescope" '"%.pyc$"' "uses a Lua pattern for .pyc"
+  # Bare ".git" matches any char before "git", e.g. ~/workspace/github/.
+  assert_not_contains "$telescope" '".git"' "no unescaped .git pattern"
+  assert_not_contains "$telescope" '"*.pyc"' "no glob-style *.pyc pattern"
+  assert_not_contains "$telescope" '".DS_Store"' "no unescaped .DS_Store pattern"
+  pass "nvim telescope ignore patterns escaped ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_quotes_lazy_sync() {
   local setup
   setup="$(cat "$SETUP_SH")"
@@ -239,6 +252,7 @@ test_linux_skips_when_nvim_present
 test_lsp_pins_for_nvim_010
 test_lsp_registers_servers_when_mason_fails
 test_lsp_covers_go_and_c
+test_telescope_ignore_patterns_are_escaped
 test_setup_quotes_lazy_sync
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"

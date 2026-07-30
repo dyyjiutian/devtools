@@ -9,6 +9,7 @@ filegroup(
         "init.lua",
         "README.md",
         "lua/plugins/lsp.lua",
+        "lua/plugins/telescope.lua",
     ],
 )
 

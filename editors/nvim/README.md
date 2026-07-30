@@ -339,6 +339,18 @@ cd editors/nvim && ./setup.sh --restore
 - 刚 attach 就请求会返回 `null`，需等其完成 background analysis（大仓库更明显）。
 - 它是纯文本同名匹配而非作用域感知，不同文件中的同名函数/变量也会被算作引用。
 
+### 2026-07-30 — Telescope 弹框有、结果全空（`file_ignore_patterns` 被当成 glob 写）
+
+**表象**：`gr` / `<Space>ff` 等 picker 正常弹出，但一条结果都没有；只在 `~/workspace/github/` 这类路径下复现。
+
+**根因**：`file_ignore_patterns` 是 **Lua 模式**而非 glob。`".git"` 里的 `.` 是「任意字符」通配符，
+因此它匹配到了路径中的 `/github/`（`/git` + 任意字符）。telescope 是先建 picker 再逐条
+`string.find(file, v)` 过滤，命中即丢弃，于是弹框在、内容全被静默丢掉。同理 `"*.pyc"` 是 glob 写法，
+在 Lua 模式里 `*` 需要跟在某个字符类后面，并不表示「任意多个字符」。
+
+**解法**：改用转义并带目录分隔符锚定的 Lua 模式，例如 `"^%.git/"`、`"/%.git/"`、`"%.pyc$"`。
+可用 `lua -e 'print(string.find(path, pattern))'` 快速自查某条模式是否误伤。
+
 ## References
 
 - [Neovim Documentation](https://neovim.io/doc/)
