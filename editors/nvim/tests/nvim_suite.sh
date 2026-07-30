@@ -191,10 +191,32 @@ test_lsp_pins_for_nvim_010() {
   pass "nvim lsp pins for 0.10 ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_setup_quotes_lazy_sync() {
+  local setup
+  setup="$(cat "$SETUP_SH")"
+  assert_contains "$setup" '_nvim_headless() {' "defines quoted headless helper"
+  assert_contains "$setup" 'nvim --headless -c "$cmd" -c "qa!"' "passes Ex cmd as one -c argument"
+  assert_contains "$setup" '_nvim_headless "Lazy! sync"' "Lazy sync is a single quoted argument"
+  assert_contains "$setup" '_nvim_headless "MasonToolsInstallSync"' "Mason install is quoted"
+  assert_contains "$setup" '_nvim_headless "MasonToolsUpdateSync"' "Mason update is quoted"
+  # All plugin sync entry points go through helpers (no raw unquoted +Lazy!).
+  assert_contains "$setup" '_sync_lazy_plugins' "uses _sync_lazy_plugins helper"
+  local raw_hits
+  raw_hits="$(printf '%s\n' "$setup" | grep -E 'nvim --headless' | grep -v '_nvim_headless\|#' || true)"
+  # Only the helper body may call nvim --headless directly.
+  assert_contains "$raw_hits" 'nvim --headless -c "$cmd" -c "qa!"' "only helper invokes nvim --headless"
+  if printf '%s\n' "$setup" | grep -Eq -- 'nvim --headless \+Lazy! sync'; then
+    echo "FAIL: found unquoted '+Lazy! sync' which shell splits" >&2
+    return 1
+  fi
+  pass "nvim setup quotes Lazy sync ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_linux_prefers_nvim_cache
 test_linux_download_uses_pinned_url
 test_linux_skips_when_nvim_present
 test_lsp_pins_for_nvim_010
+test_setup_quotes_lazy_sync
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"

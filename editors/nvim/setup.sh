@@ -148,6 +148,41 @@ _ensure_local_bin_path() {
     fi
 }
 
+# Run a Neovim Ex command headlessly. Always quote multi-word +cmd / -c args —
+# unquoted `+Lazy! sync` is split by the shell, so Lazy never runs.
+_nvim_headless() {
+    local cmd="$1"
+    nvim --headless -c "$cmd" -c "qa!"
+}
+
+# Drop mason/lspconfig trees so Lazy re-checkouts the pinned tags from lsp.lua.
+_reset_pinned_lsp_plugins() {
+    local lazy_root="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy"
+    rm -rf \
+        "${lazy_root}/mason.nvim" \
+        "${lazy_root}/mason-lspconfig.nvim" \
+        "${lazy_root}/nvim-lspconfig"
+}
+
+_sync_lazy_plugins() {
+    info "Syncing lazy.nvim plugins..."
+    _reset_pinned_lsp_plugins
+    if _nvim_headless "Lazy! sync"; then
+        success "Plugins synced"
+    else
+        warn "Lazy sync reported errors; open nvim and run :Lazy sync if needed"
+    fi
+}
+
+_install_mason_tools() {
+    info "Installing Mason tools (formatters / ensured LSPs)..."
+    if _nvim_headless "MasonToolsInstallSync"; then
+        success "Mason tools installed"
+    else
+        warn "MasonToolsInstallSync reported errors; use :Mason if needed"
+    fi
+}
+
 install_nvim_linux() {
     local current_version
     current_version="$(get_nvim_version)"
@@ -343,14 +378,8 @@ restore_config() {
     success "Config restored from $SCRIPT_DIR"
 
     # Install plugins
-    info "Installing plugins..."
-    nvim --headless +Lazy! sync +qall 2>/dev/null || true
-    success "Plugins installed"
-
-    # Install LSPs
-    info "Installing LSP servers..."
-    nvim --headless +MasonToolsInstallSync +qall 2>/dev/null || true
-    success "LSP servers installed"
+    _sync_lazy_plugins
+    _install_mason_tools
 
     exit 0
 }
@@ -363,12 +392,18 @@ update_plugins() {
     fi
 
     step "Updating plugins..."
-    nvim --headless +Lazy! sync +qall 2>/dev/null || true
-    success "Plugins updated"
+    if _nvim_headless "Lazy! sync"; then
+        success "Plugins updated"
+    else
+        warn "Lazy sync reported errors"
+    fi
 
     step "Updating LSP servers..."
-    nvim --headless +MasonToolsUpdateSync +qall 2>/dev/null || true
-    success "LSP servers updated"
+    if _nvim_headless "MasonToolsUpdateSync"; then
+        success "LSP servers updated"
+    else
+        warn "MasonToolsUpdateSync reported errors"
+    fi
 }
 
 # --- Install Nerd Font ---
@@ -485,14 +520,12 @@ main() {
     # Install Nerd Font
     install_nerd_font
 
-    # First run to install plugins
+    # First run to install plugins (must quote Lazy! sync — see _nvim_headless)
     step "Installing plugins (this may take a few minutes)..."
-    nvim --headless +Lazy! sync +qall 2>/dev/null || true
-    success "Plugins installed"
+    _sync_lazy_plugins
 
     step "Installing LSP servers..."
-    nvim --headless +MasonToolsInstallSync +qall 2>/dev/null || true
-    success "LSP servers installed"
+    _install_mason_tools
 
     # Done
     echo ""

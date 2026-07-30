@@ -297,10 +297,22 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 ```bash
 rm -rf ~/.local/share/nvim/lazy/mason.nvim ~/.local/share/nvim/lazy/mason-lspconfig.nvim ~/.local/share/nvim/lazy/nvim-lspconfig
 # 或整目录: rm -rf ~/.local/share/nvim/lazy
-nvim --headless "+Lazy! sync" +qall
+nvim --headless -c "Lazy! sync" -c "qa!"
 ```
 
 重型服务器（jdtls / clangd / rust_analyzer 等）仍可在 `:Mason` 中按需安装。
+
+### 2026-07-30 — `setup.sh` 未加引号导致 Lazy sync 从未执行
+
+**表象**：`lsp.lua` 已 pin mason/lspconfig v1，但打开文件仍报 `vim.lsp.enable` 为 nil，lazy 目录里仍是 v2。
+
+**根因**：`nvim --headless +Lazy! sync +qall` 未加引号，shell 把参数拆成 `+Lazy!`、`sync`、`+qall`，`Lazy! sync` 从未作为一条 Ex 命令执行。
+
+**解法**：改为 `nvim --headless -c "Lazy! sync" -c "qa!"`（`_nvim_headless`）；setup/restore 前清理 pinned 的 mason/lspconfig 目录再 sync。重新执行：
+
+```bash
+cd editors/nvim && ./setup.sh --restore
+```
 
 ## References
 
