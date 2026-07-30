@@ -8,6 +8,7 @@ filegroup(
         "setup.sh",
         "init.lua",
         "README.md",
+        "lua/plugins/lsp.lua",
     ],
 )
 

@@ -1,12 +1,15 @@
 -- ============================================================
 -- LSP Configuration
+-- Pinned for Neovim 0.10.x (Alinux 3). mason-lspconfig v2+ needs
+-- vim.lsp.enable() which only exists in Neovim 0.11+.
 -- ============================================================
 
 return {
   "neovim/nvim-lspconfig",
+  version = "v1.8.0",
   dependencies = {
-    { "williamboman/mason.nvim", config = true },
-    "williamboman/mason-lspconfig.nvim",
+    { "williamboman/mason.nvim", version = "v1.11.0", config = true },
+    { "williamboman/mason-lspconfig.nvim", version = "v1.32.0" },
     "WhoIsSethDaniel/mason-tool-installer.nvim",
     { "j-hui/fidget.nvim", opts = {} },
     { "folke/neodev.nvim", opts = {} },
@@ -47,6 +50,7 @@ return {
     local capabilities = vim.lsp.protocol.make_client_capabilities()
     capabilities = vim.tbl_deep_extend("force", capabilities, require("cmp_nvim_lsp").default_capabilities())
 
+    -- Server configs (handlers still apply when installed via :Mason).
     local servers = {
       lua_ls = {
         settings = {
@@ -70,17 +74,33 @@ return {
       clangd = {},
     }
 
+    -- Auto-install a small common set once; heavy/optional servers via :Mason.
+    local ensure_lsp = {
+      "lua_ls",
+      "pyright",
+      "bashls",
+      "jsonls",
+      "yamlls",
+      "ts_ls",
+    }
+
     require("mason").setup()
 
-    local ensure_installed = vim.tbl_keys(servers or {})
-    vim.list_extend(ensure_installed, {
-      "stylua",
-      "prettier",
-      "shfmt",
+    -- Formatters only (not every LSP). Debounce avoids "X: installing" spam each start.
+    require("mason-tool-installer").setup({
+      ensure_installed = {
+        "stylua",
+        "prettier",
+        "shfmt",
+      },
+      auto_update = false,
+      run_on_start = true,
+      debounce_hours = 24,
     })
-    require("mason-tool-installer").setup({ ensure_installed = ensure_installed })
 
     require("mason-lspconfig").setup({
+      ensure_installed = ensure_lsp,
+      automatic_installation = false,
       handlers = {
         function(server_name)
           local server = servers[server_name] or {}

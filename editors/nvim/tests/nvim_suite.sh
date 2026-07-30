@@ -180,9 +180,21 @@ test_linux_skips_when_nvim_present() {
   pass "nvim linux skips when already present ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_lsp_pins_for_nvim_010() {
+  local lsp
+  lsp="$(cat "$MODULE_ROOT/lua/plugins/lsp.lua")"
+  assert_contains "$lsp" 'version = "v1.8.0"' "pins nvim-lspconfig for 0.10"
+  assert_contains "$lsp" 'version = "v1.11.0"' "pins mason.nvim v1"
+  assert_contains "$lsp" 'version = "v1.32.0"' "pins mason-lspconfig v1"
+  assert_contains "$lsp" "debounce_hours = 24" "debounces tool installer"
+  assert_not_contains "$lsp" "vim.tbl_keys(servers" "does not auto-install every LSP via tool-installer"
+  pass "nvim lsp pins for 0.10 ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_linux_prefers_nvim_cache
 test_linux_download_uses_pinned_url
 test_linux_skips_when_nvim_present
+test_lsp_pins_for_nvim_010
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"

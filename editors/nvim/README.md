@@ -286,6 +286,22 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 **解法**：改为官方 `nvim-linux-*.tar.gz`，解压到 `~/.local/nvim` 并 symlink `~/.local/bin/nvim`，不依赖 FUSE。
 
+### 2026-07-30 — mason-lspconfig `vim.lsp.enable` 为 nil（Neovim 0.10）
+
+**表象**：打开文件时报 `Failed to run config for nvim-lspconfig` / `attempt to call field 'enable' (a nil value)`，并常伴随每次启动 `jdtls: installing` / `clangd: installing`。
+
+**根因**：`mason-lspconfig` v2+ 默认 `automatic_enable`，调用 Neovim 0.11 才有的 `vim.lsp.enable()`；同时 `mason-tool-installer` 把全部 LSP 放进 `ensure_installed`，启动时反复尝试安装。
+
+**解法**：钉住 `nvim-lspconfig` v1.8.0、`mason.nvim` v1.11.0、`mason-lspconfig` v1.32.0；仅自动安装常用 LSP + 格式化工具（`debounce_hours = 24`）。已装过插件时执行：
+
+```bash
+rm -rf ~/.local/share/nvim/lazy/mason.nvim ~/.local/share/nvim/lazy/mason-lspconfig.nvim ~/.local/share/nvim/lazy/nvim-lspconfig
+# 或整目录: rm -rf ~/.local/share/nvim/lazy
+nvim --headless "+Lazy! sync" +qall
+```
+
+重型服务器（jdtls / clangd / rust_analyzer 等）仍可在 `:Mason` 中按需安装。
+
 ## References
 
 - [Neovim Documentation](https://neovim.io/doc/)
