@@ -9,6 +9,8 @@ SKILLS_SRC="$SCRIPT_DIR/skills"
 RULES_SRC="$SCRIPT_DIR/rules"
 CURSOR_SKILLS="${CURSOR_SKILLS_DIR:-$HOME/.cursor/skills}"
 CLAUDE_SKILLS="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
+# Codex 官方推荐用户级路径为 ~/.agents/skills（旧路径 ~/.codex/skills 仍可用，设 CODEX_SKILLS_DIR 覆盖）
+CODEX_SKILLS="${CODEX_SKILLS_DIR:-$HOME/.agents/skills}"
 CURSOR_RULES="${CURSOR_RULES_DIR:-$HOME/.cursor/rules}"
 
 DRY_RUN=0
@@ -42,18 +44,23 @@ ${BOLD}命令:${NC}
 
 ${BOLD}选项:${NC}
   --dry-run         只预览，不改动文件系统
-  --target <name>   cursor（默认）| claude | all
+  --target <name>   cursor（默认）| claude | codex | all
   --copy            复制目录而非符号链接
   -h, --help        显示帮助
 
 ${BOLD}说明:${NC}
-  skills 同步到 ~/.cursor/skills/ 或 ~/.claude/skills/
-  rules（*.mdc）仅同步到 ~/.cursor/rules/（claude / all 时 skills 仍同步，rules 只写 Cursor）
+  skills 同步到：
+    cursor → ~/.cursor/skills/
+    claude → ~/.claude/skills/
+    codex  → ~/.agents/skills/（可用 CODEX_SKILLS_DIR 覆盖，例如 ~/.codex/skills）
+    all    → 上述三端
+  rules（*.mdc）仅同步到 ~/.cursor/rules/（claude/codex 时跳过；all 时仍只写 Cursor）
 
 ${BOLD}示例:${NC}
   $(basename "$0") sync
   $(basename "$0") sync --dry-run
   $(basename "$0") sync --target all
+  $(basename "$0") sync --target codex
   $(basename "$0") status
   $(basename "$0") unlink --dry-run
 
@@ -120,16 +127,28 @@ _unlink_rules_for_cursor() {
     done < <(_list_rules)
 }
 
+_validate_target() {
+    case "$1" in
+        cursor|claude|codex|all) return 0 ;;
+        *)
+            error "未知 --target: $1（期望 cursor|claude|codex|all）"
+            exit 1
+            ;;
+    esac
+}
+
 _dest_dirs_for_target() {
     case "$1" in
         cursor) printf '%s\n' "$CURSOR_SKILLS" ;;
         claude) printf '%s\n' "$CLAUDE_SKILLS" ;;
+        codex) printf '%s\n' "$CODEX_SKILLS" ;;
         all)
             printf '%s\n' "$CURSOR_SKILLS"
             printf '%s\n' "$CLAUDE_SKILLS"
+            printf '%s\n' "$CODEX_SKILLS"
             ;;
         *)
-            error "未知 --target: $1（期望 cursor|claude|all）"
+            error "未知 --target: $1（期望 cursor|claude|codex|all）"
             exit 1
             ;;
     esac
@@ -232,14 +251,14 @@ cmd_sync() {
         success "skills 完成（处理 $count 项）"
     fi
 
-    # rules 仅写入 Cursor（claude/all 时 skills 仍按 target，rules 固定 Cursor）
+    # rules 仅写入 Cursor（claude/codex/all 时 skills 仍按 target，rules 固定 Cursor）
     case "$TARGET" in
         cursor|all)
             step "同步 cookbook rules → cursor ($CURSOR_RULES)"
             _sync_rules_for_cursor
             ;;
-        claude)
-            info "跳过 rules 同步（--target claude）"
+        claude|codex)
+            info "跳过 rules 同步（--target $TARGET）"
             ;;
     esac
 }
@@ -260,8 +279,8 @@ cmd_unlink() {
             step "移除 cookbook rules 链接 → cursor"
             _unlink_rules_for_cursor
             ;;
-        claude)
-            info "跳过 rules unlink（--target claude）"
+        claude|codex)
+            info "跳过 rules unlink（--target $TARGET）"
             ;;
     esac
 }
@@ -274,6 +293,7 @@ cmd_status() {
     echo -e "${BOLD}源目录:${NC} $SKILLS_SRC"
     echo -e "${BOLD}Cursor:${NC} $CURSOR_SKILLS"
     echo -e "${BOLD}Claude:${NC} $CLAUDE_SKILLS"
+    echo -e "${BOLD}Codex:${NC}  $CODEX_SKILLS"
     echo
 
     while IFS=$'\t' read -r name src; do
@@ -281,7 +301,7 @@ cmd_status() {
         found=1
         echo -e "${BOLD}$name${NC}"
         echo "  src: $src"
-        for dest_root in "$CURSOR_SKILLS" "$CLAUDE_SKILLS"; do
+        for dest_root in "$CURSOR_SKILLS" "$CLAUDE_SKILLS" "$CODEX_SKILLS"; do
             dest="$dest_root/$name"
             if _is_cookbook_link "$dest" "$src"; then
                 echo -e "  ${GREEN}linked${NC}: $dest"
@@ -331,6 +351,7 @@ parse_global_opts() {
             --target)
                 [[ $# -ge 2 ]] || { error "--target 需要参数"; exit 1; }
                 TARGET="$2"
+                _validate_target "$TARGET"
                 shift 2
                 ;;
             -h|--help) usage; exit 0 ;;

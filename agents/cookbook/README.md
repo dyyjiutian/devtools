@@ -1,6 +1,6 @@
 # Agent Cookbook
 
-个人编程习惯与经验的可消费配方集，供 Cursor / Claude 等 Agent 使用。  
+个人编程习惯与经验的可消费配方集，供 Cursor / Claude / Codex 等 Agent 使用。
 不是运行时安装器；安装与渠道配置仍在 `agents/claude`、`agents/codex`、`agents/cursor-agent`。
 
 ## 目录约定
@@ -28,20 +28,46 @@ agents/cookbook/
 
 真实可执行 Git 工具仍在 `tools/git/`（如 `git rb`、`git review`）；本目录只沉淀「如何编排」的经验。
 
-## 同步到本机
+## 同步到本机（多 Agent CLI）
+
+`setup.sh sync` 把 cookbook 里的 skills（及 Cursor rules）链到各 Agent 的本机消费目录。默认符号链接，便于在仓库内改 recipe 后立即生效。
+
+| `--target` | skills 目标 | rules |
+|------------|-------------|-------|
+| `cursor`（默认） | `~/.cursor/skills/` | `~/.cursor/rules/` |
+| `claude` | `~/.claude/skills/` | 跳过 |
+| `codex` | `~/.agents/skills/` | 跳过 |
+| `all` | 上述三端 | 仅 Cursor |
+
+> Codex 官方推荐用户级路径为 `~/.agents/skills/`。若仍使用旧路径，可覆盖：
+> `CODEX_SKILLS_DIR="$HOME/.codex/skills" ./setup.sh sync --target codex`
+
+### 一次安装到多个 Agent
 
 ```bash
 cd agents/cookbook
 
-./setup.sh sync              # skills → ~/.cursor/skills/；rules → ~/.cursor/rules/
-./setup.sh sync --dry-run    # 预览
-./setup.sh sync --target claude   # 仅 skills → ~/.claude/skills/（跳过 Cursor rules）
-./setup.sh sync --target all      # Cursor skills+rules + Claude skills
-./setup.sh status
-./setup.sh unlink            # 移除本 cookbook 创建的链接
+./setup.sh sync --target all           # Cursor + Claude + Codex
+./setup.sh sync --target all --dry-run # 预览三端路径，不改动文件
+./setup.sh status                      # 查看各端链接状态
 ```
 
-默认用符号链接，便于在仓库内改 recipe 后立即生效。勿把 API Key、本机绝对路径或临时配置提交进本目录。
+### 只安装到某一个 Agent
+
+```bash
+./setup.sh sync                        # 仅 Cursor（skills + rules）
+./setup.sh sync --target claude        # 仅 Claude skills
+./setup.sh sync --target codex         # 仅 Codex skills
+```
+
+### 常用维护
+
+```bash
+./setup.sh unlink --target all         # 移除本 cookbook 创建的三端链接
+./setup.sh sync --copy --target all    # 复制而非符号链接（适合只读部署）
+```
+
+勿把 API Key、本机绝对路径或临时配置提交进本目录。
 
 ## 现有 skills
 
@@ -59,7 +85,7 @@ cd agents/cookbook
 
 - **完整：** brainstorm → spec → exec → simply → test  
 - **简单：** brainstorm → exec → test（无长 spec、无 simply）  
-- 覆盖口令：`用完整流程` / `用简单流程` / `跳过 simply` / `用官方 superpowers`
+- **覆盖口令：** `用完整流程` / `用简单流程` / `跳过 simply` / `用官方 superpowers`
 
 设计见 `docs/superpowers/specs/2026-07-30-dev-pipeline-design.md`。
 
@@ -69,11 +95,12 @@ cd agents/cookbook
 |------|------|
 | `prefer-dev-pipeline.mdc` | `alwaysApply`：开发任务优先 `dev-pipeline`，不默认走官方 Superpowers 总入口 |
 
-`./setup.sh sync`（`--target cursor` 或 `all`）会把 `rules/*.mdc` 链到 `~/.cursor/rules/`。
+`./setup.sh sync`（`--target cursor` 或 `all`）会把 `rules/*.mdc` 链到 `~/.cursor/rules/`。Claude / Codex 不消费 Cursor `.mdc` rules。
 
 ## 校验
 
 ```bash
 bash agents/cookbook/tests/skills_structure_test.sh
+bash agents/cookbook/tests/setup_sync_test.sh
 bash -n agents/cookbook/setup.sh
 ```
