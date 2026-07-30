@@ -1,13 +1,13 @@
 ---
-name: dev-exec
+name: dev-execute
 description: >-
-  Use when implementing an already-clarified intent or approved short spec
-  in the dev-pipeline workflow. Triggers: 实现, exec, 按 spec 做, 开始写代码.
+  Use when implementing an already-clarified intent or approved short design
+  in the dev-loop workflow. Triggers: 实现, execute, exec, 按 design 做, 开始写代码.
 ---
 
-# Dev Exec
+# Dev Execute
 
-按已确认意图/spec 实现。保持仓库模块边界；根入口不塞具体平台细节。
+按已确认意图/design 实现。保持仓库模块边界；根入口不塞具体平台细节。
 
 前提：已完成 `dev-workspace`（或用户明确跳过隔离）。完整模式若使用 `.worktrees/`，所有编辑必须落在该 worktree 绝对路径下。
 
@@ -25,7 +25,7 @@ git diff --cached --stat
 |---|---|
 | 干净，或仅有本会话已知未提交改动 | 继续 |
 | 出现未知/他人/其它工具改动的文件 | **先停下**：列出路径，对照意图；询问纳入、还原，或重读后再改 |
-| 预期要改的文件内容与上次读取不一致（被外部改写） | **先停下**：重新 Read，必要时退回 `dev-brainstorm` / 调整方案 |
+| 预期要改的文件内容与上次读取不一致（被外部改写） | **先停下**：重新 Read，必要时退回 `dev-ask` / 调整方案 |
 
 不要在未确认的脏状态上继续 Write，避免与外部改动叠成不一致。
 
@@ -34,11 +34,11 @@ git diff --cached --stat
 1. 确认工作根与分支与 `dev-workspace` 宣布的一致
 2. 跑 Preflight；异常则停，不开始改
 3. 若 full 且任务明显多步：可先写短 plan（可选），再动手
-4. 行为/逻辑改动：先走 `dev-test` 的 TDD 要求（先失败测试）
-5. 配置/文档/幂等脚本：直接最小改动，稍后用 `dev-test` 做实现后验证
+4. 行为/逻辑改动：先走 `dev-verify` 的 TDD 要求（先失败测试）
+5. 配置/文档/幂等脚本：直接最小改动，稍后用 `dev-verify` 做实现后验证
 6. 改动保持可重入；遵循目标模块 README / AGENTS
 7. 每轮较大编辑前可再跑一次 Preflight
-8. 完成后：full → `dev-simply`；simple → `dev-test`
+8. 完成后：full → `dev-simply`；simple → `dev-verify`
 
 ## When to stop
 

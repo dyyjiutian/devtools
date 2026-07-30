@@ -1,15 +1,15 @@
 ---
-name: dev-test
+name: dev-verify
 description: >-
-  Use as the verification gate in dev-pipeline after exec (and simply in
-  full mode). Triggers: TDD, 补测, 验证, verification, regression.
+  Use as the verification gate in dev-loop after execute (and simply in
+  full mode). Triggers: verify, TDD, 补测, 验证, verification, regression, test.
 ---
 
-# Dev Test
+# Dev Verify
 
-两种模式共用的测试门禁。完成前必须有证据；缺工具则说明未跑，不得假称通过。
+两种模式共用的验证门禁（不只单测：含脚本检查、dry-run、场景验证等）。完成前必须有证据；缺工具则说明未跑，不得假称通过。
 
-优先执行设计阶段已确认的测试策略（full：spec `## 测试要点`；simple：brainstorm 结论）。不要用更弱的检查悄悄降级。
+优先执行设计阶段已确认的验证策略（full：design `## 测试要点`；simple：ask 结论）。不要用更弱的检查悄悄降级。
 
 ## Strategy
 

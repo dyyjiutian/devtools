@@ -1,15 +1,15 @@
 ---
 name: dev-workspace
 description: >-
-  Use after clarifying intent (and writing a full-mode spec) and before
-  implementation in the dev-pipeline workflow. Sets up branch or .worktrees
+  Use after clarifying intent (and writing a full-mode design) and before
+  implementation in the dev-loop workflow. Sets up branch or .worktrees
   isolation, rebases onto main, and checks for structural drift.
   Triggers: worktree, .worktrees, 临时分支, 隔离, rebase, 不在主干改.
 ---
 
 # Dev Workspace
 
-在 `dev-exec` 之前准备隔离工作区。默认**不在主干**（`main` / `master`）上直接改代码，除非用户明确要求「就在当前分支 / 主干上做」。
+在 `dev-execute` 之前准备隔离工作区。默认**不在主干**（`main` / `master`）上直接改代码，除非用户明确要求「就在当前分支 / 主干上做」。
 
 开场宣布：`Using dev-workspace (mode=<full|simple>, root=<path>, branch=<name>)`。
 
@@ -20,7 +20,7 @@ description: >-
 ### full
 
 1. 确保仓库根存在可忽略的 `.worktrees/`（本仓库 `.gitignore` 已含；若缺失则补上并单独 commit）
-2. 选短横线 topic（来自 spec / 用户说法），分支名建议 `feat/<topic>` 或 `fix/<topic>`
+2. 选短横线 topic（来自 design / 用户说法），分支名建议 `feat/<topic>` 或 `fix/<topic>`
 3. 若该 worktree / 分支尚不存在：
    ```bash
    git fetch origin
@@ -58,21 +58,21 @@ git rebase origin/main
 
 （基线同 Isolation；冲突则停下解决或询问，禁止 `--force` 覆盖他人历史。）
 
-rebase 完成后做**结构漂移检查**（对照已确认的意图 / spec）：
+rebase 完成后做**结构漂移检查**（对照已确认的意图 / design）：
 
 | 信号 | 处理 |
 |---|---|
-| spec 点名的路径/模块消失或大幅搬迁 | 暂停实现 → 回到 `dev-brainstorm`（full 时必要时改 `dev-spec`） |
+| design 点名的路径/模块消失或大幅搬迁 | 暂停实现 → 回到 `dev-ask`（full 时必要时改 `dev-design`） |
 | 同文件区域出现与设计冲突的主干变更 | 同上 |
 | 依赖/入口/包布局与设计假设不一致 | 同上 |
-| 仅小冲突或无关文件变化 | 解决冲突后继续 `dev-exec` |
+| 仅小冲突或无关文件变化 | 解决冲突后继续 `dev-execute` |
 
-宣布结果：`workspace ready at <abs-root> on <branch>` 或 `drift detected — returning to brainstorm`。
+宣布结果：`workspace ready at <abs-root> on <branch>` 或 `drift detected — returning to ask`。
 
 ## Hard rules
 
-- 未完成本 skill（或用户明确跳过隔离）前，不要开始 `dev-exec` 写生产代码
+- 未完成本 skill（或用户明确跳过隔离）前，不要开始 `dev-execute` 写生产代码
 - 完整模式 worktree：禁止把实现写进主 checkout 路径
 - 不要嵌套创建 worktree（已在 worktree 内再 `git worktree add`）
-- `dev-exec` 每次改文件前须再检 workspace 脏状态（见该 skill 的 Preflight）；本 skill 只做进入实现前的初始隔离
+- `dev-execute` 每次改文件前须再检 workspace 脏状态（见该 skill 的 Preflight）；本 skill 只做进入实现前的初始隔离
 - 不提交密钥、本机绝对路径到仓库文档（对话里可报告 abs path）

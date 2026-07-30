@@ -10,7 +10,7 @@ agents/cookbook/
 ├── setup.sh           # 同步到本机 Agent 消费路径（支持 --dry-run）
 ├── skills/            # 按需加载的工作流配方（主内容）
 │   ├── git/submit/    # 整理 commit → rebase → 开 MR/PR
-│   └── dev/           # 轻量开发流水线（替代默认 Superpowers 总入口）
+│   └── dev/           # 轻量开发闭环（替代默认 Superpowers 总入口）
 ├── commands/          # 显式触发的短入口（可选）
 ├── subagents/         # 角色分工定义（可选）
 ├── rules/             # 常驻规范（可选，宜少）
@@ -74,28 +74,28 @@ cd agents/cookbook
 | Skill | 触发场景 |
 |-------|----------|
 | `git-submit` | 整理本地 commit、按 Conventional Commits 提交、rebase 主干并创建 MR/PR |
-| `dev-pipeline` | 开发任务默认总入口：自动选完整/简单模式并编排子 skill |
-| `dev-brainstorm` | 澄清意图、需求与测试策略（简单/完整模式都要做） |
-| `dev-spec` | 完整模式：写中等短 spec（含可执行的测试要点）到 `docs/superpowers/specs/` |
-| `dev-workspace` | exec 前隔离：full 用 `.worktrees/`；simple 在主干建临时分支；rebase + 漂移检查 |
-| `dev-exec` | 按已确认意图/spec 实现；每次改文件前 Preflight 检测未知脏改动 |
-| `dev-simply` | 完整模式、exec 之后：按 Clean Architecture 精简过度设计 |
-| `dev-test` | 测试门禁：行为/逻辑走 TDD；配置/文档/幂等脚本走实现后验证 |
+| `dev-loop` | 开发任务默认总入口：自动选完整/简单模式并编排子 skill |
+| `dev-ask` | 澄清意图、需求与验证策略（简单/完整模式都要做） |
+| `dev-design` | 完整模式：写中等短 design（含可执行的测试要点）到 `docs/superpowers/specs/` |
+| `dev-workspace` | execute 前隔离：full 用 `.worktrees/`；simple 在主干建临时分支；rebase + 漂移检查 |
+| `dev-execute` | 按已确认意图/design 实现；每次改文件前 Preflight 检测未知脏改动 |
+| `dev-simply` | 完整模式、execute 之后：按 Clean Architecture 精简过度设计 |
+| `dev-verify` | 验证门禁：行为/逻辑走 TDD；配置/文档/幂等脚本走实现后验证 |
 
-### Dev Pipeline 模式
+### Dev Loop 模式
 
-- **完整：** brainstorm → spec → workspace → exec → simply → test
-- **简单：** brainstorm → workspace → exec → test（无长 spec、无 simply）
-- **隔离：** 默认不在主干实现；full 建 `.worktrees/<topic>`（当前窗口 + 绝对路径）；新建隔离后 rebase，结构漂移大则退回 brainstorm
+- **完整：** ask → design → workspace → execute → simply → verify
+- **简单：** ask → workspace → execute → verify（无长 design、无 simply）
+- **隔离：** 默认不在主干实现；full 建 `.worktrees/<topic>`（当前窗口 + 绝对路径）；新建隔离后 rebase，结构漂移大则退回 ask
 - **覆盖口令：** `用完整流程` / `用简单流程` / `跳过 simply` / `跳过 worktree` / `就在当前分支做` / `用官方 superpowers`
 
-设计见 `docs/superpowers/specs/2026-07-30-dev-pipeline-design.md`。
+设计见 `docs/superpowers/specs/2026-07-30-dev-pipeline-design.md`（文档文件名历史保留；内容已对齐 `dev-loop`）。
 
 ## Rules
 
 | Rule | 作用 |
 |------|------|
-| `prefer-dev-pipeline.mdc` | `alwaysApply`：开发任务优先 `dev-pipeline`，不默认走官方 Superpowers 总入口 |
+| `prefer-dev-loop.mdc` | `alwaysApply`：开发任务优先 `dev-loop`，不默认走官方 Superpowers 总入口 |
 
 `./setup.sh sync`（`--target cursor` 或 `all`）会把 `rules/*.mdc` 链到 `~/.cursor/rules/`。Claude / Codex 不消费 Cursor `.mdc` rules。
 
