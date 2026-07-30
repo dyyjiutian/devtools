@@ -14,9 +14,10 @@ step()    { echo -e "\033[36m[STEP]\033[0m $1"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NVIM_CONFIG_DIR="$HOME/.config/nvim"
-# Linux AppImage 固定 v0.10.4：兼容 Alinux 3 / glibc 2.32（更新 stable 需 glibc 2.34+）
+# Linux tarball 固定 v0.10.4：兼容 Alinux 3 / glibc 2.32；不用 AppImage（需 FUSE/fusermount）
 NVIM_VERSION="${NVIM_VERSION:-0.10.4}"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
+NVIM_INSTALL_DIR="${NVIM_INSTALL_DIR:-$HOME/.local/nvim}"
 
 # --- Help ---
 show_help() {
@@ -24,9 +25,9 @@ show_help() {
 Neovim Setup Script - 一键配置 Neovim 开发环境
 
 该脚本会执行以下配置:
-  1. 安装/更新 Neovim (Linux 固定 AppImage v${NVIM_VERSION}，兼容 glibc 2.32+)
+  1. 安装/更新 Neovim (Linux 固定 tarball v${NVIM_VERSION}，兼容 glibc 2.32+，无 FUSE 依赖)
      - macOS 通过 Homebrew 安装
-     - Linux 优先 cache/binaries/，否则下载官方 AppImage；失败再试包管理器
+     - Linux 优先 cache/binaries/，否则下载官方 tarball；失败再试包管理器
   2. 安装依赖: node, npm, ripgrep, fd, git
   3. 备份已有的 Neovim 配置 (如果存在)
   4. 安装 lazy.nvim 插件管理器
@@ -42,7 +43,8 @@ Neovim Setup Script - 一键配置 Neovim 开发环境
   ./setup.sh --help       显示此帮助信息
 
 环境变量:
-  NVIM_VERSION         Linux AppImage 版本（默认 ${NVIM_VERSION}）
+  NVIM_VERSION         Linux tarball 版本（默认 ${NVIM_VERSION}）
+  NVIM_INSTALL_DIR     Linux 解压目录（默认 ~/.local/nvim）
   DEVTOOLS_CACHE_DIR   离线缓存根目录（默认仓库 cache/）
 EOF
     # Keep keybindings in a separate literal block for readability
@@ -155,33 +157,52 @@ install_nvim_linux() {
         return 0
     fi
 
-    info "Installing Neovim v${NVIM_VERSION} via AppImage..."
+    info "Installing Neovim v${NVIM_VERSION} via tarball..."
 
-    local arch_asset filename cached url nvim_path tmp
+    local arch_asset filename cached url archive_path extract_dir top_dir nvim_bin
     arch_asset="$(_nvim_linux_arch_asset)"
-    filename="nvim-${arch_asset}-v${NVIM_VERSION}.appimage"
+    filename="nvim-${arch_asset}-v${NVIM_VERSION}.tar.gz"
     cached="${CACHE_DIR}/binaries/${filename}"
-    url="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-${arch_asset}.appimage"
-    nvim_path="$HOME/.local/bin/nvim"
-    tmp="$(mktemp "${TMPDIR:-/tmp}/nvim.appimage.XXXXXX")"
+    url="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-${arch_asset}.tar.gz"
+    extract_dir="$(mktemp -d "${TMPDIR:-/tmp}/nvim-extract.XXXXXX")"
+    archive_path="${extract_dir}/${filename}"
 
     _ensure_local_bin_path
 
     if [[ -f "$cached" ]]; then
         info "Using local cache: binaries/${filename}"
-        cp "$cached" "$tmp"
-    elif curl -fL --retry 3 -o "$tmp" "$url"; then
-        info "Downloaded Neovim v${NVIM_VERSION} AppImage"
+        cp "$cached" "$archive_path"
+    elif curl -fL --retry 3 -o "$archive_path" "$url"; then
+        info "Downloaded Neovim v${NVIM_VERSION} tarball"
     else
-        rm -f "$tmp"
-        warn "Failed to download AppImage, trying package manager..."
+        rm -rf "$extract_dir"
+        warn "Failed to download tarball, trying package manager..."
         install_nvim_linux_package_manager
         return 0
     fi
 
-    chmod +x "$tmp"
-    mv "$tmp" "$nvim_path"
-    success "Neovim AppImage installed to $nvim_path"
+    if ! tar -xzf "$archive_path" -C "$extract_dir"; then
+        rm -rf "$extract_dir"
+        warn "Failed to extract Neovim tarball, trying package manager..."
+        install_nvim_linux_package_manager
+        return 0
+    fi
+
+    top_dir="${extract_dir}/nvim-${arch_asset}"
+    nvim_bin="${top_dir}/bin/nvim"
+    if [[ ! -x "$nvim_bin" ]]; then
+        rm -rf "$extract_dir"
+        error "Neovim tarball missing bin/nvim"
+        exit 1
+    fi
+
+    rm -rf "$NVIM_INSTALL_DIR"
+    mkdir -p "$(dirname "$NVIM_INSTALL_DIR")"
+    mv "$top_dir" "$NVIM_INSTALL_DIR"
+    ln -sfn "$NVIM_INSTALL_DIR/bin/nvim" "$HOME/.local/bin/nvim"
+    rm -rf "$extract_dir"
+
+    success "Neovim tarball installed to $NVIM_INSTALL_DIR (symlink ~/.local/bin/nvim)"
 }
 
 install_nvim_linux_package_manager() {

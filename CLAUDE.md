@@ -153,6 +153,10 @@ For new or changed shell functionality:
   compatibility baseline is x86_64 only.
 - Prefer cached installation assets under `cache/`. If a source, version,
   checksum, or architecture changes, update the corresponding tests.
+- When choosing cache artifacts or installer packages, prefer fewer runtime
+  dependencies and broader compatibility (e.g. static/musl binaries or
+  official portable tarballs over AppImages that need FUSE/`fusermount`, or
+  builds that require a newer glibc than Alinux/CentOS baselines).
 - Do not commit API keys, passwords, UUIDs, private keys, personal machine
   paths, or temporary generated configuration.
 

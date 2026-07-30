@@ -165,14 +165,14 @@ test_linux_download_includes_nvim() {
 
   PATH="$fake_bin:$ORIGINAL_PATH" download_linux >/dev/null
 
-  grep -Fq $'https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.appimage\t'"$dir/binaries/nvim-linux-x86_64-v0.10.4.appimage" "$log" ||
-    fail "linux download missing nvim x86_64 v0.10.4 AppImage"
-  grep -Fq $'https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-arm64.appimage\t'"$dir/binaries/nvim-linux-arm64-v0.10.4.appimage" "$log" ||
-    fail "linux download missing nvim arm64 v0.10.4 AppImage"
-  if grep -E '/stable/nvim' "$log"; then
-    fail "linux download still references neovim stable"
+  grep -Fq $'https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz\t'"$dir/binaries/nvim-linux-x86_64-v0.10.4.tar.gz" "$log" ||
+    fail "linux download missing nvim x86_64 v0.10.4 tarball"
+  grep -Fq $'https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-arm64.tar.gz\t'"$dir/binaries/nvim-linux-arm64-v0.10.4.tar.gz" "$log" ||
+    fail "linux download missing nvim arm64 v0.10.4 tarball"
+  if grep -Ei 'appimage|/stable/nvim' "$log"; then
+    fail "linux download still references neovim AppImage or stable"
   fi
-  echo "PASS: Linux cache download includes pinned Neovim AppImages"
+  echo "PASS: Linux cache download includes pinned Neovim tarballs"
 }
 
 test_valid_cache_skips_download

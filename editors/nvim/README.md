@@ -16,7 +16,7 @@ Modern Neovim configuration with Lua-based setup using [lazy.nvim](https://githu
 
 ## Prerequisites
 
-- **Neovim** >= 0.9.0（Linux 安装器固定 **v0.10.4** AppImage，兼容 Alinux 3 / glibc 2.32）
+- **Neovim** >= 0.9.0（Linux 安装器固定 **v0.10.4** portable tarball，兼容 Alinux 3 / glibc 2.32，无 FUSE 依赖）
 - **Git**
 - **Node.js** >= 16 (for LSP servers)
 - **Ripgrep** (for Telescope grep)
@@ -31,7 +31,7 @@ cd editors/nvim
 ```
 
 This will:
-1. Install/Update Neovim if needed（Linux：优先 `cache/binaries/nvim-*-v0.10.4.appimage`）
+1. Install/Update Neovim if needed（Linux：优先 `cache/binaries/nvim-*-v0.10.4.tar.gz`）
 2. Install system dependencies
 3. Copy configuration files
 4. Install Nerd Font for icons
@@ -45,11 +45,13 @@ If you prefer to set up manually:
 # 1. Install Neovim (macOS)
 brew install neovim node ripgrep fd
 
-# 1. Install Neovim (Linux) — pin v0.10.4 for glibc 2.32 (Alinux 3)
-curl -LO https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.appimage
-chmod u+x nvim-linux-x86_64.appimage
-mkdir -p ~/.local/bin
-mv nvim-linux-x86_64.appimage ~/.local/bin/nvim
+# 1. Install Neovim (Linux) — pin v0.10.4 tarball (glibc 2.32 / no FUSE)
+curl -LO https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz
+tar -xzf nvim-linux-x86_64.tar.gz
+mkdir -p ~/.local
+rm -rf ~/.local/nvim
+mv nvim-linux-x86_64 ~/.local/nvim
+ln -sfn ~/.local/nvim/bin/nvim ~/.local/bin/nvim
 
 # 2. Copy config files
 mkdir -p ~/.config/nvim
@@ -270,11 +272,19 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 ### 2026-07-30 — Alinux 3 安装 Neovim stable 失败（glibc）
 
-**表象**：`editors/nvim/setup.sh` 在 Alinux 3 上下载/运行最新 stable AppImage 失败，提示找不到可用包或动态链接器不满足要求。
+**表象**：`editors/nvim/setup.sh` 在 Alinux 3 上下载/运行最新 stable 失败，提示找不到可用包或动态链接器不满足要求。
 
 **根因**：较新的 Neovim stable 需要 glibc 2.34+，Alinux 3 为 glibc 2.32。
 
-**解法**：Linux 安装固定为 v0.10.4 AppImage；优先使用仓库 `cache/binaries/nvim-linux-*-v0.10.4.appimage`，缺失时再从 GitHub 下载同版本。可用 `bash cache/download.sh linux` 预拉缓存。
+**解法**：Linux 安装固定为 v0.10.4 portable tarball；优先使用仓库 `cache/binaries/nvim-linux-*-v0.10.4.tar.gz`，缺失时再从 GitHub 下载同版本。可用 `bash cache/download.sh linux` 预拉缓存。
+
+### 2026-07-30 — AppImage 依赖 fusermount / FUSE
+
+**表象**：安装后运行出现 `fuse: failed to exec fusermount: No such file or directory`。
+
+**根因**：AppImage 依赖 FUSE/`fusermount`，精简服务器镜像常未安装。
+
+**解法**：改为官方 `nvim-linux-*.tar.gz`，解压到 `~/.local/nvim` 并 symlink `~/.local/bin/nvim`，不依赖 FUSE。
 
 ## References
 

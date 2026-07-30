@@ -12,11 +12,28 @@ _devtools_write_exec() {
   chmod +x "$path"
 }
 
+# Build a minimal nvim-linux-x86_64 tarball matching upstream layout.
+make_fake_nvim_tarball() {
+  local dest="$1"
+  local payload
+  payload="$(mktemp -d "${TMPDIR:-/tmp}/nvim-fake.XXXXXX")"
+  mkdir -p "$payload/nvim-linux-x86_64/bin"
+  cat >"$payload/nvim-linux-x86_64/bin/nvim" <<'EOF'
+#!/usr/bin/env bash
+echo "NVIM v0.10.4 (fake tarball)"
+EOF
+  chmod +x "$payload/nvim-linux-x86_64/bin/nvim"
+  mkdir -p "$(dirname "$dest")"
+  tar -czf "$dest" -C "$payload" nvim-linux-x86_64
+  rm -rf "$payload"
+}
+
 test_help() {
   local out
   out="$(bash "$SETUP_SH" --help 2>&1)"
   assert_contains "$out" "Neovim" "help mentions Neovim"
   assert_contains "$out" "0.10.4" "help mentions pinned version"
+  assert_contains "$out" "tarball" "help mentions tarball install"
   pass "nvim setup --help ($DEVTOOLS_TEST_PROFILE)"
 }
 
@@ -30,20 +47,15 @@ test_linux_prefers_nvim_cache() {
   esac
 
   local alt_bin="$HOME/nvim-cache-bin"
-  local cache_name="nvim-linux-x86_64-v0.10.4.appimage"
+  local cache_name="nvim-linux-x86_64-v0.10.4.tar.gz"
   local cached="$DEVTOOLS_CACHE_DIR/binaries/$cache_name"
   local out
 
   mkdir -p "$DEVTOOLS_CACHE_DIR/binaries" "$alt_bin" "$HOME/.local/bin"
   rm -f "$HOME/curl-was-called" "$HOME/.local/bin/nvim"
+  rm -rf "$HOME/.local/nvim"
 
-  # Minimal fake AppImage payload (executable stub).
-  cat >"$cached" <<'EOF'
-#!/usr/bin/env bash
-echo "NVIM v0.10.4 (fake cache)"
-EOF
-  chmod +x "$cached"
-
+  make_fake_nvim_tarball "$cached"
   _devtools_write_exec "$alt_bin/curl" 'touch "$HOME/curl-was-called"; echo "curl should not run" >&2; exit 1'
 
   out="$(
@@ -62,7 +74,8 @@ EOF
 
   assert_contains "$out" "local cache" "mentions local cache"
   assert_contains "$out" "$cache_name" "mentions cached filename"
-  assert_file_exists "$HOME/.local/bin/nvim" "nvim installed to ~/.local/bin"
+  assert_file_exists "$HOME/.local/nvim/bin/nvim" "nvim tree installed under ~/.local/nvim"
+  assert_symlink "$HOME/.local/bin/nvim" "nvim symlink in ~/.local/bin"
   [[ ! -e "$HOME/curl-was-called" ]] || {
     echo "FAIL: valid cache unexpectedly accessed network" >&2
     return 1
@@ -82,9 +95,13 @@ test_linux_download_uses_pinned_url() {
   local alt_bin="$HOME/nvim-download-bin"
   local out
   local url_log="$HOME/curl-url.log"
+  local fixture="$HOME/fake-nvim.tar.gz"
 
   mkdir -p "$alt_bin" "$HOME/.local/bin" "$DEVTOOLS_CACHE_DIR/binaries"
-  rm -f "$DEVTOOLS_CACHE_DIR/binaries"/nvim-*.appimage "$url_log" "$HOME/.local/bin/nvim"
+  rm -f "$DEVTOOLS_CACHE_DIR/binaries"/nvim-*.tar.gz "$DEVTOOLS_CACHE_DIR/binaries"/nvim-*.appimage \
+    "$url_log" "$HOME/.local/bin/nvim"
+  rm -rf "$HOME/.local/nvim"
+  make_fake_nvim_tarball "$fixture"
 
   _devtools_write_exec "$alt_bin/curl" '
 printf "%s\n" "$*" >>"$HOME/curl-url.log"
@@ -98,11 +115,7 @@ while [[ $# -gt 0 ]]; do
   fi
 done
 [[ -n "$out" ]]
-cat >"$out" <<'"'"'APP'"'"'
-#!/usr/bin/env bash
-echo fake-nvim
-APP
-chmod +x "$out"
+cp "$HOME/fake-nvim.tar.gz" "$out"
 '
 
   out="$(
@@ -120,7 +133,8 @@ chmod +x "$out"
   }
 
   assert_file_exists "$url_log" "curl was invoked"
-  assert_contains "$(cat "$url_log")" "v0.10.4/nvim-linux-x86_64.appimage" "downloads pinned v0.10.4"
+  assert_contains "$(cat "$url_log")" "v0.10.4/nvim-linux-x86_64.tar.gz" "downloads pinned v0.10.4 tarball"
+  assert_not_contains "$(cat "$url_log")" "appimage" "does not download AppImage"
   assert_not_contains "$(cat "$url_log")" "/stable/" "does not use stable tag"
   assert_file_exists "$HOME/.local/bin/nvim" "nvim installed after download"
   pass "nvim linux downloads pinned URL ($DEVTOOLS_TEST_PROFILE)"
