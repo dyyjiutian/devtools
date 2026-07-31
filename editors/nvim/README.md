@@ -95,7 +95,7 @@ nvim
 
 | Key | Description |
 |-----|-------------|
-| `<Space>e` | Toggle file explorer (nvim-tree) |
+| `<Space>n` | Toggle file explorer (nvim-tree) |
 | `<Space>w` | Save file |
 | `<Space>q` | Quit |
 | `<Space>wq` | Save and quit |
@@ -236,8 +236,7 @@ Additional formatters installed:
 ```bash
 ./setup.sh              # Full installation
 ./setup.sh --backup     # Backup existing config
-./setup.sh --restore    # Restore config from backup
-./setup.sh --update     # Update plugins only
+./setup.sh --update     # Sync init.lua/lua/ config, then update plugins and LSP servers
 ./setup.sh --help       # Show help
 ```
 
@@ -308,10 +307,10 @@ nvim --headless -c "Lazy! sync" -c "qa!"
 
 **根因**：`nvim --headless +Lazy! sync +qall` 未加引号，shell 把参数拆成 `+Lazy!`、`sync`、`+qall`，`Lazy! sync` 从未作为一条 Ex 命令执行。
 
-**解法**：改为 `nvim --headless -c "Lazy! sync" -c "qa!"`（`_nvim_headless`）；setup/restore 前清理 pinned 的 mason/lspconfig 目录再 sync。重新执行：
+**解法**：改为 `nvim --headless -c "Lazy! sync" -c "qa!"`（`_nvim_headless`）；sync 前清理 pinned 的 mason/lspconfig 目录再 sync。重新执行：
 
 ```bash
-cd editors/nvim && ./setup.sh --restore
+cd editors/nvim && ./setup.sh --update
 ```
 
 ### 2026-07-30 — mason-lspconfig 报错导致所有 LSP 都未注册（gr 无结果）
@@ -364,6 +363,37 @@ cd editors/nvim && ./setup.sh --restore
 **解法**：`branch = "master"`，并把 `config` 改回 `require("nvim-treesitter.configs").setup(opts)`。
 `setup.sh` 同步前会删除 `nvim-treesitter` 目录，让 Lazy 重新 clone 到正确分支。生效后可用
 `:TSInstallInfo` 确认 parser 已安装。
+
+### 2026-07-31 — 适配 Neovim 0.10.4 的三个遗留问题（`--update` / `<Space>e` / LazyGit）
+
+Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生态默认跟随最新版，于是暴露出三个问题，一并修复：
+
+**1. `./setup.sh --update` 不生效**
+
+- 表象：改了 `lua/` 下的配置后执行 `--update`，行为没有任何变化。
+- 根因：`--update` 只跑 `Lazy! sync` + Mason 更新，从不把仓库里的 `init.lua` / `lua/` 同步到 `~/.config/nvim`。
+- 解法：`--update` 改为「同步配置 + 更新插件与 LSP」。配置同步收敛到 `sync_config()`，
+  首次接管时备份非托管配置并写入 `.devtools-nvim` marker，之后原地覆盖，不再堆积 `~/.config/nvim.bak.*`。
+  同时删除 `--restore`（与 `--update` 语义重复，且只会多做一次备份）。
+
+**2. `<Space>e` 打不开文件树**
+
+- 表象：`<Space>e` 弹出的是诊断浮窗，不是 nvim-tree。
+- 根因：`config/keymaps.lua` 的 `vim.diagnostic.open_float` 与 `plugins/nvim-tree.lua` 的 `NvimTreeToggle`
+  抢同一个键，后加载者覆盖前者。
+- 解法：文件树改到 `<Space>n`（`NvimTreeToggle`），`<Space>e` 保留给诊断浮窗。
+  同类问题还有 `<Space>q`：`vim.diagnostic.setloclist` 被同文件后面的 `<cmd>q<CR>` 覆盖，一直是死映射；
+  诊断列表已由 trouble.nvim 的 `<Space>xx` / `<Space>xX` 提供，故直接删除该映射，`<Space>q` 只表示退出。
+
+**3. `<Space>gg` 打不开 LazyGit**
+
+- 表象：`lazygit.nvim/lua/lazygit.lua:65` 报错。
+- 根因：上游改用 `vim.fn.jobstart(cmd, { term = true })`，`term` 选项是 Neovim 0.11 才有的；0.10 只能用 `termopen`。
+- 解法：0.11 以下 pin 到最后一个使用 `termopen` 的提交 `4839ab6`，0.11+ 仍跟随默认分支（`vim.fn.has("nvim-0.11")` 判断）。
+  代价是旧版本上拿不到 `4839ab6` 之后的上游修复；宿主升到 0.11 后该 pin 会自动失效。
+
+以上被 pin 的插件（mason / lspconfig / treesitter / lazygit）在 `_reset_pinned_plugins` 中统一清理后再 sync，
+避免本机留着不兼容的旧 checkout。
 
 ## References
 

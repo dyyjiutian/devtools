@@ -18,6 +18,7 @@ NVIM_CONFIG_DIR="$HOME/.config/nvim"
 NVIM_VERSION="${NVIM_VERSION:-0.10.4}"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 NVIM_INSTALL_DIR="${NVIM_INSTALL_DIR:-$HOME/.local/nvim}"
+CONFIG_MARKER=".devtools-nvim"
 
 # --- Help ---
 show_help() {
@@ -38,8 +39,7 @@ Neovim Setup Script - 一键配置 Neovim 开发环境
 用法:
   ./setup.sh              运行完整安装
   ./setup.sh --backup     备份现有配置到当前目录
-  ./setup.sh --restore    从当前目录恢复配置
-  ./setup.sh --update     仅更新插件
+  ./setup.sh --update     同步 init.lua/lua/ 配置并更新插件与 LSP
   ./setup.sh --help       显示此帮助信息
 
 环境变量:
@@ -51,7 +51,8 @@ EOF
     cat <<'EOF'
 
 快捷键速查 (Leader 键为空格 <Space>):
-  <Space>e     切换文件树 (nvim-tree)
+  <Space>n     切换文件树 (nvim-tree)
+  <Space>e     显示诊断浮窗 (diagnostic float)
   <Space>ff    模糊查找文件 (Telescope)
   <Space>fg    全局搜索 (Telescope live_grep)
   <Space>fb    列出缓冲区 (Telescope buffers)
@@ -163,7 +164,8 @@ _reset_pinned_plugins() {
         "${lazy_root}/mason.nvim" \
         "${lazy_root}/mason-lspconfig.nvim" \
         "${lazy_root}/nvim-lspconfig" \
-        "${lazy_root}/nvim-treesitter"
+        "${lazy_root}/nvim-treesitter" \
+        "${lazy_root}/lazygit.nvim"
 }
 
 _sync_lazy_plugins() {
@@ -354,51 +356,15 @@ backup_config() {
     exit 0
 }
 
-# --- Restore config ---
-restore_config() {
-    if [ ! -f "$SCRIPT_DIR/init.lua" ]; then
-        error "init.lua not found in $SCRIPT_DIR"
-        exit 1
-    fi
-
-    # Backup existing config
-    if [ -d "$NVIM_CONFIG_DIR" ]; then
-        local backup="$NVIM_CONFIG_DIR.bak.$(date +%Y%m%d%H%M%S)"
-        info "Backing up existing config to $backup"
-        mv "$NVIM_CONFIG_DIR" "$backup"
-    fi
-
-    # Create config directory
-    mkdir -p "$NVIM_CONFIG_DIR"
-
-    # Copy config files
-    cp -r "$SCRIPT_DIR/init.lua" "$NVIM_CONFIG_DIR/"
-    if [ -d "$SCRIPT_DIR/lua" ]; then
-        cp -r "$SCRIPT_DIR/lua" "$NVIM_CONFIG_DIR/"
-    fi
-
-    success "Config restored from $SCRIPT_DIR"
-
-    # Install plugins
-    _sync_lazy_plugins
-    _install_mason_tools
-
-    exit 0
-}
-
-# --- Update plugins ---
-update_plugins() {
+# --- Update: sync config files, then refresh plugins and LSP servers ---
+update_all() {
     if ! command -v nvim &>/dev/null; then
         error "Neovim not found"
         exit 1
     fi
 
-    step "Updating plugins..."
-    if _nvim_headless "Lazy! sync"; then
-        success "Plugins updated"
-    else
-        warn "Lazy sync reported errors"
-    fi
+    sync_config
+    _sync_lazy_plugins
 
     step "Updating LSP servers..."
     if _nvim_headless "MasonToolsUpdateSync"; then
@@ -470,32 +436,36 @@ install_nerd_font() {
     echo ""
 }
 
-# --- Copy configuration ---
-copy_config() {
-    step "Copying Neovim configuration..."
+# --- Sync configuration ---
+# Idempotent: an unmanaged config is backed up once, then the marker lets later
+# runs overwrite in place instead of piling up ~/.config/nvim.bak.* directories.
+sync_config() {
+    step "Syncing Neovim configuration..."
 
-    # Backup existing config
-    if [ -d "$NVIM_CONFIG_DIR" ] && [ ! -L "$NVIM_CONFIG_DIR" ]; then
+    if [ ! -f "$SCRIPT_DIR/init.lua" ]; then
+        error "init.lua not found in $SCRIPT_DIR"
+        exit 1
+    fi
+
+    if [ -L "$NVIM_CONFIG_DIR" ]; then
+        rm "$NVIM_CONFIG_DIR"
+    elif [ -d "$NVIM_CONFIG_DIR" ] && [ ! -f "$NVIM_CONFIG_DIR/$CONFIG_MARKER" ]; then
         local backup="$NVIM_CONFIG_DIR.bak.$(date +%Y%m%d%H%M%S)"
         info "Backing up existing config to $backup"
         mv "$NVIM_CONFIG_DIR" "$backup"
     fi
 
-    # Remove existing config if it's a symlink
-    if [ -L "$NVIM_CONFIG_DIR" ]; then
-        rm "$NVIM_CONFIG_DIR"
-    fi
-
-    # Create config directory
     mkdir -p "$NVIM_CONFIG_DIR"
 
-    # Copy files
-    cp -r "$SCRIPT_DIR/init.lua" "$NVIM_CONFIG_DIR/"
+    # Drop the managed lua/ tree so renamed or deleted modules do not linger.
+    rm -rf "$NVIM_CONFIG_DIR/lua"
+    cp "$SCRIPT_DIR/init.lua" "$NVIM_CONFIG_DIR/"
     if [ -d "$SCRIPT_DIR/lua" ]; then
         cp -r "$SCRIPT_DIR/lua" "$NVIM_CONFIG_DIR/"
     fi
+    echo "managed by devtools editors/nvim/setup.sh" > "$NVIM_CONFIG_DIR/$CONFIG_MARKER"
 
-    success "Configuration copied to $NVIM_CONFIG_DIR"
+    success "Configuration synced to $NVIM_CONFIG_DIR"
 }
 
 # --- Main setup ---
@@ -516,8 +486,8 @@ main() {
     # Install dependencies
     install_deps
 
-    # Copy configuration
-    copy_config
+    # Sync configuration
+    sync_config
 
     # Install Nerd Font
     install_nerd_font
@@ -538,7 +508,8 @@ main() {
     success "Neovim is ready to use!"
     echo ""
     echo "快速参考 (Quick Reference):"
-    echo "  <Space>e     切换文件树 (nvim-tree)"
+    echo "  <Space>n     切换文件树 (nvim-tree)"
+    echo "  <Space>e     显示诊断浮窗 (diagnostic float)"
     echo "  <Space>ff    模糊查找文件 (Telescope)"
     echo "  <Space>fg    全局搜索 (Telescope live_grep)"
     echo "  <Space>fb    列出缓冲区 (Telescope buffers)"
@@ -560,8 +531,7 @@ if [[ "${SETUP_NO_MAIN:-}" != "1" && "${SETUP_NO_MAIN:-}" != "true" ]]; then
     case "${1:-}" in
         --help|-h)      show_help ;;
         --backup|-b)    backup_config ;;
-        --restore|-r)   restore_config ;;
-        --update|-u)    update_plugins ;;
+        --update|-u)    update_all ;;
         "")             main ;;
         *)
             error "Unknown option: ${1:-}"

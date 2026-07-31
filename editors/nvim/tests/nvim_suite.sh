@@ -237,6 +237,118 @@ test_telescope_ignore_patterns_are_escaped() {
   pass "nvim telescope ignore patterns escaped ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_lazygit_pinned_for_nvim_010() {
+  local lazygit setup
+  lazygit="$(cat "$MODULE_ROOT/lua/plugins/lazygit.lua")"
+  setup="$(cat "$SETUP_SH")"
+  # jobstart's `term` option only exists on 0.11+, so older hosts need termopen.
+  assert_contains "$lazygit" 'vim.fn.has("nvim-0.11") == 0' "pins only below Neovim 0.11"
+  assert_contains "$lazygit" '4839ab642962cc76bb1bf278427dc4c59be15072' "pins last termopen commit"
+  assert_contains "$lazygit" 'commit = legacy_commit' "applies the conditional pin"
+  assert_contains "$setup" "lazy_root}/lazygit.nvim" "setup resets lazygit checkout"
+  pass "nvim lazygit pinned below 0.11 ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_leader_keys_are_unique() {
+  local tree keymaps key hits
+  tree="$(cat "$MODULE_ROOT/lua/plugins/nvim-tree.lua")"
+  keymaps="$(cat "$MODULE_ROOT/lua/config/keymaps.lua")"
+  assert_contains "$tree" '"<leader>n", "<cmd>NvimTreeToggle<CR>"' "file tree toggles on <leader>n"
+  assert_contains "$keymaps" '"<leader>e", vim.diagnostic.open_float' "<leader>e stays on diagnostics"
+  assert_not_contains "$keymaps" "vim.diagnostic.setloclist" "loclist mapping dropped for trouble.nvim"
+
+  # Mapping one key twice means load order silently decides the winner.
+  # -R follows symlinks: bazel runfiles expose lua/ as links.
+  for key in "<leader>e" "<leader>q"; do
+    hits="$( { grep -Rho "\"$key\"" "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+    [[ "$hits" == "1" ]] || {
+      echo "FAIL: $key mapped $hits times, expected 1" >&2
+      return 1
+    }
+  done
+  assert_contains "$(bash "$SETUP_SH" --help 2>&1)" "<Space>n" "help documents the new tree key"
+  pass "nvim leader keys unique ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_update_syncs_config_then_plugins() {
+  local alt_bin="$HOME/nvim-update-bin"
+  local cfg="$HOME/.config/nvim"
+  local cmd_log="$HOME/nvim-update-cmd.log"
+  local out backups
+
+  mkdir -p "$alt_bin"
+  rm -rf "$cfg" "$HOME/.config/nvim.bak."* "$HOME/.local/share/nvim/lazy"
+  rm -f "$cmd_log"
+
+  _devtools_write_exec "$alt_bin/nvim" '
+printf "%s\n" "$*" >>"$HOME/nvim-update-cmd.log"
+if [[ "${1:-}" == "--version" ]]; then echo "NVIM v0.10.4"; fi
+exit 0
+'
+
+  # Pre-existing hand-written config must be preserved as a backup exactly once.
+  mkdir -p "$cfg/lua"
+  echo "handwritten" >"$cfg/init.lua"
+
+  _run_update() {
+    PATH="$alt_bin:$PATH" HOME="$HOME" SETUP_NO_MAIN=1 /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      update_all
+    ' _ "$SETUP_SH" 2>&1
+  }
+
+  out="$(_run_update)" || {
+    echo "FAIL: update_all failed: $out" >&2
+    return 1
+  }
+
+  assert_file_exists "$cfg/lua/plugins/nvim-tree.lua" "update copies lua/ config"
+  assert_file_exists "$cfg/.devtools-nvim" "update writes managed marker"
+  assert_not_contains "$(cat "$cfg/init.lua")" "handwritten" "update overwrites init.lua"
+  assert_contains "$(cat "$cmd_log")" "Lazy! sync" "update syncs plugins"
+  assert_contains "$(cat "$cmd_log")" "MasonToolsUpdateSync" "update refreshes LSP servers"
+
+  backups="$(find "$HOME/.config" -maxdepth 1 -name 'nvim.bak.*' | wc -l | tr -d ' ')"
+  [[ "$backups" == "1" ]] || {
+    echo "FAIL: expected 1 backup of the unmanaged config, found $backups" >&2
+    return 1
+  }
+
+  # Rerun: managed config is overwritten in place, stale modules disappear.
+  echo "stale" >"$cfg/lua/obsolete.lua"
+  out="$(_run_update)" || {
+    echo "FAIL: second update_all failed: $out" >&2
+    return 1
+  }
+
+  [[ ! -e "$cfg/lua/obsolete.lua" ]] || {
+    echo "FAIL: stale lua module survived update" >&2
+    return 1
+  }
+  backups="$(find "$HOME/.config" -maxdepth 1 -name 'nvim.bak.*' | wc -l | tr -d ' ')"
+  [[ "$backups" == "1" ]] || {
+    echo "FAIL: rerun created extra backups (found $backups)" >&2
+    return 1
+  }
+  pass "nvim update syncs config and plugins ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_restore_flag_removed() {
+  local setup out
+  setup="$(cat "$SETUP_SH")"
+  assert_not_contains "$setup" "restore_config" "restore_config is gone"
+  assert_not_contains "$setup" "--restore" "no --restore flag"
+  out="$(bash "$SETUP_SH" --restore 2>&1)" && {
+    echo "FAIL: --restore still accepted" >&2
+    return 1
+  }
+  assert_contains "$out" "Unknown option" "--restore is rejected"
+  pass "nvim --restore removed ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_quotes_lazy_sync() {
   local setup
   setup="$(cat "$SETUP_SH")"
@@ -266,7 +378,11 @@ test_lsp_pins_for_nvim_010
 test_lsp_registers_servers_when_mason_fails
 test_lsp_covers_go_and_c
 test_treesitter_pinned_to_master
+test_lazygit_pinned_for_nvim_010
+test_leader_keys_are_unique
 test_telescope_ignore_patterns_are_escaped
+test_update_syncs_config_then_plugins
+test_restore_flag_removed
 test_setup_quotes_lazy_sync
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"

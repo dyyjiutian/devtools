@@ -8,10 +8,7 @@ filegroup(
         "setup.sh",
         "init.lua",
         "README.md",
-        "lua/plugins/lsp.lua",
-        "lua/plugins/telescope.lua",
-        "lua/plugins/treesitter.lua",
-    ],
+    ] + glob(["lua/**/*.lua"]),
 )
 
 exports_files([
