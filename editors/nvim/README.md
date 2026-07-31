@@ -208,11 +208,12 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 ### AI Suggestions (GitHub Copilot)
 
 `<Tab>` already selects the next nvim-cmp item, so Copilot suggestions accept
-on `<C-j>` instead.
+on `<C-j>` or `<CR>` instead.
 
 | Key | Description |
 |-----|-------------|
-| `<C-j>` (insert mode) | Accept Copilot suggestion |
+| `<CR>` (insert mode) | Confirm the cmp menu if it's open; otherwise accept a displayed Copilot suggestion; otherwise a normal Enter |
+| `<C-j>` (insert mode) | Accept Copilot suggestion directly, bypassing cmp |
 | `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
 | `<C-]>` (insert mode) | Dismiss suggestion (Copilot default) |
 

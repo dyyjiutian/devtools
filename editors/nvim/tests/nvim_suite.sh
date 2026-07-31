@@ -248,6 +248,17 @@ test_copilot_plugin_wired() {
   }
   assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
 
+  # <CR> must confirm an open cmp menu first, then fall back to accepting a
+  # displayed Copilot suggestion, then a plain <CR> - not race with copilot.lua.
+  assert_contains "$completion" "copilot#GetDisplayedSuggestion" \
+    "<CR> checks for a displayed Copilot suggestion before falling back"
+  assert_contains "$completion" "copilot#Accept" "<CR> can accept the Copilot suggestion"
+  hits="$( { grep -o '\["<CR>"\]' <<<"$completion" || true; } | wc -l | tr -d ' ')"
+  [[ "$hits" == "1" ]] || {
+    echo "FAIL: cmp mapping table defines <CR> $hits times, expected 1" >&2
+    return 1
+  }
+
   assert_contains "$readme" ":Copilot auth" "README documents the manual sign-in step"
   assert_contains "$setup" ":Copilot auth" "setup output points to the manual sign-in step"
   pass "nvim copilot wired without clobbering cmp ($DEVTOOLS_TEST_PROFILE)"
