@@ -61,10 +61,16 @@ EOF
   K            显示文档
   <Space>rn    重命名符号
   <Space>ca    代码操作
+  <Space>cf    格式化当前文件 (conform，保存时自动格式化)
+  <Space>o     代码大纲 (aerial)
+  <Space>sr    全项目搜索替换 (grug-far)
   <Space>gs    Git status
   <Space>gb    Git blame
   <Space>gd    Git diff
   <Space>gg    打开 LazyGit
+  <C-\>        切换内置终端 (toggleterm)
+  F5/F9/F10/F11  调试: 继续 / 断点 / 单步跳过 / 步入 (nvim-dap)
+  <Space>tt    运行光标处测试 (neotest)
 EOF
     exit 0
 }
@@ -165,7 +171,9 @@ _reset_pinned_plugins() {
         "${lazy_root}/mason-lspconfig.nvim" \
         "${lazy_root}/nvim-lspconfig" \
         "${lazy_root}/nvim-treesitter" \
-        "${lazy_root}/lazygit.nvim"
+        "${lazy_root}/lazygit.nvim" \
+        "${lazy_root}/aerial.nvim" \
+        "${lazy_root}/grug-far.nvim"
 }
 
 _sync_lazy_plugins() {
@@ -518,6 +526,11 @@ main() {
     echo "  K            显示文档 (Show documentation)"
     echo "  <Space>rn    重命名符号 (Rename symbol)"
     echo "  <Space>ca    代码操作 (Code action)"
+    echo "  <Space>cf    格式化 (保存时自动格式化)"
+    echo "  <Space>o     代码大纲 (Outline)"
+    echo "  <Space>tt    运行测试 (Test)"
+    echo "  F5 / F9      调试: 继续 / 断点 (Debug)"
+    echo "  <C-\\>        内置终端 (Terminal)"
     echo "  <Space>gg    打开 LazyGit"
     echo ""
     echo "  启动命令: nvim"

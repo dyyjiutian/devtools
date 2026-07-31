@@ -111,12 +111,17 @@ return {
 
     require("mason").setup()
 
-    -- Formatters only (not every LSP). Debounce avoids "X: installing" spam each start.
+    -- Formatters, linters and debug adapters (not every LSP).
+    -- Debounce avoids "X: installing" spam each start.
     require("mason-tool-installer").setup({
       ensure_installed = {
         "stylua",
         "prettier",
         "shfmt",
+        "ruff",
+        "shellcheck",
+        "debugpy",
+        "delve",
       },
       auto_update = false,
       run_on_start = true,
