@@ -10,6 +10,7 @@ filegroup(
         "README.md",
         "lua/plugins/lsp.lua",
         "lua/plugins/telescope.lua",
+        "lua/plugins/treesitter.lua",
     ],
 )
 

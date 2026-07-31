@@ -351,6 +351,20 @@ cd editors/nvim && ./setup.sh --restore
 **解法**：改用转义并带目录分隔符锚定的 Lua 模式，例如 `"^%.git/"`、`"/%.git/"`、`"%.pyc$"`。
 可用 `lua -e 'print(string.find(path, pattern))'` 快速自查某条模式是否误伤。
 
+### 2026-07-31 — treesitter 跟随默认分支导致 preview 报 `ft_to_lang` 为 nil
+
+**表象**：跨文件 `gr` 打开 preview 时报
+`telescope/previewers/utils.lua:135: attempt to call field 'ft_to_lang' (a nil value)`。
+
+**根因**：`nvim-treesitter` 的默认分支已切换为重写版 `main`，而配置没有 pin 分支。`main` 要求 Neovim 0.12+，
+并移除了 `nvim-treesitter.configs` 与 `parsers.ft_to_lang()`；telescope 0.1.x 的 previewer 仍会调用它，于是取到 nil。
+同时 `main` 的 `setup()` 会忽略 master 风格的 `ensure_installed` / `highlight` / `indent`，
+所以 parser 目录一直是空的、treesitter 高亮其实从未生效（只是不报错，容易被忽略）。
+
+**解法**：`branch = "master"`，并把 `config` 改回 `require("nvim-treesitter.configs").setup(opts)`。
+`setup.sh` 同步前会删除 `nvim-treesitter` 目录，让 Lazy 重新 clone 到正确分支。生效后可用
+`:TSInstallInfo` 确认 parser 已安装。
+
 ## References
 
 - [Neovim Documentation](https://neovim.io/doc/)

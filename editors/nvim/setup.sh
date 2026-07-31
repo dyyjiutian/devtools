@@ -155,18 +155,20 @@ _nvim_headless() {
     nvim --headless -c "$cmd" -c "qa!"
 }
 
-# Drop mason/lspconfig trees so Lazy re-checkouts the pinned tags from lsp.lua.
-_reset_pinned_lsp_plugins() {
+# Drop plugins whose pinned tag/branch differs from upstream's default, so Lazy
+# re-clones them instead of keeping an incompatible checkout.
+_reset_pinned_plugins() {
     local lazy_root="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy"
     rm -rf \
         "${lazy_root}/mason.nvim" \
         "${lazy_root}/mason-lspconfig.nvim" \
-        "${lazy_root}/nvim-lspconfig"
+        "${lazy_root}/nvim-lspconfig" \
+        "${lazy_root}/nvim-treesitter"
 }
 
 _sync_lazy_plugins() {
     info "Syncing lazy.nvim plugins..."
-    _reset_pinned_lsp_plugins
+    _reset_pinned_plugins
     if _nvim_headless "Lazy! sync"; then
         success "Plugins synced"
     else

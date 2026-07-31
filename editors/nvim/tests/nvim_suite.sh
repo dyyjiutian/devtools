@@ -211,6 +211,19 @@ test_lsp_covers_go_and_c() {
   pass "nvim lsp covers Go and C/C++ ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_treesitter_pinned_to_master() {
+  local treesitter setup
+  treesitter="$(cat "$MODULE_ROOT/lua/plugins/treesitter.lua")"
+  setup="$(cat "$SETUP_SH")"
+  # Upstream's default branch is the rewrite, which drops parsers.ft_to_lang()
+  # that telescope 0.1.x previewers call.
+  assert_contains "$treesitter" 'branch = "master"' "pins nvim-treesitter to master"
+  assert_contains "$treesitter" 'require("nvim-treesitter.configs").setup(opts)' "uses master setup entry point"
+  assert_not_contains "$treesitter" 'require("nvim-treesitter").setup(opts)' "no rewrite-style setup call"
+  assert_contains "$setup" "nvim-treesitter" "setup resets nvim-treesitter checkout"
+  pass "nvim treesitter pinned to master ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_telescope_ignore_patterns_are_escaped() {
   local telescope
   # Comments mention the buggy patterns, so assert against code lines only.
@@ -252,6 +265,7 @@ test_linux_skips_when_nvim_present
 test_lsp_pins_for_nvim_010
 test_lsp_registers_servers_when_mason_fails
 test_lsp_covers_go_and_c
+test_treesitter_pinned_to_master
 test_telescope_ignore_patterns_are_escaped
 test_setup_quotes_lazy_sync
 
