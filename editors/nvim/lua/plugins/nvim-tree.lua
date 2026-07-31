@@ -37,8 +37,8 @@ return {
       },
     })
 
-    -- Keymaps
-    vim.keymap.set("n", "<leader>e", "<cmd>NvimTreeToggle<CR>", { desc = "Toggle file [E]xplorer" })
+    -- Keymaps: <leader>e belongs to the diagnostic float in config/keymaps.lua
+    vim.keymap.set("n", "<leader>n", "<cmd>NvimTreeToggle<CR>", { desc = "Toggle file tree ([N]vimTree)" })
     vim.keymap.set("n", "<leader>fe", "<cmd>NvimTreeFindFile<CR>", { desc = "[F]ind file in [E]xplorer" })
   end,
 }
