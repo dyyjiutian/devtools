@@ -7,6 +7,8 @@
 
 return {
   "github/copilot.vim",
+  -- cmd stub so :Copilot auth works before the first InsertEnter load.
+  cmd = "Copilot",
   event = "InsertEnter",
   init = function()
     -- <Tab> confirms nvim-cmp when its menu is open; accept Copilot on

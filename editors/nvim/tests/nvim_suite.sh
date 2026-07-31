@@ -232,6 +232,8 @@ test_copilot_plugin_wired() {
   readme="$(cat "$MODULE_ROOT/README.md")"
 
   assert_contains "$copilot" '"github/copilot.vim"' "installs copilot.vim"
+  # Lazy-loaded on InsertEnter; without cmd, :Copilot is missing until first insert.
+  assert_contains "$copilot" 'cmd = "Copilot"' "registers :Copilot lazy stub"
   assert_contains "$copilot" "vim.g.copilot_no_tab_map = true" "disables copilot's own Tab map"
   assert_contains "$copilot" '"i", "<C-j>"' "accepts suggestions on <C-j>"
   assert_contains "$copilot" "copilot#Accept" "wires the accept function"
@@ -275,6 +277,20 @@ test_copilot_plugin_wired() {
   assert_contains "$readme" ":Copilot auth" "README documents the manual sign-in step"
   assert_contains "$setup" ":Copilot auth" "setup output points to the manual sign-in step"
   pass "nvim copilot wired without clobbering cmp ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_lazy_cmd_stubs_for_user_commands() {
+  local dap neotest
+  dap="$(cat "$MODULE_ROOT/lua/plugins/dap.lua")"
+  neotest="$(cat "$MODULE_ROOT/lua/plugins/neotest.lua")"
+
+  # keys-only lazy load leaves :Dap* / :Neotest unavailable until a keymap fires.
+  assert_contains "$dap" 'cmd = {' "dap declares lazy cmd stubs"
+  assert_contains "$dap" '"DapContinue"' "dap stubs :DapContinue"
+  assert_contains "$dap" '"DapToggleBreakpoint"' "dap stubs :DapToggleBreakpoint"
+  assert_contains "$dap" '"DapTerminate"' "dap stubs :DapTerminate"
+  assert_contains "$neotest" 'cmd = "Neotest"' "neotest stubs :Neotest"
+  pass "nvim lazy cmd stubs for user commands ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_telescope_ignore_patterns_are_escaped() {
@@ -506,6 +522,7 @@ test_ide_plugins_present
 test_ide_plugins_pinned_for_nvim_010
 test_format_and_tools_wired
 test_copilot_plugin_wired
+test_lazy_cmd_stubs_for_user_commands
 test_telescope_ignore_patterns_are_escaped
 test_update_syncs_config_then_plugins
 test_restore_flag_removed

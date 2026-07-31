@@ -506,6 +506,14 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 
 **解法**：`lint.lua` 在触发前用 `vim.fn.executable()` 过滤，只运行已安装的 linter；一个都没有就跳过。
 
+### 2026-07-31 — lazy 加载插件未声明 `cmd`，Ex 命令补全缺失
+
+**表象**：安装/`--update` 后输入 `:Copilot`、`:DapContinue`、`:Neotest` 无补全、命令不存在；先按过快捷键或进过插入模式后又可用。
+
+**根因**：lazy.nvim 仅在 `cmd` / `keys` / `event` 等触发器命中后才加载插件。`copilot.vim` 只有 `event = InsertEnter`，`nvim-dap` / `neotest` 只有 `keys`，都没有预挂 `cmd` stub，因此插件自带的 user command 在首次触发前未注册。
+
+**解法**：为这三个插件补上对应 `cmd`（保留原有 `event`/`keys`）。同类已正确声明的有 lazygit / trouble / aerial / toggleterm / grug-far / conform。生效：`./setup.sh --update` 后重启 Neovim，无需清 lazy 缓存。
+
 ## References
 
 - [Neovim Documentation](https://neovim.io/doc/)

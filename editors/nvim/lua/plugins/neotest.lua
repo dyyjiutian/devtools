@@ -13,6 +13,8 @@ return {
     "nvim-neotest/neotest-python",
     "fredrikaverpil/neotest-golang",
   },
+  -- keys alone leave :Neotest unavailable until a keymap fires.
+  cmd = "Neotest",
   keys = {
     {
       "<leader>tt",
