@@ -234,66 +234,68 @@ test_copilot_plugin_wired() {
   readme="$(cat "$MODULE_ROOT/README.md")"
 
   assert_contains "$copilot" '"github/copilot.vim"' "installs copilot.vim"
-  # Lazy-loaded on InsertEnter; without cmd, :Copilot is missing until first insert.
+  # Lazy-loaded after VimEnter; without cmd, :Copilot is missing until load.
   assert_contains "$copilot" 'cmd = "Copilot"' "registers :Copilot lazy stub"
+  assert_contains "$copilot" 'event = "VeryLazy"' "loads on VeryLazy, not only InsertEnter"
+  assert_contains "$copilot" 'copilot#Init' "calls Init after lazy load"
   assert_contains "$copilot" "vim.g.copilot_no_tab_map = true" "disables copilot's own Tab map"
   assert_contains "$copilot" '"i", "<C-j>"' "accepts suggestions on <C-j>"
   assert_contains "$copilot" "copilot#Accept" "wires the accept function"
-  assert_contains "$copilot" '"i", "<C-g>"' "requests suggestions on <C-g>"
+  assert_contains "$copilot" '"i", "<C-S-g>"' "requests suggestions on <C-S-g>"
   assert_contains "$copilot" "copilot#Suggest" "wires the suggest function"
-  assert_contains "$copilot" "cmp.close" "<C-g> closes cmp before suggesting"
+  assert_contains "$copilot" "cmp.close" "<C-S-g> closes cmp before suggesting"
+  assert_not_contains "$copilot" '"i", "<C-g>"' "does not use bare <C-g> for suggest"
+  assert_not_contains "$copilot" 'event = "InsertEnter"' "does not wait for InsertEnter to start"
 
   # Copilot's own Tab map stays off; our cmp <Tab> handler owns the key.
   assert_not_contains "$copilot" '"<Tab>"' "copilot.lua does not bind <Tab> itself"
   assert_contains "$completion" '["<Tab>"]' "cmp maps <Tab>"
   assert_not_contains "$completion" '["<S-Tab>"]' "cmp does not bind <S-Tab>"
-  # <Tab> priority: Copilot accept → cmp confirm → indent. Never navigate.
+  # <Tab> priority: cmp confirm → Copilot accept → indent. Never navigate.
   local tab_block
   tab_block="$(awk '/\["<Tab>"\]/,/\["<CR>"\]/' <<<"$completion")"
   assert_contains "$tab_block" "cmp.confirm" "cmp <Tab> confirms when the menu is open"
   assert_contains "$tab_block" "copilot#GetDisplayedSuggestion" \
     "cmp <Tab> checks for a displayed Copilot suggestion"
   assert_contains "$tab_block" "copilot#Accept" "cmp <Tab> can accept Copilot"
-  # Copilot must be checked before cmp.confirm in the Tab handler body.
+  # cmp.confirm must be checked before Copilot in the Tab handler body.
   local confirm_line accept_line
   confirm_line="$(printf '%s\n' "$tab_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
   accept_line="$(printf '%s\n' "$tab_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
-  [[ -n "$confirm_line" && -n "$accept_line" && "$accept_line" -lt "$confirm_line" ]] || {
-    echo "FAIL: copilot#Accept (line ${accept_line:-?}) must precede cmp.confirm (line ${confirm_line:-?}) in <Tab>" >&2
+  [[ -n "$confirm_line" && -n "$accept_line" && "$confirm_line" -lt "$accept_line" ]] || {
+    echo "FAIL: cmp.confirm (line ${confirm_line:-?}) must precede copilot#Accept (line ${accept_line:-?}) in <Tab>" >&2
     return 1
   }
   assert_not_contains "$tab_block" "select_next_item" "cmp <Tab> does not navigate"
   assert_not_contains "$tab_block" "select_prev_item" "cmp <Tab> does not navigate prev"
 
-  # <C-j> / <C-g> must be unique in insert mode across plugin specs.
+  # <C-j> / <C-S-g> must be unique in insert mode across plugin specs.
   hits="$( { grep -Rho '"i", *"<C-j>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
   [[ "$hits" == "1" ]] || {
     echo "FAIL: insert-mode <C-j> mapped $hits times, expected 1" >&2
     return 1
   }
-  hits="$( { grep -Rho '"i", *"<C-g>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+  hits="$( { grep -Rho '"i", *"<C-S-g>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
   [[ "$hits" == "1" ]] || {
-    echo "FAIL: insert-mode <C-g> mapped $hits times, expected 1" >&2
+    echo "FAIL: insert-mode <C-S-g> mapped $hits times, expected 1" >&2
     return 1
   }
   assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
-  # Quote-bounded: "<C-S-g>" must not count as claiming bare "<C-g>".
-  assert_not_contains "$completion" '"<C-g>"' "cmp does not also claim <C-g>"
+  assert_not_contains "$completion" '["<C-S-g>"]' "cmp has no <C-S-g> mapping"
+  assert_not_contains "$completion" '["<C-Space>"]' "does not bind tmux prefix <C-Space>"
+  assert_not_contains "$completion" "cmp.mapping.complete" "no manual cmp complete shortcut"
 
-  # <CR> mirrors <Tab>: Copilot accept → cmp confirm → newline.
+  # <CR> mirrors <Tab>: cmp confirm → Copilot accept → newline.
   local cr_block
-  cr_block="$(awk '/\["<CR>"\]/,/\["<C-S-g>"\]/' <<<"$completion")"
+  cr_block="$(awk '/\["<CR>"\]/,/\["<C-l>"\]/' <<<"$completion")"
   assert_contains "$cr_block" "cmp.confirm" "<CR> confirms cmp when the menu is open"
   assert_contains "$cr_block" "copilot#GetDisplayedSuggestion" \
     "<CR> checks for a displayed Copilot suggestion before falling back"
   assert_contains "$cr_block" "copilot#Accept" "<CR> can accept the Copilot suggestion"
-  assert_contains "$completion" '["<C-S-g>"]' "cmp complete uses <C-S-g>, not tmux <C-Space>"
-  assert_contains "$completion" "cmp.mapping.complete" "wires manual cmp complete"
-  assert_not_contains "$completion" '["<C-Space>"]' "does not bind tmux prefix <C-Space>"
   confirm_line="$(printf '%s\n' "$cr_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
   accept_line="$(printf '%s\n' "$cr_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
-  [[ -n "$confirm_line" && -n "$accept_line" && "$accept_line" -lt "$confirm_line" ]] || {
-    echo "FAIL: copilot#Accept (line ${accept_line:-?}) must precede cmp.confirm (line ${confirm_line:-?}) in <CR>" >&2
+  [[ -n "$confirm_line" && -n "$accept_line" && "$confirm_line" -lt "$accept_line" ]] || {
+    echo "FAIL: cmp.confirm (line ${confirm_line:-?}) must precede copilot#Accept (line ${accept_line:-?}) in <CR>" >&2
     return 1
   }
   hits="$( { grep -o '\["<CR>"\]' <<<"$completion" || true; } | wc -l | tr -d ' ')"

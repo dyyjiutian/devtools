@@ -7,23 +7,31 @@
 
 return {
   "github/copilot.vim",
-  -- cmd stub so :Copilot auth works before the first InsertEnter load.
+  -- cmd stub so :Copilot works before the plugin body loads.
   cmd = "Copilot",
-  event = "InsertEnter",
+  -- VeryLazy (not InsertEnter): plugin's own autocmd only calls copilot#Init on
+  -- VimEnter; loading after that left the agent dead until :Copilot restart.
+  event = "VeryLazy",
   init = function()
     -- Disable copilot.vim's own <Tab> map; completion.lua owns <Tab>/<CR>
-    -- (Copilot accept → cmp confirm → indent/newline). Keep <C-j> / <C-g>.
+    -- (cmp confirm → Copilot accept → indent/newline). Keep <C-j> / <C-S-g>.
     -- Must be set before plugin/copilot.vim runs, hence init() not config().
     vim.g.copilot_no_tab_map = true
   end,
   config = function()
+    -- Kick the language server if VimEnter already fired before we loaded.
+    vim.schedule(function()
+      pcall(vim.fn["copilot#Init"])
+    end)
+
     vim.keymap.set("i", "<C-j>", 'copilot#Accept("\\<CR>")', {
       expr = true,
       replace_keycodes = false,
       desc = "Accept Copilot suggestion",
     })
-    -- Close cmp first so ghost text is visible, then request a suggestion.
-    vim.keymap.set("i", "<C-g>", function()
+    -- Manual suggest (Ctrl-Shift-G). Close cmp first so ghost text is visible.
+    -- Needs terminal/tmux extended-keys (csi-u) in some hosts.
+    vim.keymap.set("i", "<C-S-g>", function()
       local ok_cmp, cmp = pcall(require, "cmp")
       if ok_cmp and cmp.visible() then
         cmp.close()

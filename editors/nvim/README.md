@@ -207,19 +207,18 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 
 ### AI Suggestions (GitHub Copilot)
 
-Completion: `<Tab>` and `<CR>` prefer a displayed Copilot ghost suggestion, then
-the open cmp menu, otherwise indent / newline; `↑`/`↓` (or `<C-n>`/`<C-p>`) move
-the cmp selection. Use `<C-g>` to request Copilot and `<C-S-g>` to open cmp
-manually (avoids tmux `<C-Space>` prefix). Copilot's built-in `<Tab>` map stays
-disabled (`copilot_no_tab_map`).
+Completion: `<Tab>` and `<CR>` prefer the open cmp menu, then a displayed Copilot
+ghost suggestion, otherwise indent / newline; `↑`/`↓` (or `<C-n>`/`<C-p>`) move
+the cmp selection. Use `<C-S-g>` to request Copilot (no manual cmp-complete key;
+`<C-Space>` stays free for tmux). Copilot's built-in `<Tab>` map stays disabled
+(`copilot_no_tab_map`).
 
 | Key | Description |
 |-----|-------------|
-| `<Tab>` (insert mode) | Accept Copilot ghost text if shown; else confirm cmp; else indent |
-| `<CR>` (insert mode) | Accept Copilot ghost text if shown; else confirm cmp; else newline |
+| `<Tab>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else indent |
+| `<CR>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else newline |
 | `<C-j>` (insert mode) | Accept Copilot suggestion directly, bypassing cmp |
-| `<C-g>` (insert mode) | Close cmp (if open) and request a Copilot suggestion |
-| `<C-S-g>` (insert mode) | Manually open the nvim-cmp completion menu |
+| `<C-S-g>` (insert mode) | Close cmp (if open) and request a Copilot suggestion |
 | `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
 | `<C-]>` (insert mode) | Dismiss suggestion (Copilot default) |
 
@@ -544,21 +543,21 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 
 **解法**：`<CR>` 与 `<Tab>` 同优先级——cmp 可见 → confirm；否则 Copilot；否则换行。
 
-### 2026-07-31 — Copilot 幽灵字被 cmp 菜单抢优先级
+### 2026-07-31 — 手动 cmp 快捷键与 tmux / Copilot 抢键
 
-**表象**：进入插入模式后常先看到 cmp 菜单；有 Copilot 幽灵字时 `<Tab>`/`<CR>` 仍先确认 cmp，感觉 Copilot「没触发」。
+**表象**：`<C-Space>` 打开 cmp 会撞 tmux 前缀；把手动补全改到 `<C-S-g>` 后又与「主动请求 Copilot」抢键，优先级来回改体验不稳。
 
-**根因**：接受键原先把 `cmp.visible()` 放在 Copilot 检查之前；cmp 又经常自动弹出，盖住/抢走操作焦点。
+**根因**：tmux prefix=`C-Space`；插入模式快捷键有限，cmp 手动补全与 Copilot suggest 不宜再抢同一套修饰键。
 
-**解法**：`<Tab>`/`<CR>` 改为「有幽灵字 → Copilot；否则 cmp；否则缩进/换行」。另加 `<C-g>`：关闭 cmp 并 `copilot#Suggest()` 主动请求。cmp 仍自动弹出，可用 `<C-S-g>` 手动补全。
+**解法**：去掉 nvim-cmp 的手动 `complete()` 快捷键（仍自动弹菜单，可用 `<C-n>`/`<C-p>` 选择）。`<C-S-g>` 专用于关闭 cmp 并 `copilot#Suggest()`。`<Tab>`/`<CR>` 恢复为「cmp → Copilot → 缩进/换行」。
 
-### 2026-07-31 — `<C-Space>` 手动 cmp 与 tmux 前缀冲突
+### 2026-07-31 — 首次打开 Neovim 后 Copilot 不工作，需 `:Copilot restart`
 
-**表象**：插入模式按 Ctrl+Space 想打开 cmp，却触发 tmux 前缀（或无响应）。
+**表象**：新开 nvim 进入插入模式没有幽灵提示；执行 `:Copilot` / restart 之后才开始工作。
 
-**根因**：本仓库 `terminal/tmux` 将 prefix 设为 `C-Space`。
+**根因**：`copilot.vim` 只在 `VimEnter` 里调用 `copilot#Init()`。插件用 `event = InsertEnter` 懒加载时，`VimEnter` 已过，Init 从未执行，语言服务不启动。
 
-**解法**：nvim-cmp 手动补全改为 `<C-S-g>`（Ctrl+Shift+G）。需终端/tmux `extended-keys`（本仓 tmux 已开 csi-u）才能与 `<C-g>`（Copilot 请求）区分。
+**解法**：改为 `event = VeryLazy`，并在 `config` 里 `vim.schedule` 调用 `copilot#Init()`，补上错过的初始化。
 
 ## References
 

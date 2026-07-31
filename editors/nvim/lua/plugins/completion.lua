@@ -47,10 +47,15 @@ return {
         ["<C-b>"] = cmp.mapping.scroll_docs(-4),
         ["<C-f>"] = cmp.mapping.scroll_docs(4),
         ["<C-y>"] = cmp.mapping.confirm({ select = true }),
-        -- Tab / Enter: Copilot ghost text → cmp confirm → fallback
-        -- (indent for Tab, newline for Enter). Ctrl-J accepts Copilot only.
+        -- Tab / Enter: cmp confirm → Copilot ghost text → fallback
+        -- (indent for Tab, newline for Enter). No manual complete mapping —
+        -- <C-Space> is tmux prefix; use automatic popup / <C-n><C-p> instead.
         -- Up/Down (and <C-n>/<C-p>) navigate. No <S-Tab> — leave it free.
         ["<Tab>"] = cmp.mapping(function(fallback)
+          if cmp.visible() then
+            cmp.confirm({ select = true })
+            return
+          end
           local ok, suggestion = pcall(vim.fn["copilot#GetDisplayedSuggestion"])
           if ok and suggestion.text and suggestion.text ~= "" then
             local ok_accept, keys = pcall(vim.fn["copilot#Accept"], "")
@@ -58,14 +63,14 @@ return {
               vim.api.nvim_feedkeys(keys, "n", true)
               return
             end
-          end
-          if cmp.visible() then
-            cmp.confirm({ select = true })
-            return
           end
           fallback()
         end),
         ["<CR>"] = cmp.mapping(function(fallback)
+          if cmp.visible() then
+            cmp.confirm({ select = true })
+            return
+          end
           local ok, suggestion = pcall(vim.fn["copilot#GetDisplayedSuggestion"])
           if ok and suggestion.text and suggestion.text ~= "" then
             local ok_accept, keys = pcall(vim.fn["copilot#Accept"], "")
@@ -74,15 +79,8 @@ return {
               return
             end
           end
-          if cmp.visible() then
-            cmp.confirm({ select = true })
-            return
-          end
           fallback()
         end),
-        -- <C-Space> is tmux prefix in this repo; use Ctrl-Shift-G instead.
-        -- Needs terminal/tmux extended-keys (csi-u) to distinguish from <C-g>.
-        ["<C-S-g>"] = cmp.mapping.complete({}),
         ["<C-l>"] = cmp.mapping(function()
           if luasnip.expand_or_locally_jumpable() then
             luasnip.expand_or_jump()
