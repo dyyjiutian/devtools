@@ -5,10 +5,12 @@ alwaysApply: true
 
 # Prefer Dev Loop
 
-对开发/实现/修 bug/加功能类任务：
+对开发/实现/修已知 bug/加功能类任务：
 
 1. 优先 Read 并遵循 skill `dev-loop`
 2. 不要默认走官方 `using-superpowers` 全流程
 3. 仅当用户明确说「用官方 superpowers」时才使用官方总入口
 4. 用户可覆盖模式：`用完整流程` / `用简单流程` / `跳过 simply` / `跳过 worktree` / `就在当前分支做`
 5. 实现前遵循 `dev-workspace`：默认不在主干改；完整模式用 `.worktrees/` 绝对路径
+
+对 **debug / 排查 / 根因尚不清楚** 的任务：不要强行套 `dev-loop` 实现闭环；留给原生 agent 自行判断排查路径。根因清楚且要改代码时，再走 `dev-loop`（含 verify）。

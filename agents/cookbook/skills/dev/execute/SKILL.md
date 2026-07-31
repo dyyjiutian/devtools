@@ -38,7 +38,7 @@ git diff --cached --stat
 5. 配置/文档/幂等脚本：直接最小改动，稍后用 `dev-verify` 做实现后验证
 6. 改动保持可重入；遵循目标模块 README / AGENTS
 7. 每轮较大编辑前可再跑一次 Preflight
-8. 完成后：full → `dev-simply`；simple → `dev-verify`
+8. 完成后：full → **必须** Read 并遵循 `dev-simply`（除非用户跳过）→ `dev-verify`；simple → `dev-verify`（simple 无 simply，但 verify 不可跳过）
 
 ## When to stop
 

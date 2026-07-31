@@ -14,15 +14,18 @@
 |---|---|
 | 落地方式 | Router + 薄包装 skill（方案 1） |
 | 总入口名 | `dev-loop`（原 dev-pipeline） |
-| 模式选择 | Agent 按复杂度自动选；用户可随时覆盖 |
+| 模式选择 | 先任务分流；实现类再按复杂度选 full/simple；用户可随时覆盖 |
+| Debug 分流 | 排查/根因不清不进实现闭环，留给原生 agent 判断；根因清楚再进 loop |
 | 完整模式 | ask → design → workspace → execute → simply → verify → submit |
-| 简单模式 | ask(轻量) → workspace → execute → verify → submit（无长 design、无 simply） |
+| 简单模式 | ask(轻量) → workspace → execute → verify → submit（无长 design、无 simply；须有 verify） |
+| Simply | 仅 full 且须显式执行；不牺牲功能/可读性，用更简单优雅的实现 |
+| Verify 覆盖 | 按改动选回归老用例或补新用例（simple/full 相同） |
 | Workspace | full：`.worktrees/<topic>`；simple：在主干则建临时分支；默认不在主干实现 |
 | Workspace 后 | 新建隔离后 rebase `origin/main`；结构漂移大则退回 ask |
 | Worktree 使用方式 | 留在当前 Cursor 窗口；读写强制 worktree 绝对路径（方案 A） |
-| Simply 强度 | 默认自动精简；有争议再问 |
+| Simply 强度 | 默认自动精简（须显式调用）；有争议再问；不以牺牲可读性换短 |
 | Design 正式度 | 中等：短结构落盘到 `docs/superpowers/specs/` |
-| 验证策略 | 行为/逻辑 → TDD；配置/文档/幂等脚本 → 实现后验证；门禁 skill 名 `dev-verify` |
+| 验证策略 | 行为/逻辑 → TDD；配置/文档/幂等脚本 → 实现后验证；须判断回归 vs 新用例；门禁 `dev-verify` |
 | 与官方共存 | 保留插件；用 router skill + User Rule 覆盖默认入口 |
 | 存放位置 | `agents/cookbook/skills/`，经 `setup.sh sync` 链到本机 |
 
@@ -32,13 +35,13 @@
 
 | Skill | 职责 |
 |---|---|
-| `dev-loop` | 总入口：判复杂度 → 选模式 → 编排子 skill；处理用户覆盖 |
-| `dev-ask` | 澄清意图与需求。完整模式可更深；简单模式同样必须把意图/需求问清，但更快收敛、默认不落长文档 |
+| `dev-loop` | 总入口：任务分流 → 判复杂度 → 选模式 → 编排子 skill；处理用户覆盖 |
+| `dev-ask` | 澄清意图与需求及验证策略（含回归 vs 新用例）。完整模式可更深；简单模式更快收敛、默认不落长文档 |
 | `dev-design` | 仅完整模式：写中等短 design |
 | `dev-workspace` | execute 前隔离：full 用 `.worktrees/`；simple 在主干建分支；rebase + 漂移检查 |
-| `dev-execute` | 按已确认意图/design 实现；完整模式且多步任务时可先写短 plan |
-| `dev-simply` | 仅完整模式、execute 之后：精简过度设计 |
-| `dev-verify` | 验证门禁（两种模式共用；含 UT / 场景 / dry-run 等） |
+| `dev-execute` | 按已确认意图/design 实现；完整模式且多步任务时可先写短 plan；完成后显式交 simply（full） |
+| `dev-simply` | 仅完整模式、execute 之后须显式执行：不牺牲功能/可读性的精简 |
+| `dev-verify` | 验证门禁（两种模式都必须；按改动回归或补新用例） |
 | `dev-submit` | verify 后可选收尾：询问是否提交；确认 local/remote 后委托 `git-submit` |
 
 可选：`agents/cookbook/rules/prefer-dev-loop.mdc`，声明开发任务优先 `dev-loop`。
@@ -49,8 +52,8 @@
 
 `dev-loop` 开场：
 
-1. 读用户请求并粗看仓库上下文
-2. 自动选择完整 / 简单，并一句话说明理由
+1. 读用户请求并粗看仓库上下文；先做任务分流（debug/排查且根因不清 → 不进实现闭环，留给原生判断）
+2. 实现类任务：自动选择完整 / 简单，并一句话说明理由
 3. 进入对应闭环；用户可覆盖
 
 ### 判定启发式
@@ -107,7 +110,7 @@
 4. 测试要点（必填：层级 UT/场景、mock/夹具/环境、兼容性或性能等特别点、完成证据）
 5. 非目标
 
-ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认「怎么验」，full 写入 design。`dev-verify` 按该约定执行，不得无说明降级。
+ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认「怎么验」以及回归老用例还是补新用例，full 写入 design。`dev-verify` 按该约定执行，不得无说明降级。
 
 **短 plan**（可选）：`docs/superpowers/plans/YYYY-MM-DD-<topic>.md`，仅在完整模式且任务明显多步时编写。
 
@@ -115,12 +118,14 @@ ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认
 
 ## Simply（Clean Architecture 精简）
 
-触发：完整模式，在 `dev-execute` 之后、`dev-verify` 之前执行。若 simply 改动了行为或验证面，`dev-verify` 必须覆盖这些变更（含必要的补测）。
+触发：完整模式，在 `dev-execute` 之后、`dev-verify` 之前**必须显式**执行（除非用户跳过）。
+目标：在不牺牲功能与可读性的前提下，用更简单优雅的方式实现同一行为。若 simply 改动了行为或验证面，`dev-verify` 必须覆盖这些变更（含必要的补测）。
 
 默认自动处理：
 
 - 删除未使用的抽象 / 空接口 /「为未来预留」的层
 - 合并过度拆分、无真实依赖倒置价值的适配层
+- 用更直接的结构替换绕弯实现（行为不变）
 - 保持用例边界清晰：CLI → 用例编排 → 系统/包管理/网络适配（对齐仓库 `AGENTS.md`）
 
 必须停下来询问的情况：
@@ -133,10 +138,14 @@ ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认
 
 ## 验证门禁（`dev-verify`）
 
+simple 与 full 都必须经过本门禁。
+
 | 改动类型 | 策略 |
 |---|---|
-| 行为 / 逻辑 / bugfix | TDD：先失败测试，再最小实现 |
+| 行为 / 逻辑 / bug fix | TDD：先失败测试，再最小实现 |
 | 纯配置 / 文档 / 幂等脚本调整 | 实现后做最小验证（如 `bash -n`、`--help`、相关回归、`--dry-run`） |
+
+覆盖选择：现有用例能盖住则回归；盖不住则设计/补新用例；部分覆盖则二者兼用。
 
 完成前遵守 verification-before-completion 精神：有证据再宣称通过；缺工具则如实说明未跑。
 
@@ -152,9 +161,10 @@ ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认
 
 | 场景 | 行为 |
 |---|---|
-| 一般开发任务 | 优先读并遵循 `dev-loop` |
+| 一般实现/已知缺陷修复 | 优先读并遵循 `dev-loop` |
+| debug / 排查 / 根因不清 | 不进 `dev-loop` 实现闭环；留给原生 agent 自行判断（可选用官方 debug skill，但不强制） |
 | 用户明确要求官方流程 | 可使用官方 brainstorm / writing-plans / executing-plans 等 |
-| 官方其他 skill（debug、code-review、finishing-branch 等） | 在明确相关时仍可按需使用；不再充当总入口 |
+| 官方其他 skill（debug、code-review、finishing-branch 等） | 在明确相关或原生判断选用时可用；不再充当实现总入口 |
 
 通过 skill `description`（触发条件写清）+ User Rule / cookbook rule 压住 `using-superpowers`「任意会话即触发」的默认抢占。
 
@@ -199,3 +209,9 @@ ask 阶段就必须与用户对齐验证策略；simple 模式至少口头确认
 - **表象：** `dev-verify` 结束后闭环停止，不会询问整理 commit / 开 PR；也易与「主动自动提交」混淆。
 - **根因：** 初版未定义 submit 步骤；提交能力只在独立 `git-submit`。
 - **解法：** 增加 `dev-submit`（verify 之后）；默认先问；确认 `local`/`remote` 后委托 `git-submit`；rebase 冲突仅安全自动解决。
+
+### 2026-07-31 — debug 分流、simply 显式化与 simple 模式验证
+
+- **表象：** 排查类任务被套进实现闭环；simply 少被显式调用且目标偏「删抽象」；simple 模式易弱化 verify。
+- **根因：** 总入口未做任务分流；simply/verify 约定不够硬。
+- **解法：** `dev-loop` 增加 Task triage（debug 留给原生判断）；强化 simply 的 Goal 与显式调用；verify 增加 Coverage choice（回归 vs 新用例），simple/full 都必须过门禁。

@@ -55,13 +55,13 @@ for rel in "${REQUIRED_DEV_SKILLS[@]}"; do
   f="$SKILLS/$rel"
   [[ -f "$f" ]] || continue
   case "$rel" in
-    */loop/*) assert_heading "$f" "Mode selection"; assert_heading "$f" "Loops" ;;
+    */loop/*) assert_heading "$f" "Task triage"; assert_heading "$f" "Mode selection"; assert_heading "$f" "Loops" ;;
     */ask/*) assert_heading "$f" "Modes"; assert_heading "$f" "Testing strategy"; assert_heading "$f" "Checklist" ;;
     */design/*) assert_heading "$f" "Design template"; assert_heading "$f" "Path" ;;
     */workspace/*) assert_heading "$f" "Isolation rules"; assert_heading "$f" "Rebase and drift check" ;;
     */execute/*) assert_heading "$f" "Preflight"; assert_heading "$f" "Process"; assert_heading "$f" "When to stop" ;;
-    */simply/*) assert_heading "$f" "Default actions"; assert_heading "$f" "Ask first" ;;
-    */verify/*) assert_heading "$f" "Strategy"; assert_heading "$f" "Evidence" ;;
+    */simply/*) assert_heading "$f" "Goal"; assert_heading "$f" "Default actions"; assert_heading "$f" "Ask first" ;;
+    */verify/*) assert_heading "$f" "Strategy"; assert_heading "$f" "Coverage choice"; assert_heading "$f" "Evidence" ;;
     */submit/*) assert_heading "$f" "Gate"; assert_heading "$f" "Scope"; assert_heading "$f" "Handoff" ;;
   esac
 done

@@ -74,19 +74,21 @@ cd agents/cookbook
 | Skill | 触发场景 |
 |-------|----------|
 | `git-submit` | 整理本地 commit、按 Conventional Commits 提交、rebase 主干并创建 MR/PR |
-| `dev-loop` | 开发任务默认总入口：自动选完整/简单模式并编排子 skill |
-| `dev-ask` | 澄清意图、需求与验证策略（简单/完整模式都要做） |
+| `dev-loop` | 实现类任务默认总入口：任务分流后选完整/简单模式并编排子 skill |
+| `dev-ask` | 澄清意图、需求与验证策略（简单/完整模式都要做；须点明回归或补新用例） |
 | `dev-design` | 完整模式：写中等短 design（含可执行的测试要点）到 `docs/superpowers/specs/` |
 | `dev-workspace` | execute 前隔离：full 用 `.worktrees/`；simple 在主干建临时分支；rebase + 漂移检查 |
 | `dev-execute` | 按已确认意图/design 实现；每次改文件前 Preflight 检测未知脏改动 |
-| `dev-simply` | 完整模式、execute 之后：按 Clean Architecture 精简过度设计 |
-| `dev-verify` | 验证门禁：行为/逻辑走 TDD；配置/文档/幂等脚本走实现后验证 |
+| `dev-simply` | 完整模式、execute 之后必须执行：不牺牲功能/可读性，用更简单优雅的实现 |
+| `dev-verify` | 验证门禁（simple/full 都必须）：按改动回归老用例或补新用例 |
 | `dev-submit` | verify 通过后可选收尾：询问是否提交；确认 local/remote 后委托 `git-submit` |
 
 ### Dev Loop 模式
 
+- **分流：** debug/排查/根因不清 → 不进实现闭环，留给原生 agent 判断；根因清楚要改代码再进 loop
 - **完整：** ask → design → workspace → execute → simply → verify → submit
-- **简单：** ask → workspace → execute → verify → submit（无长 design、无 simply）
+- **简单：** ask → workspace → execute → verify → submit（无长 design、无 simply；**须有 verify**）
+- **simply：** 仅 full（除非跳过）；显式调用；精简而非压可读性
 - **隔离：** 默认不在主干实现；full 建 `.worktrees/<topic>`（当前窗口 + 绝对路径）；新建隔离后 rebase，结构漂移大则退回 ask
 - **提交：** 默认先问再提交（本轮已授权「做完自己提交」可跳过是否提交）；先确认仅本地 commit 或 rebase + 开 PR/MR
 - **覆盖口令：** `用完整流程` / `用简单流程` / `跳过 simply` / `跳过 worktree` / `就在当前分支做` / `用官方 superpowers`
