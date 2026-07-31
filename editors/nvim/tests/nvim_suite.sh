@@ -236,8 +236,16 @@ test_copilot_plugin_wired() {
   assert_contains "$copilot" '"i", "<C-j>"' "accepts suggestions on <C-j>"
   assert_contains "$copilot" "copilot#Accept" "wires the accept function"
 
-  # <Tab> already selects the next nvim-cmp item; Copilot must not fight it.
+  # <Tab> confirms cmp; Copilot must not remap it.
   assert_not_contains "$copilot" '"<Tab>"' "does not remap <Tab>, which cmp owns"
+  assert_contains "$completion" '["<Tab>"]' "cmp maps <Tab>"
+  assert_not_contains "$completion" '["<S-Tab>"]' "cmp does not bind <S-Tab>"
+  # <Tab> must confirm, not navigate — navigate stays on <C-n>/<C-p>/arrows.
+  local tab_block
+  tab_block="$(awk '/\["<Tab>"\]/,/\["<CR>"\]/' <<<"$completion")"
+  assert_contains "$tab_block" "cmp.confirm" "cmp <Tab> confirms the selection"
+  assert_not_contains "$tab_block" "select_next_item" "cmp <Tab> does not navigate"
+  assert_not_contains "$tab_block" "select_prev_item" "cmp <Tab> does not navigate prev"
 
   # <C-j> must be free in insert mode across all plugin specs, or the two
   # mappings would silently race by lazy.nvim load order.
@@ -248,11 +256,16 @@ test_copilot_plugin_wired() {
   }
   assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
 
-  # <CR> must confirm an open cmp menu first, then fall back to accepting a
-  # displayed Copilot suggestion, then a plain <CR> - not race with copilot.lua.
+  # <CR> never confirms cmp; it may accept a displayed Copilot suggestion,
+  # otherwise falls back to a plain newline.
   assert_contains "$completion" "copilot#GetDisplayedSuggestion" \
     "<CR> checks for a displayed Copilot suggestion before falling back"
   assert_contains "$completion" "copilot#Accept" "<CR> can accept the Copilot suggestion"
+  # The cmp.confirm call must live under the <Tab> mapping, not under <CR>.
+  # Strip the <Tab> block, then assert the remaining <CR> path has no confirm.
+  local cr_block
+  cr_block="$(awk '/\["<CR>"\]/,/\["<C-Space>"\]/' <<<"$completion")"
+  assert_not_contains "$cr_block" "cmp.confirm" "<CR> does not confirm cmp"
   hits="$( { grep -o '\["<CR>"\]' <<<"$completion" || true; } | wc -l | tr -d ' ')"
   [[ "$hits" == "1" ]] || {
     echo "FAIL: cmp mapping table defines <CR> $hits times, expected 1" >&2

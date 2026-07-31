@@ -47,15 +47,19 @@ return {
         ["<C-b>"] = cmp.mapping.scroll_docs(-4),
         ["<C-f>"] = cmp.mapping.scroll_docs(4),
         ["<C-y>"] = cmp.mapping.confirm({ select = true }),
-        -- Enter: confirm the cmp menu when it's open; otherwise accept a
-        -- displayed Copilot suggestion; otherwise behave like a normal <CR>.
-        -- Ctrl-J (see plugins/copilot.lua) still accepts Copilot directly,
-        -- bypassing cmp, as an explicit alternative.
-        ["<CR>"] = cmp.mapping(function(fallback)
+        -- Tab confirms the cmp menu; Up/Down (and <C-n>/<C-p>) navigate.
+        -- No <S-Tab> binding — leave Shift-Tab for other insert-mode uses.
+        ["<Tab>"] = cmp.mapping(function(fallback)
           if cmp.visible() then
             cmp.confirm({ select = true })
-            return
+          else
+            fallback()
           end
+        end),
+        -- Enter never confirms cmp (always a newline unless Copilot has a
+        -- displayed suggestion). Ctrl-J (plugins/copilot.lua) still accepts
+        -- Copilot directly as an explicit alternative.
+        ["<CR>"] = cmp.mapping(function(fallback)
           local ok, suggestion = pcall(vim.fn["copilot#GetDisplayedSuggestion"])
           if ok and suggestion.text and suggestion.text ~= "" then
             local ok_accept, keys = pcall(vim.fn["copilot#Accept"], "")
@@ -66,8 +70,6 @@ return {
           end
           fallback()
         end),
-        ["<Tab>"] = cmp.mapping.select_next_item(),
-        ["<S-Tab>"] = cmp.mapping.select_prev_item(),
         ["<C-Space>"] = cmp.mapping.complete({}),
         ["<C-l>"] = cmp.mapping(function()
           if luasnip.expand_or_locally_jumpable() then

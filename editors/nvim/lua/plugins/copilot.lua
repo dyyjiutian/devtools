@@ -9,8 +9,8 @@ return {
   "github/copilot.vim",
   event = "InsertEnter",
   init = function()
-    -- <Tab> already selects the next nvim-cmp item; accept suggestions on
-    -- <C-j> instead of fighting nvim-cmp over Tab. Must be set before the
+    -- <Tab> confirms nvim-cmp when its menu is open; accept Copilot on
+    -- <C-j> / <CR> instead of fighting cmp over Tab. Must be set before the
     -- plugin's own plugin/copilot.vim runs, hence init() not config().
     vim.g.copilot_no_tab_map = true
   end,
