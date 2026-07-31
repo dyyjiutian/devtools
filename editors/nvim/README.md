@@ -12,6 +12,9 @@ Modern Neovim configuration with Lua-based setup using [lazy.nvim](https://githu
 - **File Explorer**: Nvim-tree for file navigation
 - **Git Integration**: Fugitive, Gitsigns, and LazyGit support
 - **Syntax Highlighting**: Tree-sitter powered syntax highlighting
+- **Debugging**: nvim-dap with VSCode-style F5/F9/F10/F11 keys (Python, Go)
+- **Testing**: neotest runs and debugs tests from the editor (Python, Go)
+- **Format on Save**: conform.nvim, switchable with `:FormatToggle`
 - **Beautiful UI**: TokyoNight colorscheme with Lualine and Bufferline
 
 ## Prerequisites
@@ -151,6 +154,50 @@ nvim
 | `S` | Flash treesitter |
 | `<Space>/` | Search in current buffer |
 | `<Space>xx` | Toggle Trouble (diagnostics) |
+| `<Space>o` | Toggle code outline (aerial) |
+| `<Space>sr` | Project-wide search and replace (grug-far) |
+| `<Space>sw` | Search and replace word under cursor |
+
+### Format & Lint
+
+Saving a buffer formats it (conform.nvim). `:FormatToggle` switches that off
+globally, `:FormatToggle!` for the current buffer only.
+
+| Key | Description |
+|-----|-------------|
+| `<Space>cf` | Format buffer or selection |
+
+### Debug (nvim-dap)
+
+F-keys match VSCode; the `<Space>d` group covers the rest.
+
+| Key | Description |
+|-----|-------------|
+| `<F5>` | Start / continue |
+| `<F9>` | Toggle breakpoint |
+| `<F10>` / `<F11>` / `<S-F11>` | Step over / into / out |
+| `<Space>db` / `<Space>dB` | Toggle breakpoint / conditional breakpoint |
+| `<Space>du` | Toggle debugger UI |
+| `<Space>de` | Evaluate expression |
+| `<Space>dr` / `<Space>dl` / `<Space>dt` | REPL / run last / terminate |
+
+Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
+
+### Test (neotest)
+
+| Key | Description |
+|-----|-------------|
+| `<Space>tt` / `<Space>tf` | Run nearest test / whole file |
+| `<Space>ts` / `<Space>to` / `<Space>tp` | Summary / output / output panel |
+| `<Space>tl` / `<Space>tx` | Run last / stop |
+| `<Space>td` | Debug nearest test (via nvim-dap) |
+
+### Terminal
+
+| Key | Description |
+|-----|-------------|
+| `<C-\>` | Toggle terminal |
+| `<Space>tv` / `<Space>tF` | Vertical / floating terminal |
 
 ## Included Plugins
 
@@ -177,6 +224,28 @@ nvim
 | [nvim-tree.lua](https://github.com/nvim-tree/nvim-tree.lua) | File explorer |
 | [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) | Fuzzy finder |
 | [flash.nvim](https://github.com/folke/flash.nvim) | Enhanced search |
+| [aerial.nvim](https://github.com/stevearc/aerial.nvim) | Code outline |
+| [grug-far.nvim](https://github.com/MagicDuck/grug-far.nvim) | Project search and replace |
+| [nvim-treesitter-context](https://github.com/nvim-treesitter/nvim-treesitter-context) | Sticky scope header |
+| [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) | Integrated terminal |
+
+### Debug & Test
+
+| Plugin | Description |
+|--------|-------------|
+| [nvim-dap](https://github.com/mfussenegger/nvim-dap) | Debug Adapter Protocol client |
+| [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui) | Debugger panels |
+| [nvim-dap-virtual-text](https://github.com/theHamsta/nvim-dap-virtual-text) | Inline variable values |
+| [nvim-dap-python](https://github.com/mfussenegger/nvim-dap-python) / [nvim-dap-go](https://github.com/leoluz/nvim-dap-go) | Python / Go adapters |
+| [neotest](https://github.com/nvim-neotest/neotest) | Test runner |
+| [neotest-python](https://github.com/nvim-neotest/neotest-python) / [neotest-golang](https://github.com/fredrikaverpil/neotest-golang) | Python / Go test adapters |
+
+### Format & Lint
+
+| Plugin | Description |
+|--------|-------------|
+| [conform.nvim](https://github.com/stevearc/conform.nvim) | Format on save |
+| [nvim-lint](https://github.com/mfussenegger/nvim-lint) | Linters outside LSP |
 
 ### Git
 
@@ -223,11 +292,15 @@ The configuration includes LSP servers for:
 - **HTML/CSS** (html, cssls)
 - **Docker** (dockerls)
 
-Additional formatters installed:
-- stylua (Lua)
-- black, isort (Python)
-- prettier (Web)
-- shfmt (Shell)
+Formatters, linters and debug adapters installed by Mason:
+
+- stylua (Lua), prettier (Web), shfmt (Shell)
+- ruff (Python format + lint), shellcheck (Shell lint)
+- debugpy (Python debug), delve (Go debug)
+
+Debugging and test running currently cover **Python and Go**. Java keeps LSP
+only: driving jdtls debug/test needs `nvim-jdtls` plus extra bundles, which is
+tracked as separate work.
 
 ## Commands
 
@@ -394,6 +467,23 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 
 以上被 pin 的插件（mason / lspconfig / treesitter / lazygit）在 `_reset_pinned_plugins` 中统一清理后再 sync，
 避免本机留着不兼容的旧 checkout。
+
+### 2026-07-31 — 引入 conform 后与手写的行尾空白清理冲突
+
+**表象**：接入 conform 的保存时格式化后，`:FormatToggle` 关掉自动格式化，保存时行尾空白仍被删除。
+
+**根因**：`config/autocmds.lua` 里有一条无条件的 `BufWritePre` `%s/\s\+$//e`，与 conform 抢同一个事件。
+它还会吃掉 Markdown 用于换行的两个行尾空格。
+
+**解法**：删除该 autocmd。conform 覆盖的格式化器（stylua / prettier / shfmt / gofmt / ruff）本身就会处理行尾空白。
+
+### 2026-07-31 — nvim-lint 在 linter 未安装时每次保存报 ENOENT
+
+**表象**：打开或保存 Python 文件时报 `Error running ruff: ENOENT: no such file or directory`。
+
+**根因**：`try_lint()` 会无条件启动 `linters_by_ft` 里的每个 linter，Mason 尚未装好对应二进制时直接抛错。
+
+**解法**：`lint.lua` 在触发前用 `vim.fn.executable()` 过滤，只运行已安装的 linter；一个都没有就跳过。
 
 ## References
 

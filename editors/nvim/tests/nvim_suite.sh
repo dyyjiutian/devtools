@@ -256,10 +256,12 @@ test_leader_keys_are_unique() {
   assert_contains "$tree" '"<leader>n", "<cmd>NvimTreeToggle<CR>"' "file tree toggles on <leader>n"
   assert_contains "$keymaps" '"<leader>e", vim.diagnostic.open_float' "<leader>e stays on diagnostics"
   assert_not_contains "$keymaps" "vim.diagnostic.setloclist" "loclist mapping dropped for trouble.nvim"
+  # A bare <leader>d would shadow the whole debug group behind timeoutlen.
+  assert_not_contains "$keymaps" '"<leader>d", [[' "no bare <leader>d delete mapping"
 
   # Mapping one key twice means load order silently decides the winner.
   # -R follows symlinks: bazel runfiles expose lua/ as links.
-  for key in "<leader>e" "<leader>q"; do
+  for key in "<leader>e" "<leader>q" "<leader>o" "<leader>tt" "<leader>cf" "<leader>sr"; do
     hits="$( { grep -Rho "\"$key\"" "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
     [[ "$hits" == "1" ]] || {
       echo "FAIL: $key mapped $hits times, expected 1" >&2
@@ -268,6 +270,73 @@ test_leader_keys_are_unique() {
   done
   assert_contains "$(bash "$SETUP_SH" --help 2>&1)" "<Space>n" "help documents the new tree key"
   pass "nvim leader keys unique ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_ide_plugins_present() {
+  local plugins
+  # Comments name the rejected alternatives, so assert against code lines only.
+  plugins="$(cat "$MODULE_ROOT"/lua/plugins/*.lua | grep -v '^[[:space:]]*--')"
+  assert_contains "$plugins" '"stevearc/conform.nvim"' "format on save via conform"
+  assert_contains "$plugins" '"mfussenegger/nvim-lint"' "linters via nvim-lint"
+  assert_contains "$plugins" '"mfussenegger/nvim-dap"' "debugger via nvim-dap"
+  assert_contains "$plugins" '"rcarriga/nvim-dap-ui"' "debugger UI"
+  assert_contains "$plugins" '"nvim-neotest/neotest"' "test runner"
+  assert_contains "$plugins" '"stevearc/aerial.nvim"' "code outline"
+  assert_contains "$plugins" '"MagicDuck/grug-far.nvim"' "project search and replace"
+  assert_contains "$plugins" '"akinsho/toggleterm.nvim"' "integrated terminal"
+  assert_contains "$plugins" '"nvim-treesitter/nvim-treesitter-context"' "sticky context"
+  assert_contains "$plugins" '"hrsh7th/cmp-buffer"' "buffer completion source"
+  assert_contains "$plugins" '"hrsh7th/cmp-cmdline"' "cmdline completion source"
+
+  # neotest-go is unmaintained; mason-nvim-dap couples to pinned Mason v1 internals.
+  assert_not_contains "$plugins" "neotest-go\"" "does not use unmaintained neotest-go"
+  assert_not_contains "$plugins" "mason-nvim-dap" "does not depend on mason-nvim-dap"
+  pass "nvim IDE plugins declared ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_ide_plugins_pinned_for_nvim_010() {
+  local aerial grugfar setup
+  aerial="$(cat "$MODULE_ROOT/lua/plugins/aerial.lua")"
+  grugfar="$(cat "$MODULE_ROOT/lua/plugins/grug-far.lua")"
+  setup="$(cat "$SETUP_SH")"
+
+  # aerial master errors below 0.12; grug-far refuses to load below 0.11.
+  assert_contains "$aerial" 'vim.fn.has("nvim-0.12")' "aerial checks for 0.12"
+  assert_contains "$aerial" '"nvim-0.9"' "aerial falls back to the 0.9 branch"
+  assert_contains "$aerial" "branch = branch_for_host()" "aerial applies the conditional branch"
+  assert_contains "$grugfar" 'vim.fn.has("nvim-0.11")' "grug-far checks for 0.11"
+  assert_contains "$grugfar" '"1.6.6"' "grug-far pins the last 0.10-compatible tag"
+
+  # `cond and nil or value` always yields value; conditional pins must branch.
+  assert_not_contains "$aerial" "== 1 and nil or" "aerial avoids the and/or nil pitfall"
+  assert_not_contains "$grugfar" "== 1 and nil or" "grug-far avoids the and/or nil pitfall"
+
+  assert_contains "$setup" "lazy_root}/aerial.nvim" "setup resets aerial checkout"
+  assert_contains "$setup" "lazy_root}/grug-far.nvim" "setup resets grug-far checkout"
+  pass "nvim IDE plugins pinned for 0.10 ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_format_and_tools_wired() {
+  local format lint autocmds lsp
+  format="$(cat "$MODULE_ROOT/lua/plugins/format.lua")"
+  lint="$(cat "$MODULE_ROOT/lua/plugins/lint.lua")"
+  autocmds="$(cat "$MODULE_ROOT/lua/config/autocmds.lua")"
+  lsp="$(cat "$MODULE_ROOT/lua/plugins/lsp.lua")"
+
+  assert_contains "$format" "format_on_save" "conform formats on save"
+  assert_contains "$format" "FormatToggle" "autoformat can be switched off"
+
+  # try_lint() errors with ENOENT on every save when a linter is not installed.
+  assert_contains "$lint" "vim.fn.executable(cmd) == 1" "lint skips missing binaries"
+  assert_contains "$lint" "lint.try_lint(names)" "lint runs only installed linters"
+
+  # A blanket trim on BufWritePre fights conform and eats markdown hard breaks.
+  assert_not_contains "$autocmds" 's/\\s\\+$//e' "no blanket trailing-whitespace autocmd"
+
+  for tool in ruff shellcheck debugpy delve; do
+    assert_contains "$lsp" "\"$tool\"," "mason installs $tool"
+  done
+  pass "nvim format and mason tools wired ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_update_syncs_config_then_plugins() {
@@ -380,6 +449,9 @@ test_lsp_covers_go_and_c
 test_treesitter_pinned_to_master
 test_lazygit_pinned_for_nvim_010
 test_leader_keys_are_unique
+test_ide_plugins_present
+test_ide_plugins_pinned_for_nvim_010
+test_format_and_tools_wired
 test_telescope_ignore_patterns_are_escaped
 test_update_syncs_config_then_plugins
 test_restore_flag_removed
