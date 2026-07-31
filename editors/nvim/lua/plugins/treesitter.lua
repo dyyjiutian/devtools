@@ -34,7 +34,9 @@ return {
       "vimdoc",
       "yaml",
     },
-    auto_install = true,
+    -- ensure_installed + Lazy build=:TSUpdate already install parsers; auto_install
+    -- can race the same lang and surface "Error during tarball extraction".
+    auto_install = false,
     highlight = {
       enable = true,
       additional_vim_regex_highlighting = { "ruby" },
@@ -51,6 +53,9 @@ return {
     },
   },
   config = function(_, opts)
+    -- curl+tar archive downloads often fail behind flaky GitHub access; git clone
+    -- is more reliable for ensure_installed / :TSUpdate during setup.sh --update.
+    require("nvim-treesitter.install").prefer_git = true
     require("nvim-treesitter.configs").setup(opts)
   end,
 }

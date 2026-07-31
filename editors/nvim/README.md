@@ -207,15 +207,15 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 
 ### AI Suggestions (GitHub Copilot)
 
-Completion: `<Tab>` prefers the open cmp menu, then a displayed Copilot ghost
-suggestion, otherwise indents; `↑`/`↓` (or `<C-n>`/`<C-p>`) move the cmp
-selection; `<CR>` never confirms cmp (newline, or Copilot if a ghost suggestion
-is displayed). Copilot's built-in `<Tab>` map stays disabled (`copilot_no_tab_map`).
+Completion: `<Tab>` and `<CR>` both prefer the open cmp menu, then a displayed
+Copilot ghost suggestion, otherwise indent / newline; `↑`/`↓` (or `<C-n>`/`<C-p>`)
+move the cmp selection. Copilot's built-in `<Tab>` map stays disabled
+(`copilot_no_tab_map`).
 
 | Key | Description |
 |-----|-------------|
 | `<Tab>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else indent |
-| `<CR>` (insert mode) | Accept a displayed Copilot suggestion, otherwise a normal Enter (never confirms cmp) |
+| `<CR>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else newline |
 | `<C-j>` (insert mode) | Accept Copilot suggestion directly, bypassing cmp |
 | `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
 | `<C-]>` (insert mode) | Dismiss suggestion (Copilot default) |
@@ -522,6 +522,24 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 **根因**：为避免与 cmp 抢键，配置了 `copilot_no_tab_map = true`，且 cmp 的 `<Tab>` 只在 `cmp.visible()` 时 `confirm`，否则直接 `fallback()`，没有检查 Copilot。
 
 **解法**：`<Tab>` 优先级改为「cmp 可见 → confirm；否则有幽灵字 → `copilot#Accept`；否则缩进」。仍禁用 Copilot 自带 Tab 映射，由 `completion.lua` 统一处理。`./setup.sh --update` 后重启生效。
+
+### 2026-07-31 — treesitter parser 安装报 `Error during tarball extraction`
+
+**表象**：`./setup.sh --update` 或 `:TSUpdate` 时出现
+`nvim-treesitter[bash]: Error during tarball extraction` /
+`tree-sitter-bash.tar.gz: Cannot open: No such file or directory`。
+
+**根因**：默认用 curl 拉 GitHub archive 再 `tar` 解压；下载失败或不完整时解压找不到文件。另有 `auto_install` 与 `ensure_installed` / Lazy `build = :TSUpdate` 并发装同一 parser 的竞态。
+
+**解法**：`prefer_git = true`（改用 git clone）；`auto_install = false`（只靠 `ensure_installed` + `:TSUpdate`）。生效后执行 `./setup.sh --update`，若仍失败可手动 `:TSInstall bash`。
+
+### 2026-07-31 — `<CR>` 不确认 nvim-cmp
+
+**表象**：补全菜单打开时按 Enter 只会换行，不能接受当前 cmp 项（只能用 Tab）。
+
+**根因**：此前为避免误确认，`<CR>` 只处理 Copilot 幽灵字，从不调用 `cmp.confirm`。
+
+**解法**：`<CR>` 与 `<Tab>` 同优先级——cmp 可见 → confirm；否则 Copilot；否则换行。
 
 ## References
 

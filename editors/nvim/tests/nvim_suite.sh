@@ -220,6 +220,8 @@ test_treesitter_pinned_to_master() {
   assert_contains "$treesitter" 'branch = "master"' "pins nvim-treesitter to master"
   assert_contains "$treesitter" 'require("nvim-treesitter.configs").setup(opts)' "uses master setup entry point"
   assert_not_contains "$treesitter" 'require("nvim-treesitter").setup(opts)' "no rewrite-style setup call"
+  assert_contains "$treesitter" "prefer_git = true" "prefers git over curl tarball downloads"
+  assert_contains "$treesitter" "auto_install = false" "disables auto_install to avoid TSUpdate races"
   assert_contains "$setup" "nvim-treesitter" "setup resets nvim-treesitter checkout"
   pass "nvim treesitter pinned to master ($DEVTOOLS_TEST_PROFILE)"
 }
@@ -269,16 +271,19 @@ test_copilot_plugin_wired() {
   }
   assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
 
-  # <CR> never confirms cmp; it may accept a displayed Copilot suggestion,
-  # otherwise falls back to a plain newline.
-  assert_contains "$completion" "copilot#GetDisplayedSuggestion" \
-    "<CR> checks for a displayed Copilot suggestion before falling back"
-  assert_contains "$completion" "copilot#Accept" "<CR> can accept the Copilot suggestion"
-  # The cmp.confirm call must live under the <Tab> mapping, not under <CR>.
-  # Strip the <Tab> block, then assert the remaining <CR> path has no confirm.
+  # <CR> mirrors <Tab>: cmp confirm → Copilot accept → newline.
   local cr_block
   cr_block="$(awk '/\["<CR>"\]/,/\["<C-Space>"\]/' <<<"$completion")"
-  assert_not_contains "$cr_block" "cmp.confirm" "<CR> does not confirm cmp"
+  assert_contains "$cr_block" "cmp.confirm" "<CR> confirms cmp when the menu is open"
+  assert_contains "$cr_block" "copilot#GetDisplayedSuggestion" \
+    "<CR> checks for a displayed Copilot suggestion before falling back"
+  assert_contains "$cr_block" "copilot#Accept" "<CR> can accept the Copilot suggestion"
+  confirm_line="$(printf '%s\n' "$cr_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
+  accept_line="$(printf '%s\n' "$cr_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
+  [[ -n "$confirm_line" && -n "$accept_line" && "$confirm_line" -lt "$accept_line" ]] || {
+    echo "FAIL: cmp.confirm (line ${confirm_line:-?}) must precede copilot#Accept (line ${accept_line:-?}) in <CR>" >&2
+    return 1
+  }
   hits="$( { grep -o '\["<CR>"\]' <<<"$completion" || true; } | wc -l | tr -d ' ')"
   [[ "$hits" == "1" ]] || {
     echo "FAIL: cmp mapping table defines <CR> $hits times, expected 1" >&2
