@@ -224,6 +224,35 @@ test_treesitter_pinned_to_master() {
   pass "nvim treesitter pinned to master ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_copilot_plugin_wired() {
+  local copilot completion setup readme hits
+  copilot="$(cat "$MODULE_ROOT/lua/plugins/copilot.lua")"
+  completion="$(cat "$MODULE_ROOT/lua/plugins/completion.lua")"
+  setup="$(cat "$SETUP_SH")"
+  readme="$(cat "$MODULE_ROOT/README.md")"
+
+  assert_contains "$copilot" '"github/copilot.vim"' "installs copilot.vim"
+  assert_contains "$copilot" "vim.g.copilot_no_tab_map = true" "disables copilot's own Tab map"
+  assert_contains "$copilot" '"i", "<C-j>"' "accepts suggestions on <C-j>"
+  assert_contains "$copilot" "copilot#Accept" "wires the accept function"
+
+  # <Tab> already selects the next nvim-cmp item; Copilot must not fight it.
+  assert_not_contains "$copilot" '"<Tab>"' "does not remap <Tab>, which cmp owns"
+
+  # <C-j> must be free in insert mode across all plugin specs, or the two
+  # mappings would silently race by lazy.nvim load order.
+  hits="$( { grep -Rho '"i", *"<C-j>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+  [[ "$hits" == "1" ]] || {
+    echo "FAIL: insert-mode <C-j> mapped $hits times, expected 1" >&2
+    return 1
+  }
+  assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
+
+  assert_contains "$readme" ":Copilot auth" "README documents the manual sign-in step"
+  assert_contains "$setup" ":Copilot auth" "setup output points to the manual sign-in step"
+  pass "nvim copilot wired without clobbering cmp ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_telescope_ignore_patterns_are_escaped() {
   local telescope
   # Comments mention the buggy patterns, so assert against code lines only.
@@ -452,6 +481,7 @@ test_leader_keys_are_unique
 test_ide_plugins_present
 test_ide_plugins_pinned_for_nvim_010
 test_format_and_tools_wired
+test_copilot_plugin_wired
 test_telescope_ignore_patterns_are_escaped
 test_update_syncs_config_then_plugins
 test_restore_flag_removed

@@ -71,6 +71,7 @@ EOF
   <C-\>        切换内置终端 (toggleterm)
   F5/F9/F10/F11  调试: 继续 / 断点 / 单步跳过 / 步入 (nvim-dap)
   <Space>tt    运行光标处测试 (neotest)
+  <C-j>        接受 Copilot 建议 (插入模式，需先 :Copilot auth)
 EOF
     exit 0
 }
@@ -536,6 +537,7 @@ main() {
     echo "  启动命令: nvim"
     echo ""
     echo "  提示: 将终端字体设置为 'MesloLGS NF' 以显示图标"
+    echo "  提示: 首次使用 GitHub Copilot 需在 nvim 内运行 :Copilot auth 完成登录（需订阅）"
     echo ""
 }
 

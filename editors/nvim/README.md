@@ -15,6 +15,7 @@ Modern Neovim configuration with Lua-based setup using [lazy.nvim](https://githu
 - **Debugging**: nvim-dap with VSCode-style F5/F9/F10/F11 keys (Python, Go)
 - **Testing**: neotest runs and debugs tests from the editor (Python, Go)
 - **Format on Save**: conform.nvim, switchable with `:FormatToggle`
+- **AI Suggestions**: GitHub Copilot ghost-text completion (`:Copilot auth` required, opt-in)
 - **Beautiful UI**: TokyoNight colorscheme with Lualine and Bufferline
 
 ## Prerequisites
@@ -39,6 +40,11 @@ This will:
 3. Copy configuration files
 4. Install Nerd Font for icons
 5. Install all plugins and LSP servers
+
+GitHub Copilot needs a one-time, interactive sign-in that the script cannot
+perform: open Neovim and run `:Copilot auth`, then follow the device-flow link
+in your browser. Copilot suggestions stay silent (no ghost text) until this
+completes; a subscription is required.
 
 ## Manual Setup
 
@@ -199,6 +205,17 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 | `<C-\>` | Toggle terminal |
 | `<Space>tv` / `<Space>tF` | Vertical / floating terminal |
 
+### AI Suggestions (GitHub Copilot)
+
+`<Tab>` already selects the next nvim-cmp item, so Copilot suggestions accept
+on `<C-j>` instead.
+
+| Key | Description |
+|-----|-------------|
+| `<C-j>` (insert mode) | Accept Copilot suggestion |
+| `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
+| `<C-]>` (insert mode) | Dismiss suggestion (Copilot default) |
+
 ## Included Plugins
 
 ### Core
@@ -216,6 +233,7 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 | [mason.nvim](https://github.com/williamboman/mason.nvim) | LSP/DAP/formatter installer |
 | [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) | Auto-completion |
 | [LuaSnip](https://github.com/L3MON4D3/LuaSnip) | Snippet engine |
+| [copilot.vim](https://github.com/github/copilot.vim) | GitHub Copilot ghost-text suggestions (requires subscription + `:Copilot auth`) |
 
 ### Navigation
 
