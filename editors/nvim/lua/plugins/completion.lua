@@ -47,14 +47,22 @@ return {
         ["<C-b>"] = cmp.mapping.scroll_docs(-4),
         ["<C-f>"] = cmp.mapping.scroll_docs(4),
         ["<C-y>"] = cmp.mapping.confirm({ select = true }),
-        -- Tab confirms the cmp menu; Up/Down (and <C-n>/<C-p>) navigate.
-        -- No <S-Tab> binding — leave Shift-Tab for other insert-mode uses.
+        -- Tab: cmp menu → confirm; else Copilot ghost text → accept; else indent.
+        -- Up/Down (and <C-n>/<C-p>) navigate. No <S-Tab> — leave it free.
         ["<Tab>"] = cmp.mapping(function(fallback)
           if cmp.visible() then
             cmp.confirm({ select = true })
-          else
-            fallback()
+            return
           end
+          local ok, suggestion = pcall(vim.fn["copilot#GetDisplayedSuggestion"])
+          if ok and suggestion.text and suggestion.text ~= "" then
+            local ok_accept, keys = pcall(vim.fn["copilot#Accept"], "")
+            if ok_accept and keys ~= "" then
+              vim.api.nvim_feedkeys(keys, "n", true)
+              return
+            end
+          end
+          fallback()
         end),
         -- Enter never confirms cmp (always a newline unless Copilot has a
         -- displayed suggestion). Ctrl-J (plugins/copilot.lua) still accepts

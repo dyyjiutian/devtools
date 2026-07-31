@@ -238,14 +238,25 @@ test_copilot_plugin_wired() {
   assert_contains "$copilot" '"i", "<C-j>"' "accepts suggestions on <C-j>"
   assert_contains "$copilot" "copilot#Accept" "wires the accept function"
 
-  # <Tab> confirms cmp; Copilot must not remap it.
-  assert_not_contains "$copilot" '"<Tab>"' "does not remap <Tab>, which cmp owns"
+  # Copilot's own Tab map stays off; our cmp <Tab> handler owns the key.
+  assert_not_contains "$copilot" '"<Tab>"' "copilot.lua does not bind <Tab> itself"
   assert_contains "$completion" '["<Tab>"]' "cmp maps <Tab>"
   assert_not_contains "$completion" '["<S-Tab>"]' "cmp does not bind <S-Tab>"
-  # <Tab> must confirm, not navigate — navigate stays on <C-n>/<C-p>/arrows.
+  # <Tab> priority: cmp confirm → Copilot accept → indent. Never navigate.
   local tab_block
   tab_block="$(awk '/\["<Tab>"\]/,/\["<CR>"\]/' <<<"$completion")"
-  assert_contains "$tab_block" "cmp.confirm" "cmp <Tab> confirms the selection"
+  assert_contains "$tab_block" "cmp.confirm" "cmp <Tab> confirms when the menu is open"
+  assert_contains "$tab_block" "copilot#GetDisplayedSuggestion" \
+    "cmp <Tab> checks for a displayed Copilot suggestion"
+  assert_contains "$tab_block" "copilot#Accept" "cmp <Tab> can accept Copilot"
+  # cmp.confirm must be checked before Copilot in the Tab handler body.
+  local confirm_line accept_line
+  confirm_line="$(printf '%s\n' "$tab_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
+  accept_line="$(printf '%s\n' "$tab_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
+  [[ -n "$confirm_line" && -n "$accept_line" && "$confirm_line" -lt "$accept_line" ]] || {
+    echo "FAIL: cmp.confirm (line ${confirm_line:-?}) must precede copilot#Accept (line ${accept_line:-?}) in <Tab>" >&2
+    return 1
+  }
   assert_not_contains "$tab_block" "select_next_item" "cmp <Tab> does not navigate"
   assert_not_contains "$tab_block" "select_prev_item" "cmp <Tab> does not navigate prev"
 

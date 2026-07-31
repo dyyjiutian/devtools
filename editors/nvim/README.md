@@ -207,13 +207,14 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 
 ### AI Suggestions (GitHub Copilot)
 
-Completion: `<Tab>` accepts the selected cmp item; `↑`/`↓` (or `<C-n>`/`<C-p>`)
-move the selection; `<CR>` never confirms cmp (newline, or Copilot if a ghost
-suggestion is displayed). Copilot does not own `<Tab>`.
+Completion: `<Tab>` prefers the open cmp menu, then a displayed Copilot ghost
+suggestion, otherwise indents; `↑`/`↓` (or `<C-n>`/`<C-p>`) move the cmp
+selection; `<CR>` never confirms cmp (newline, or Copilot if a ghost suggestion
+is displayed). Copilot's built-in `<Tab>` map stays disabled (`copilot_no_tab_map`).
 
 | Key | Description |
 |-----|-------------|
-| `<Tab>` (insert mode) | Accept the selected nvim-cmp item (indent when the menu is closed) |
+| `<Tab>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else indent |
 | `<CR>` (insert mode) | Accept a displayed Copilot suggestion, otherwise a normal Enter (never confirms cmp) |
 | `<C-j>` (insert mode) | Accept Copilot suggestion directly, bypassing cmp |
 | `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
@@ -513,6 +514,14 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 **根因**：lazy.nvim 仅在 `cmd` / `keys` / `event` 等触发器命中后才加载插件。`copilot.vim` 只有 `event = InsertEnter`，`nvim-dap` / `neotest` 只有 `keys`，都没有预挂 `cmd` stub，因此插件自带的 user command 在首次触发前未注册。
 
 **解法**：为这三个插件补上对应 `cmd`（保留原有 `event`/`keys`）。同类已正确声明的有 lazygit / trouble / aerial / toggleterm / grug-far / conform。生效：`./setup.sh --update` 后重启 Neovim，无需清 lazy 缓存。
+
+### 2026-07-31 — `<Tab>` 只确认 cmp，有 Copilot 幽灵字时变成插入 Tab
+
+**表象**：关闭 cmp 菜单后按 `<Tab>` 插入制表符/缩进，不接受已显示的 Copilot 幽灵建议；`<C-j>` / `<CR>` 才能接受。
+
+**根因**：为避免与 cmp 抢键，配置了 `copilot_no_tab_map = true`，且 cmp 的 `<Tab>` 只在 `cmp.visible()` 时 `confirm`，否则直接 `fallback()`，没有检查 Copilot。
+
+**解法**：`<Tab>` 优先级改为「cmp 可见 → confirm；否则有幽灵字 → `copilot#Accept`；否则缩进」。仍禁用 Copilot 自带 Tab 映射，由 `completion.lua` 统一处理。`./setup.sh --update` 后重启生效。
 
 ## References
 

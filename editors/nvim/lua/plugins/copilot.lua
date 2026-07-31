@@ -11,9 +11,9 @@ return {
   cmd = "Copilot",
   event = "InsertEnter",
   init = function()
-    -- <Tab> confirms nvim-cmp when its menu is open; accept Copilot on
-    -- <C-j> / <CR> instead of fighting cmp over Tab. Must be set before the
-    -- plugin's own plugin/copilot.vim runs, hence init() not config().
+    -- Disable copilot.vim's own <Tab> map; completion.lua owns <Tab>
+    -- (cmp confirm → Copilot accept → indent). Keep <C-j> as a direct accept.
+    -- Must be set before plugin/copilot.vim runs, hence init() not config().
     vim.g.copilot_no_tab_map = true
   end,
   config = function()
