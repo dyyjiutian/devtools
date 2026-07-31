@@ -209,8 +209,9 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 
 Completion: `<Tab>` and `<CR>` prefer a displayed Copilot ghost suggestion, then
 the open cmp menu, otherwise indent / newline; `↑`/`↓` (or `<C-n>`/`<C-p>`) move
-the cmp selection. Use `<C-g>` to close cmp and request Copilot. Copilot's
-built-in `<Tab>` map stays disabled (`copilot_no_tab_map`).
+the cmp selection. Use `<C-g>` to request Copilot and `<C-S-g>` to open cmp
+manually (avoids tmux `<C-Space>` prefix). Copilot's built-in `<Tab>` map stays
+disabled (`copilot_no_tab_map`).
 
 | Key | Description |
 |-----|-------------|
@@ -218,6 +219,7 @@ built-in `<Tab>` map stays disabled (`copilot_no_tab_map`).
 | `<CR>` (insert mode) | Accept Copilot ghost text if shown; else confirm cmp; else newline |
 | `<C-j>` (insert mode) | Accept Copilot suggestion directly, bypassing cmp |
 | `<C-g>` (insert mode) | Close cmp (if open) and request a Copilot suggestion |
+| `<C-S-g>` (insert mode) | Manually open the nvim-cmp completion menu |
 | `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
 | `<C-]>` (insert mode) | Dismiss suggestion (Copilot default) |
 
@@ -548,7 +550,15 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 
 **根因**：接受键原先把 `cmp.visible()` 放在 Copilot 检查之前；cmp 又经常自动弹出，盖住/抢走操作焦点。
 
-**解法**：`<Tab>`/`<CR>` 改为「有幽灵字 → Copilot；否则 cmp；否则缩进/换行」。另加 `<C-g>`：关闭 cmp 并 `copilot#Suggest()` 主动请求。cmp 仍自动弹出，可用 `<C-Space>` 手动补全。
+**解法**：`<Tab>`/`<CR>` 改为「有幽灵字 → Copilot；否则 cmp；否则缩进/换行」。另加 `<C-g>`：关闭 cmp 并 `copilot#Suggest()` 主动请求。cmp 仍自动弹出，可用 `<C-S-g>` 手动补全。
+
+### 2026-07-31 — `<C-Space>` 手动 cmp 与 tmux 前缀冲突
+
+**表象**：插入模式按 Ctrl+Space 想打开 cmp，却触发 tmux 前缀（或无响应）。
+
+**根因**：本仓库 `terminal/tmux` 将 prefix 设为 `C-Space`。
+
+**解法**：nvim-cmp 手动补全改为 `<C-S-g>`（Ctrl+Shift+G）。需终端/tmux `extended-keys`（本仓 tmux 已开 csi-u）才能与 `<C-g>`（Copilot 请求）区分。
 
 ## References
 

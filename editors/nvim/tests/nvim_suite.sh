@@ -277,15 +277,19 @@ test_copilot_plugin_wired() {
     return 1
   }
   assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
-  assert_not_contains "$completion" "<C-g>" "cmp does not also claim <C-g>"
+  # Quote-bounded: "<C-S-g>" must not count as claiming bare "<C-g>".
+  assert_not_contains "$completion" '"<C-g>"' "cmp does not also claim <C-g>"
 
   # <CR> mirrors <Tab>: Copilot accept → cmp confirm → newline.
   local cr_block
-  cr_block="$(awk '/\["<CR>"\]/,/\["<C-Space>"\]/' <<<"$completion")"
+  cr_block="$(awk '/\["<CR>"\]/,/\["<C-S-g>"\]/' <<<"$completion")"
   assert_contains "$cr_block" "cmp.confirm" "<CR> confirms cmp when the menu is open"
   assert_contains "$cr_block" "copilot#GetDisplayedSuggestion" \
     "<CR> checks for a displayed Copilot suggestion before falling back"
   assert_contains "$cr_block" "copilot#Accept" "<CR> can accept the Copilot suggestion"
+  assert_contains "$completion" '["<C-S-g>"]' "cmp complete uses <C-S-g>, not tmux <C-Space>"
+  assert_contains "$completion" "cmp.mapping.complete" "wires manual cmp complete"
+  assert_not_contains "$completion" '["<C-Space>"]' "does not bind tmux prefix <C-Space>"
   confirm_line="$(printf '%s\n' "$cr_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
   accept_line="$(printf '%s\n' "$cr_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
   [[ -n "$confirm_line" && -n "$accept_line" && "$accept_line" -lt "$confirm_line" ]] || {

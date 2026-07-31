@@ -80,7 +80,9 @@ return {
           end
           fallback()
         end),
-        ["<C-Space>"] = cmp.mapping.complete({}),
+        -- <C-Space> is tmux prefix in this repo; use Ctrl-Shift-G instead.
+        -- Needs terminal/tmux extended-keys (csi-u) to distinguish from <C-g>.
+        ["<C-S-g>"] = cmp.mapping.complete({}),
         ["<C-l>"] = cmp.mapping(function()
           if luasnip.expand_or_locally_jumpable() then
             luasnip.expand_or_jump()
