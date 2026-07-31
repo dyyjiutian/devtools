@@ -72,6 +72,7 @@ EOF
   F5/F9/F10/F11  调试: 继续 / 断点 / 单步跳过 / 步入 (nvim-dap)
   <Space>tt    运行光标处测试 (neotest)
   <Tab>        确认 cmp / 接受 Copilot 幽灵字 / 缩进 (插入模式)
+  <CR>         确认 cmp / 接受 Copilot 幽灵字 / 换行 (插入模式)
   <C-j>        直接接受 Copilot 建议 (插入模式，需先 :Copilot auth)
 EOF
     exit 0
