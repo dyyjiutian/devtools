@@ -14,12 +14,8 @@ autocmd("TextYankPost", {
   end,
 })
 
--- Remove trailing whitespace on save
-autocmd("BufWritePre", {
-  desc = "Remove trailing whitespace on save",
-  group = augroup("trim-whitespace", { clear = true }),
-  command = [[%s/\s\+$//e]],
-})
+-- Trailing whitespace is handled by conform.nvim (plugins/format.lua). A blanket
+-- BufWritePre substitute would fight the formatters and eat markdown hard breaks.
 
 -- Auto resize splits when window is resized
 autocmd("VimResized", {
