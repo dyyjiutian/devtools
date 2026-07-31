@@ -55,9 +55,6 @@ map("n", "N", "Nzzzv")
 -- Paste without overwriting register
 map("x", "<leader>p", [['_dP]], { desc = "Paste without overwriting register" })
 
--- Delete without yanking
-map({ "n", "v" }, "<leader>d", [['_d]], { desc = "Delete without yanking" })
-
 -- Quick file explorer
 map("n", "<leader>pv", vim.cmd.Ex, { desc = "Open file explorer" })
 
