@@ -207,16 +207,17 @@ Adapters are installed by Mason: `debugpy` (Python) and `delve` (Go).
 
 ### AI Suggestions (GitHub Copilot)
 
-Completion: `<Tab>` and `<CR>` both prefer the open cmp menu, then a displayed
-Copilot ghost suggestion, otherwise indent / newline; `↑`/`↓` (or `<C-n>`/`<C-p>`)
-move the cmp selection. Copilot's built-in `<Tab>` map stays disabled
-(`copilot_no_tab_map`).
+Completion: `<Tab>` and `<CR>` prefer a displayed Copilot ghost suggestion, then
+the open cmp menu, otherwise indent / newline; `↑`/`↓` (or `<C-n>`/`<C-p>`) move
+the cmp selection. Use `<C-g>` to close cmp and request Copilot. Copilot's
+built-in `<Tab>` map stays disabled (`copilot_no_tab_map`).
 
 | Key | Description |
 |-----|-------------|
-| `<Tab>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else indent |
-| `<CR>` (insert mode) | Confirm cmp if visible; else accept Copilot ghost text; else newline |
+| `<Tab>` (insert mode) | Accept Copilot ghost text if shown; else confirm cmp; else indent |
+| `<CR>` (insert mode) | Accept Copilot ghost text if shown; else confirm cmp; else newline |
 | `<C-j>` (insert mode) | Accept Copilot suggestion directly, bypassing cmp |
+| `<C-g>` (insert mode) | Close cmp (if open) and request a Copilot suggestion |
 | `<M-]>` / `<M-[>` | Next / previous suggestion (Copilot default) |
 | `<C-]>` (insert mode) | Dismiss suggestion (Copilot default) |
 
@@ -540,6 +541,14 @@ Linux 侧固定安装 Neovim 0.10.4（见上文 glibc 一节），而插件生�
 **根因**：此前为避免误确认，`<CR>` 只处理 Copilot 幽灵字，从不调用 `cmp.confirm`。
 
 **解法**：`<CR>` 与 `<Tab>` 同优先级——cmp 可见 → confirm；否则 Copilot；否则换行。
+
+### 2026-07-31 — Copilot 幽灵字被 cmp 菜单抢优先级
+
+**表象**：进入插入模式后常先看到 cmp 菜单；有 Copilot 幽灵字时 `<Tab>`/`<CR>` 仍先确认 cmp，感觉 Copilot「没触发」。
+
+**根因**：接受键原先把 `cmp.visible()` 放在 Copilot 检查之前；cmp 又经常自动弹出，盖住/抢走操作焦点。
+
+**解法**：`<Tab>`/`<CR>` 改为「有幽灵字 → Copilot；否则 cmp；否则缩进/换行」。另加 `<C-g>`：关闭 cmp 并 `copilot#Suggest()` 主动请求。cmp 仍自动弹出，可用 `<C-Space>` 手动补全。
 
 ## References
 

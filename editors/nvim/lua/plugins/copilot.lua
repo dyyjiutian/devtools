@@ -11,8 +11,8 @@ return {
   cmd = "Copilot",
   event = "InsertEnter",
   init = function()
-    -- Disable copilot.vim's own <Tab> map; completion.lua owns <Tab>
-    -- (cmp confirm → Copilot accept → indent). Keep <C-j> as a direct accept.
+    -- Disable copilot.vim's own <Tab> map; completion.lua owns <Tab>/<CR>
+    -- (Copilot accept → cmp confirm → indent/newline). Keep <C-j> / <C-g>.
     -- Must be set before plugin/copilot.vim runs, hence init() not config().
     vim.g.copilot_no_tab_map = true
   end,
@@ -22,5 +22,13 @@ return {
       replace_keycodes = false,
       desc = "Accept Copilot suggestion",
     })
+    -- Close cmp first so ghost text is visible, then request a suggestion.
+    vim.keymap.set("i", "<C-g>", function()
+      local ok_cmp, cmp = pcall(require, "cmp")
+      if ok_cmp and cmp.visible() then
+        cmp.close()
+      end
+      pcall(vim.fn["copilot#Suggest"])
+    end, { desc = "Request Copilot suggestion" })
   end,
 }

@@ -239,39 +239,47 @@ test_copilot_plugin_wired() {
   assert_contains "$copilot" "vim.g.copilot_no_tab_map = true" "disables copilot's own Tab map"
   assert_contains "$copilot" '"i", "<C-j>"' "accepts suggestions on <C-j>"
   assert_contains "$copilot" "copilot#Accept" "wires the accept function"
+  assert_contains "$copilot" '"i", "<C-g>"' "requests suggestions on <C-g>"
+  assert_contains "$copilot" "copilot#Suggest" "wires the suggest function"
+  assert_contains "$copilot" "cmp.close" "<C-g> closes cmp before suggesting"
 
   # Copilot's own Tab map stays off; our cmp <Tab> handler owns the key.
   assert_not_contains "$copilot" '"<Tab>"' "copilot.lua does not bind <Tab> itself"
   assert_contains "$completion" '["<Tab>"]' "cmp maps <Tab>"
   assert_not_contains "$completion" '["<S-Tab>"]' "cmp does not bind <S-Tab>"
-  # <Tab> priority: cmp confirm → Copilot accept → indent. Never navigate.
+  # <Tab> priority: Copilot accept → cmp confirm → indent. Never navigate.
   local tab_block
   tab_block="$(awk '/\["<Tab>"\]/,/\["<CR>"\]/' <<<"$completion")"
   assert_contains "$tab_block" "cmp.confirm" "cmp <Tab> confirms when the menu is open"
   assert_contains "$tab_block" "copilot#GetDisplayedSuggestion" \
     "cmp <Tab> checks for a displayed Copilot suggestion"
   assert_contains "$tab_block" "copilot#Accept" "cmp <Tab> can accept Copilot"
-  # cmp.confirm must be checked before Copilot in the Tab handler body.
+  # Copilot must be checked before cmp.confirm in the Tab handler body.
   local confirm_line accept_line
   confirm_line="$(printf '%s\n' "$tab_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
   accept_line="$(printf '%s\n' "$tab_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
-  [[ -n "$confirm_line" && -n "$accept_line" && "$confirm_line" -lt "$accept_line" ]] || {
-    echo "FAIL: cmp.confirm (line ${confirm_line:-?}) must precede copilot#Accept (line ${accept_line:-?}) in <Tab>" >&2
+  [[ -n "$confirm_line" && -n "$accept_line" && "$accept_line" -lt "$confirm_line" ]] || {
+    echo "FAIL: copilot#Accept (line ${accept_line:-?}) must precede cmp.confirm (line ${confirm_line:-?}) in <Tab>" >&2
     return 1
   }
   assert_not_contains "$tab_block" "select_next_item" "cmp <Tab> does not navigate"
   assert_not_contains "$tab_block" "select_prev_item" "cmp <Tab> does not navigate prev"
 
-  # <C-j> must be free in insert mode across all plugin specs, or the two
-  # mappings would silently race by lazy.nvim load order.
+  # <C-j> / <C-g> must be unique in insert mode across plugin specs.
   hits="$( { grep -Rho '"i", *"<C-j>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
   [[ "$hits" == "1" ]] || {
     echo "FAIL: insert-mode <C-j> mapped $hits times, expected 1" >&2
     return 1
   }
+  hits="$( { grep -Rho '"i", *"<C-g>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+  [[ "$hits" == "1" ]] || {
+    echo "FAIL: insert-mode <C-g> mapped $hits times, expected 1" >&2
+    return 1
+  }
   assert_not_contains "$completion" "<C-j>" "cmp does not also claim <C-j>"
+  assert_not_contains "$completion" "<C-g>" "cmp does not also claim <C-g>"
 
-  # <CR> mirrors <Tab>: cmp confirm → Copilot accept → newline.
+  # <CR> mirrors <Tab>: Copilot accept → cmp confirm → newline.
   local cr_block
   cr_block="$(awk '/\["<CR>"\]/,/\["<C-Space>"\]/' <<<"$completion")"
   assert_contains "$cr_block" "cmp.confirm" "<CR> confirms cmp when the menu is open"
@@ -280,8 +288,8 @@ test_copilot_plugin_wired() {
   assert_contains "$cr_block" "copilot#Accept" "<CR> can accept the Copilot suggestion"
   confirm_line="$(printf '%s\n' "$cr_block" | grep -n 'cmp.confirm' | head -1 | cut -d: -f1)"
   accept_line="$(printf '%s\n' "$cr_block" | grep -n 'copilot#Accept' | head -1 | cut -d: -f1)"
-  [[ -n "$confirm_line" && -n "$accept_line" && "$confirm_line" -lt "$accept_line" ]] || {
-    echo "FAIL: cmp.confirm (line ${confirm_line:-?}) must precede copilot#Accept (line ${accept_line:-?}) in <CR>" >&2
+  [[ -n "$confirm_line" && -n "$accept_line" && "$accept_line" -lt "$confirm_line" ]] || {
+    echo "FAIL: copilot#Accept (line ${accept_line:-?}) must precede cmp.confirm (line ${confirm_line:-?}) in <CR>" >&2
     return 1
   }
   hits="$( { grep -o '\["<CR>"\]' <<<"$completion" || true; } | wc -l | tr -d ' ')"
