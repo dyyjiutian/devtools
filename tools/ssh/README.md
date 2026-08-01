@@ -10,7 +10,7 @@ bash tools/ssh/fssh.sh --help
 
 依赖 ssh 和 fzf；脚本会备份并更新 ~/.ssh/config。
 
-## fssh 主机查询
+## fssh 主机 / session 查询
 
 `fssh` 无参数时打开全量 Host 选择器。带参数时对 SSH **Host 别名**（不含 `*?` 通配）做解析；会递归跟随 `~/.ssh/config` 中的 `Include`（相对路径按 OpenSSH 规则解析到 `~/.ssh/`，支持 `~` 与通配）：
 
@@ -18,9 +18,13 @@ bash tools/ssh/fssh.sh --help
 2. 否则不区分大小写的子串匹配
 3. 唯一命中直接连接；多个命中对候选开 fzf；零命中报错退出
 
+`-t/--tmux <session>` 对远端 tmux session 名使用相同匹配规则（唯一命中跳过 fzf）；**必须同时给出 host 查询**，且与 `-n/--no-tmux` 互斥。
+
 ~~~bash
-fssh dev          # 唯一匹配 → 直连；多个 → fzf
-fssh prod -n      # 解析后 plain SSH（跳过 tmux）
+fssh dev              # 唯一 host → 再弹 session 菜单；多个 host → fzf
+fssh prod -n          # 解析后 plain SSH（跳过 tmux）
+fssh prod -t main     # 解析 host 后 attach session（唯一命中直连）
+fssh prod -t ma       # session 子串唯一 → 直连；多个 → fzf；零命中报错
 ~~~
 
 ## Issues

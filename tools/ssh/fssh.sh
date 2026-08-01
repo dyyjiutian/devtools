@@ -46,8 +46,10 @@ Usage:
   fssh                  Interactive: pick SSH host, then tmux session
   fssh <query>          Resolve Host alias: exact match, else substring;
                         unique hit connects, multiple hits open fzf
-  fssh -n               Skip tmux — plain SSH login after host pick
-  fssh <query> -n       Resolve <query>, then plain SSH
+  fssh <query> -n       Resolve <query>, then plain SSH (no tmux)
+  fssh <query> -t <session>
+                        Resolve <query>, then attach tmux session
+                        (host query required with -t)
   fssh -l               List all hosts from SSH config (incl. Include) and exit
   fssh -h               Show this help
 
@@ -55,18 +57,20 @@ Flags (long forms also accepted):
   -h, --help            Show this help
   -l, --list            List available SSH hosts and exit
   -n, --no-tmux         Plain SSH — skip tmux session picker entirely
+  -t, --tmux SESSION    Attach tmux session (requires host query; mutually
+                        exclusive with -n/--no-tmux)
 
-Host query matching (Host aliases only; wildcards excluded):
-  1. Case-insensitive exact match against Host aliases
+Host / session query matching (Host aliases or session names):
+  1. Case-insensitive exact match
   2. Else case-insensitive substring match
   3. 1 hit → use it; multiple → fzf on matches; 0 → error
 
-Interactive tmux flow:
+Interactive tmux flow (no -n / -t):
   1. Reads ~/.ssh/config Host entries, following Include (wildcards excluded)
   2. Resolve query or fzf picker → select host
   3. SSH to host, list tmux sessions
-  4. fzf picker → select existing session, "[新建会话]" to create one,
-     or "[直接登录]" to drop into a plain shell (no tmux)
+  4. fzf picker → select existing session, "[new session]" to create one,
+     or "[ssh login]" to drop into a plain shell (no tmux)
   5. Connects accordingly
 
 On any exit (normal or network disconnect), local terminal mouse state is
@@ -341,6 +345,57 @@ list_remote_sessions() {
 NEW_SESSION_LABEL="[new session]"
 DIRECT_LOGIN_LABEL="[ssh login]"
 
+# Exact case-insensitive match wins; otherwise substring. $1=query $2=sessions list.
+match_sessions() {
+    local query="$1"
+    local sessions="${2:-}"
+    local exact
+    [[ -n "$sessions" ]] || return 0
+
+    exact=$(printf '%s\n' "$sessions" \
+        | awk -v q="$query" 'BEGIN{ql=tolower(q)} tolower($0)==ql')
+    if [[ -n "$exact" ]]; then
+        printf '%s\n' "$exact"
+        return 0
+    fi
+
+    printf '%s\n' "$sessions" \
+        | awk -v q="$query" 'BEGIN{ql=tolower(q)} ql!="" && index(tolower($0), ql)'
+}
+
+# Optional $1: pre-filtered session list (newline-separated).
+pick_session_name() {
+    local sessions="${1:-}"
+    [[ -n "$sessions" ]] || error "No tmux sessions to pick from."
+
+    local selected
+    selected=$(printf '%s\n' "$sessions" \
+        | fzf --prompt="Tmux Session ❯ " --height=40% --reverse --border --no-multi)
+
+    printf '%s\n' "$selected"
+}
+
+# Resolve a query to a single session name (exact → substring → fzf if multiple).
+# $1=query $2=newline-separated session list from the remote host.
+resolve_session() {
+    local query="$1"
+    local sessions="${2:-}"
+    local matches count
+
+    matches=$(match_sessions "$query" "$sessions")
+    if [[ -z "$matches" ]]; then
+        error "No tmux session matching '${query}'"
+    fi
+
+    count=$(printf '%s\n' "$matches" | grep -c . || true)
+    if [[ "$count" -eq 1 ]]; then
+        printf '%s\n' "$matches"
+        return 0
+    fi
+
+    pick_session_name "$matches"
+}
+
 # Build session-picker lines: [ssh login], existing sessions, [new session].
 session_menu_entries() {
     local sessions="${1:-}"
@@ -369,25 +424,68 @@ connect_plain() {
     mssh "$HOST"
 }
 
+# Attach (or create-and-attach) a named tmux session on HOST.
+connect_tmux_session() {
+    local session="$1"
+    local _tmux_check rc
+
+    success "→ ${HOST}  session: ${session}"
+
+    # Probe without PTY so the shell's raw stderr (e.g. "tmux: command not found")
+    # comes back through the non-PTY SSH channel and can be captured and displayed.
+    if ! _tmux_check=$(remote_tmux "$HOST" -V 2>&1); then
+        [[ -n "$_tmux_check" ]] && echo "$_tmux_check" >&2
+        error "tmux not available on ${HOST}"
+    fi
+
+    # Do not use exec — trap must fire on exit to clean up terminal state
+    INTERACTIVE_SESSION_STARTED=true
+    remote_tmux -t "$HOST" new-session -As "$session" || {
+        rc=$?
+        echo -e "\033[31m[ERROR]\033[0m Remote tmux exited ${rc} on ${HOST}" >&2
+        exit $rc
+    }
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 fssh_main() {
     local NO_TMUX=false
     local DIRECT_HOST=""
-    local CHOICE SESSION _tmux_check rc
+    local SESSION_QUERY=""
+    local CHOICE SESSION sessions
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --help|-h)     show_help ;;
             --list|-l)     list_hosts_detail; exit 0 ;;
             --no-tmux|-n)  NO_TMUX=true; shift ;;
+            --tmux|-t)
+                [[ -n "${2:-}" && "${2:0:1}" != "-" ]] \
+                    || error "-t/--tmux requires a session name. Run fssh -h for usage."
+                SESSION_QUERY="$2"
+                shift 2
+                ;;
             -*)            error "Unknown option: $1. Run fssh -h for usage." ;;
-            *)             DIRECT_HOST="$1"; shift ;;
+            *)
+                if [[ -n "$DIRECT_HOST" ]]; then
+                    error "Unexpected argument: $1. Run fssh -h for usage."
+                fi
+                DIRECT_HOST="$1"
+                shift
+                ;;
         esac
     done
 
+    if [[ -n "$SESSION_QUERY" && "$NO_TMUX" == "true" ]]; then
+        error "-t/--tmux and -n/--no-tmux are mutually exclusive."
+    fi
+    if [[ -n "$SESSION_QUERY" && -z "$DIRECT_HOST" ]]; then
+        error "-t/--tmux requires a host query."
+    fi
+
     check_deps
 
-    # HOST is global: connect_plain reads it from the caller scope.
+    # HOST is global: connect_plain / connect_tmux_session read it from caller scope.
     if [[ -n "$DIRECT_HOST" ]]; then
         HOST=$(resolve_host "$DIRECT_HOST")
     else
@@ -402,6 +500,17 @@ fssh_main() {
 
     if [[ "$NO_TMUX" == "true" ]]; then
         connect_plain
+        exit 0
+    fi
+
+    if [[ -n "$SESSION_QUERY" ]]; then
+        sessions=$(list_remote_sessions "$HOST")
+        SESSION=$(resolve_session "$SESSION_QUERY" "$sessions")
+        if [[ -z "$SESSION" ]]; then
+            warn "No session selected."
+            exit 0
+        fi
+        connect_tmux_session "$SESSION"
         exit 0
     fi
 
@@ -426,22 +535,7 @@ fssh_main() {
             ;;
     esac
 
-    success "→ ${HOST}  session: ${SESSION}"
-
-    # Probe without PTY so the shell's raw stderr (e.g. "tmux: command not found")
-    # comes back through the non-PTY SSH channel and can be captured and displayed.
-    if ! _tmux_check=$(remote_tmux "$HOST" -V 2>&1); then
-        [[ -n "$_tmux_check" ]] && echo "$_tmux_check" >&2
-        error "tmux not available on ${HOST}"
-    fi
-
-    # Do not use exec — trap must fire on exit to clean up terminal state
-    INTERACTIVE_SESSION_STARTED=true
-    remote_tmux -t "$HOST" new-session -As "$SESSION" || {
-        rc=$?
-        echo -e "\033[31m[ERROR]\033[0m Remote tmux exited ${rc} on ${HOST}" >&2
-        exit $rc
-    }
+    connect_tmux_session "$SESSION"
 }
 
 if [[ "${FSSH_NO_MAIN:-}" != "1" ]]; then

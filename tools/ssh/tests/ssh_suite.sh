@@ -100,6 +100,8 @@ test_fssh_help_mentions_query() {
   out="$(bash "$FSSH_SH" --help 2>&1)"
   assert_contains "$out" "query" "fssh help mentions query matching"
   assert_contains "$out" "substring" "fssh help mentions substring matching"
+  assert_contains "$out" "-t, --tmux" "fssh help mentions -t/--tmux session flag"
+  assert_contains "$out" "-n, --no-tmux" "fssh help mentions -n/--no-tmux"
   pass "fssh --help mentions fuzzy query ($DEVTOOLS_TEST_PROFILE)"
 }
 
@@ -233,6 +235,83 @@ EOF
   pass "fssh resolve_host multiple via fzf ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_match_sessions_exact() {
+  local out
+  out="$(run_fssh_fn match_sessions Main $'Main\nwork\nMainLab')"
+  assert_eq "$out" "Main" "exact case-insensitive session wins"
+  pass "fssh match_sessions exact ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_match_sessions_exact_beats_substring() {
+  local out
+  out="$(run_fssh_fn match_sessions main $'main\nmain-extra\nwork')"
+  assert_eq "$out" "main" "exact match beats substring siblings"
+  pass "fssh match_sessions exact beats substring ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_match_sessions_substring_unique() {
+  local out
+  out="$(run_fssh_fn match_sessions wor $'main\nwork\ndev')"
+  assert_eq "$out" "work" "unique substring matches one session"
+  pass "fssh match_sessions unique substring ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_match_sessions_substring_multiple() {
+  local out count
+  out="$(run_fssh_fn match_sessions a $'main\nwork\ndata')"
+  count="$(printf '%s\n' "$out" | grep -c . || true)"
+  assert_eq "$count" "2" "substring returns two session matches"
+  assert_contains "$out" "main" "includes main"
+  assert_contains "$out" "data" "includes data"
+  pass "fssh match_sessions multiple substring ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_resolve_session_unique() {
+  local out
+  out="$(run_fssh_fn resolve_session mai $'main\nwork')"
+  assert_eq "$out" "main" "unique substring resolves without fzf"
+  pass "fssh resolve_session unique ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_resolve_session_none() {
+  local rc=0 out
+  out="$(run_fssh_fn resolve_session nope $'main\nwork' 2>&1)" || rc=$?
+  assert_eq "$rc" "1" "no match exits 1"
+  assert_contains "$out" "No tmux session matching" "error mentions no match"
+  pass "fssh resolve_session none ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_resolve_session_multiple_uses_fzf() {
+  mkdir -p "$FAKE_BIN"
+  cat >"$FAKE_BIN/fzf" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+grep -x 'main'
+EOF
+  chmod +x "$FAKE_BIN/fzf"
+
+  local out
+  out="$(PATH="$FAKE_BIN:$PATH" run_fssh_fn resolve_session a $'main\nwork\ndata')"
+  assert_eq "$out" "main" "multiple session matches go through fzf"
+  pass "fssh resolve_session multiple via fzf ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_fssh_tmux_requires_host() {
+  local rc=0 out
+  out="$(bash "$FSSH_SH" -t main 2>&1)" || rc=$?
+  assert_eq "$rc" "1" "-t without host exits 1"
+  assert_contains "$out" "-t/--tmux requires a host" "error says host is required"
+  pass "fssh -t requires host ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_fssh_tmux_conflicts_with_no_tmux() {
+  local rc=0 out
+  out="$(bash "$FSSH_SH" prod -t main -n 2>&1)" || rc=$?
+  assert_eq "$rc" "1" "-t with -n exits 1"
+  assert_contains "$out" "mutually exclusive" "error mentions mutual exclusion"
+  pass "fssh -t conflicts with -n ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_session_menu_order_with_sessions() {
   local out
   out="$(run_fssh_fn session_menu_entries $'main\nwork')"
@@ -358,6 +437,15 @@ test_match_hosts_ignores_wildcards
 test_resolve_host_unique
 test_resolve_host_none
 test_resolve_host_multiple_uses_fzf
+test_match_sessions_exact
+test_match_sessions_exact_beats_substring
+test_match_sessions_substring_unique
+test_match_sessions_substring_multiple
+test_resolve_session_unique
+test_resolve_session_none
+test_resolve_session_multiple_uses_fzf
+test_fssh_tmux_requires_host
+test_fssh_tmux_conflicts_with_no_tmux
 test_session_menu_order_with_sessions
 test_session_menu_order_without_sessions
 test_list_remote_sessions_ignores_stderr_noise
