@@ -30,7 +30,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CACHE_DIR="${SCRIPT_DIR}/../../../cache"
+CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../../cache}"
 XRAY_VERSION="26.3.27"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -315,22 +315,47 @@ download_file_with_mirrors() {
     return 1
 }
 
+# 从 cache/binaries 复制 geo 数据；缓存缺失或过小则返回 1
+copy_cached_geo_file() {
+    local name="$1" dest="$2" min_size="$3"
+    local cached="${CACHE_DIR}/binaries/${name}"
+    if [[ -f "$cached" ]] && [[ $(file_size "$cached") -ge $min_size ]]; then
+        info "使用本地缓存: binaries/${name}"
+        cp "$cached" "$dest"
+        return 0
+    fi
+    return 1
+}
+
 ensure_geo_data() {
     local dat_dir="$1"
     local geoip="${dat_dir}/geoip.dat"
     local geosite="${dat_dir}/geosite.dat"
-    local min_size=65536 need=false
+    local min_size=65536
+    local need_geoip=false need_geosite=false
 
-    [[ ! -f "$geoip" ]] || [[ $(file_size "$geoip") -lt $min_size ]] && need=true
-    [[ ! -f "$geosite" ]] || [[ $(file_size "$geosite") -lt $min_size ]] && need=true
+    [[ ! -f "$geoip" ]] || [[ $(file_size "$geoip") -lt $min_size ]] && need_geoip=true
+    [[ ! -f "$geosite" ]] || [[ $(file_size "$geosite") -lt $min_size ]] && need_geosite=true
 
-    if ! $need; then
+    if ! $need_geoip && ! $need_geosite; then
         success "Geo 路由数据已就绪: ${dat_dir}"
         return 0
     fi
 
-    step "下载 Geo 路由数据（国内镜像，路由规则必需）"
     mkdir -p "$dat_dir"
+
+    if $need_geoip && copy_cached_geo_file "geoip.dat" "$geoip" "$min_size"; then
+        need_geoip=false
+    fi
+    if $need_geosite && copy_cached_geo_file "geosite.dat" "$geosite" "$min_size"; then
+        need_geosite=false
+    fi
+    if ! $need_geoip && ! $need_geosite; then
+        success "Geo 路由数据已从缓存安装: ${dat_dir}"
+        return 0
+    fi
+
+    step "下载 Geo 路由数据（国内镜像，路由规则必需）"
     DOWNLOAD_MAX_TIME=300
 
     local geoip_urls geosite_urls
@@ -350,10 +375,14 @@ ensure_geo_data() {
         geosite_urls=("https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat")
     fi
 
-    download_file_with_mirrors "$geoip" "${geoip_urls[@]}" \
-        || { error "geoip.dat 下载失败"; return 1; }
-    download_file_with_mirrors "$geosite" "${geosite_urls[@]}" \
-        || { error "geosite.dat 下载失败"; return 1; }
+    if $need_geoip; then
+        download_file_with_mirrors "$geoip" "${geoip_urls[@]}" \
+            || { error "geoip.dat 下载失败"; return 1; }
+    fi
+    if $need_geosite; then
+        download_file_with_mirrors "$geosite" "${geosite_urls[@]}" \
+            || { error "geosite.dat 下载失败"; return 1; }
+    fi
     unset DOWNLOAD_MAX_TIME
     success "Geo 路由数据已下载: ${dat_dir}"
 }

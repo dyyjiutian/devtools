@@ -49,6 +49,8 @@ cache/
 | `Xray-linux-64-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip | VPN Linux 客户端 x86_64 |
 | `Xray-linux-arm64-v8a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip | VPN Linux 客户端 arm64 |
 | `Xray-linux-arm32-v7a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm32-v7a.zip | VPN Linux 客户端 arm32 |
+| `geoip.dat` | https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat | VPN 客户端（Linux / macOS）路由数据 |
+| `geosite.dat` | https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat | VPN 客户端（Linux / macOS）路由数据 |
 | `tmux-3.7b.tar.gz` | https://github.com/tmux/tmux/releases/download/3.7b/tmux-3.7b.tar.gz | Linux 源码编译（`terminal/tmux/setup.sh`） |
 | `nvim-linux-x86_64-v0.10.4.tar.gz` | https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz | Linux x86_64（`editors/nvim/setup.sh`） |
 | `nvim-linux-arm64-v0.10.4.tar.gz` | https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-arm64.tar.gz | Linux arm64（`editors/nvim/setup.sh`） |

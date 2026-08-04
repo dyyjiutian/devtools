@@ -99,6 +99,16 @@ download_git_delta() {
     "$sha256"
 }
 
+# VPN 客户端 geoip/geosite（Loyalsoldier；架构无关，linux/macos 共用）
+download_vpn_geodata() {
+  download \
+    "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat" \
+    "${BINARIES_DIR}/geoip.dat"
+  download \
+    "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat" \
+    "${BINARIES_DIR}/geosite.dat"
+}
+
 pkg_version() {
   local name="$1" fallback="$2"
   local ver
@@ -121,6 +131,9 @@ download_macos() {
   download \
     "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh" \
     "${SCRIPTS_DIR}/ohmyzsh-install.sh"
+
+  # VPN macOS 客户端同样需要 geo 路由数据
+  download_vpn_geodata
 }
 
 download_linux() {
@@ -213,6 +226,9 @@ download_linux() {
       "https://github.com/XTLS/Xray-core/releases/download/v${xray_version}/Xray-linux-${arch}.zip" \
       "${BINARIES_DIR}/Xray-linux-${arch}-v${xray_version}.zip"
   done
+
+  # Loyalsoldier geo 路由数据（VPN 客户端国内分流；jsdelivr 在国内易超时）
+  download_vpn_geodata
 
   # tmux 源码包（terminal/tmux/setup.sh / os/linux 源码编译用）
   download \

@@ -223,7 +223,7 @@ sudo ./client/linux_setup.sh install --tun \
 
 脚本会自动：
 - 安装 Xray-core（官方脚本失败时回退到 ghfast.top / jsdelivr / mirror.ghproxy.com 镜像）
-- 下载 geoip.dat / geosite.dat 路由数据（jsdelivr CDN 镜像）
+- 安装 geoip.dat / geosite.dat 路由数据（优先 `cache/binaries/`，缺失时再走 jsdelivr / GitHub）
 - 写入 `/usr/local/etc/xray/client.json`
 - 暴露 SOCKS5（`127.0.0.1:10808`）和 HTTP（`127.0.0.1:10809`）
 - 配置 systemd 服务 `xray-client` 并设为开机自启
@@ -519,6 +519,23 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 - **中继节点无感知**：杭州 ECS 仅做 TCP 转发，不解密、不存储任何流量内容
 - **建议**：阿里云安全组限制 443 入方向仅允许可信客户端 IP，防止被扫描滥用
 - **UUID 和私钥**：请妥善保管出口节点生成的配置，切勿公开
+
+## Issues
+
+### 2026-08-04 — 国内网络下载 geoip.dat / geosite.dat 超时
+
+**症状**：`linux_setup.sh` / `macos_setup.sh` 安装时从 `cdn.jsdelivr.net` 拉
+Loyalsoldier `geoip.dat` / `geosite.dat`，长时间卡在 `curl: (28) Operation timed out`
+（例如收到约 3–4MB 后超时）。
+
+**根因**：jsdelivr 在部分国内网络上不稳定，单文件约十几到几十 MB，默认镜像链易失败。
+
+**解法**：将两份数据缓存到 `cache/binaries/{geoip,geosite}.dat`；客户端 `ensure_geo_data`
+优先从本地缓存复制，缓存缺失时才回退在线下载。预取：
+
+```bash
+bash cache/download.sh linux   # 或 macos / all
+```
 
 ## 常见问题
 

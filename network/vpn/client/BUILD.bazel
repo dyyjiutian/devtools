@@ -1,0 +1,17 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "linux_setup_test",
+    srcs = ["linux_setup_test.sh"],
+    data = [
+        "bin/xray-tun-route",
+        "linux_setup.sh",
+    ],
+    size = "small",
+    tags = [
+        "local",
+        "smoke",
+    ],
+)
