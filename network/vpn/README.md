@@ -537,6 +537,23 @@ Loyalsoldier `geoip.dat` / `geosite.dat`，长时间卡在 `curl: (28) Operation
 bash cache/download.sh linux   # 或 macos / all
 ```
 
+### 2026-08-04 — 配置校验报 `code not found in geoip.dat: PRIVATE`
+
+**症状**：写入 `client.json` 后 `xray run -test` 失败：
+`failed to load GeoIP: private > code not found in geoip.dat: PRIVATE`。
+
+**根因**：jsdelivr 超时可能留下约数 MB 的截断 `geoip.dat`。旧逻辑仅检查
+`>= 64KiB`，截断文件会被当成“已就绪”，而 `PRIVATE` 段通常在文件后部，截断后缺失。
+
+**解法**：校验体积（geoip ≥ 8MiB、geosite ≥ 4MiB）并要求 `geoip.dat` 含 `PRIVATE`；
+下载改为先写临时文件再 `mv`；校验失败时 `ensure_geo_data <dir> true` 强制刷新。
+有仓库缓存时可直接：
+
+```bash
+sudo cp cache/binaries/geoip.dat cache/binaries/geosite.dat /usr/local/share/xray/
+sudo ./client/linux_setup.sh install --vless='...'
+```
+
 ## 常见问题
 
 **Q: 中继节点部署后能否复用现有 nginx SNI 代理（proxy 方案）？**

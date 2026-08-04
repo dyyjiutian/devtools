@@ -47,11 +47,11 @@ render_client_config() {
     )
 }
 
-echo "[1/8] --tun is documented"
+echo "[1/9] --tun is documented"
 help_output="$(bash "$LINUX_SETUP" --help)"
 [[ "$help_output" == *"--tun"* ]] || fail "linux_setup.sh --help should document --tun"
 
-echo "[2/8] sourcing proxy on still updates the current shell"
+echo "[2/9] sourcing proxy on still updates the current shell"
 source_home="${TMP_DIR}/source-home"
 mkdir -p "$source_home"
 if ! env -i HOME="$source_home" PATH="/usr/bin:/bin" \
@@ -61,7 +61,7 @@ if ! env -i HOME="$source_home" PATH="/usr/bin:/bin" \
     fail "source linux_setup.sh proxy on should update the current shell"
 fi
 
-echo "[3/8] default and TUN client configurations"
+echo "[3/9] default and TUN client configurations"
 normal_dir="${TMP_DIR}/normal"
 tun_dir="${TMP_DIR}/tun"
 mkdir -p "$normal_dir" "$tun_dir"
@@ -79,7 +79,7 @@ assert_file_contains "${tun_dir}/client.json" '"mark": 255'
 python3 -m json.tool "${normal_dir}/client.json" >/dev/null
 python3 -m json.tool "${tun_dir}/client.json" >/dev/null
 
-echo "[4/8] TUN policy routing helper"
+echo "[4/9] TUN policy routing helper"
 fake_ip="${TMP_DIR}/ip"
 ip_log="${TMP_DIR}/ip.log"
 fake_sysctl="${TMP_DIR}/sysctl"
@@ -270,7 +270,7 @@ IP_BIN="$fake_ip" IP_LOG="$ip_log" \
     || fail "TUN helper should wait until xray0 appears"
 run_tun_helper down
 
-echo "[4b/8] TUN protects inbound connection replies"
+echo "[4b/9] TUN protects inbound connection replies"
 NFT_BIN="$fake_nft" IPTABLES_BIN="$fake_iptables" \
     IP6TABLES_BIN="$fake_ip6tables" FIREWALL_LOG="$firewall_log" \
     FAKE_NFT_VERIFY=true XRAY_TUN_FIREWALL_STATE_FILE="$firewall_state_file" \
@@ -283,7 +283,7 @@ assert_file_contains "$firewall_log" 'meta mark set 255'
 assert_file_contains "$firewall_log" 'echo-reply'
 run_tun_helper down
 
-echo "[4c/8] TUN firewall backend fallback and fail-closed setup"
+echo "[4c/9] TUN firewall backend fallback and fail-closed setup"
 firewall_log="${TMP_DIR}/fallback-firewall.log"
 FAKE_NFT_FAIL=true run_firewall_helper up
 assert_file_contains "$firewall_log" 'iptables -t mangle -N XRAY_TUN_PREROUTING'
@@ -356,7 +356,7 @@ fi
 [[ "$(< "${sysctl_state_dir}/all")" -eq 1 ]] \
     || fail "TUN helper should restore global rp_filter after partial setup failure"
 
-echo "[5/8] normal and TUN systemd units"
+echo "[5/9] normal and TUN systemd units"
 normal_systemd_dir="${TMP_DIR}/systemd-normal"
 tun_systemd_dir="${TMP_DIR}/systemd-tun"
 mkdir -p "$normal_systemd_dir" "$tun_systemd_dir"
@@ -396,7 +396,7 @@ assert_file_contains "$route_unit" 'ExecStart=/usr/local/libexec/xray-client-tun
 assert_file_contains "$route_unit" 'ExecStop=/usr/local/libexec/xray-client-tun-route down'
 assert_file_contains "$route_unit" 'RemainAfterExit=yes'
 
-echo "[6/8] TUN support install and removal lifecycle"
+echo "[6/9] TUN support install and removal lifecycle"
 lifecycle_systemd_dir="${TMP_DIR}/systemd-lifecycle"
 lifecycle_helper="${TMP_DIR}/libexec/xray-client-tun-route"
 systemctl_log="${TMP_DIR}/systemctl.log"
@@ -435,7 +435,7 @@ chmod +x "${fake_bin}/systemctl"
 assert_file_contains "$systemctl_log" 'stop xray-client-tun-routing.service'
 assert_file_contains "$systemctl_log" 'disable xray-client-tun-routing.service'
 
-echo "[7/8] install, status, and clean wire the TUN lifecycle"
+echo "[7/9] install, status, and clean wire the TUN lifecycle"
 (
     set --
     export LINUX_SETUP_SOURCE_ONLY=true
@@ -448,15 +448,16 @@ echo "[7/8] install, status, and clean wire the TUN lifecycle"
     assert_text_contains "$(declare -f do_clean)" 'remove_tun_routing'
 )
 
-echo "[8/8] ensure_geo_data reuses cache/binaries without network"
+echo "[8/9] ensure_geo_data reuses cache/binaries without network"
 geo_cache="${TMP_DIR}/geo-cache"
 geo_dat="${TMP_DIR}/geo-dat"
 geo_fake_bin="${TMP_DIR}/geo-fake-bin"
 mkdir -p "${geo_cache}/binaries" "$geo_dat" "$geo_fake_bin"
-# Larger than ensure_geo_data min_size (65536)
-dd if=/dev/zero of="${geo_cache}/binaries/geoip.dat" bs=1024 count=70 status=none
-dd if=/dev/zero of="${geo_cache}/binaries/geosite.dat" bs=1024 count=80 status=none
-printf 'cached-geoip' | dd of="${geo_cache}/binaries/geoip.dat" conv=notrunc status=none
+# Small fixtures; override production min sizes via env for the test.
+dd if=/dev/zero of="${geo_cache}/binaries/geoip.dat" bs=1024 count=8 status=none
+dd if=/dev/zero of="${geo_cache}/binaries/geosite.dat" bs=1024 count=8 status=none
+# Marker must include PRIVATE — truncated real downloads miss this code.
+printf 'cached-geoip-PRIVATE' | dd of="${geo_cache}/binaries/geoip.dat" conv=notrunc status=none
 printf 'cached-geosite' | dd of="${geo_cache}/binaries/geosite.dat" conv=notrunc status=none
 cat > "${geo_fake_bin}/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -469,6 +470,8 @@ chmod +x "${geo_fake_bin}/curl"
     set --
     export LINUX_SETUP_SOURCE_ONLY=true
     export DEVTOOLS_CACHE_DIR="$geo_cache"
+    export GEOIP_MIN_BYTES=1024
+    export GEOSITE_MIN_BYTES=1024
     # shellcheck source=linux_setup.sh
     source "$LINUX_SETUP"
     CACHE_DIR="$geo_cache"
@@ -478,7 +481,34 @@ chmod +x "${geo_fake_bin}/curl"
 [[ ! -e "${TMP_DIR}/geo-curl-called" ]] || fail "ensure_geo_data should not call curl when cache exists"
 [[ -f "${geo_dat}/geoip.dat" ]] || fail "geoip.dat should be installed from cache"
 [[ -f "${geo_dat}/geosite.dat" ]] || fail "geosite.dat should be installed from cache"
-grep -q 'cached-geoip' "${geo_dat}/geoip.dat" || fail "geoip.dat content should come from cache"
+grep -q 'cached-geoip-PRIVATE' "${geo_dat}/geoip.dat" || fail "geoip.dat content should come from cache"
 grep -q 'cached-geosite' "${geo_dat}/geosite.dat" || fail "geosite.dat content should come from cache"
+
+echo "[9/9] truncated geoip without PRIVATE is replaced from cache"
+geo_trunc_dat="${TMP_DIR}/geo-trunc-dat"
+mkdir -p "$geo_trunc_dat"
+# ~3.9MB-style truncated file: large enough for old 64KiB check, missing PRIVATE
+dd if=/dev/zero of="${geo_trunc_dat}/geoip.dat" bs=1024 count=4000 status=none
+dd if=/dev/zero of="${geo_trunc_dat}/geosite.dat" bs=1024 count=8 status=none
+printf 'truncated-no-marker' | dd of="${geo_trunc_dat}/geoip.dat" conv=notrunc status=none
+printf 'old-geosite' | dd of="${geo_trunc_dat}/geosite.dat" conv=notrunc status=none
+rm -f "${TMP_DIR}/geo-curl-called"
+(
+    set --
+    export LINUX_SETUP_SOURCE_ONLY=true
+    export DEVTOOLS_CACHE_DIR="$geo_cache"
+    export GEOIP_MIN_BYTES=1024
+    export GEOSITE_MIN_BYTES=1024
+    # shellcheck source=linux_setup.sh
+    source "$LINUX_SETUP"
+    CACHE_DIR="$geo_cache"
+    CURL_MARKER="${TMP_DIR}/geo-curl-called" PATH="${geo_fake_bin}:$PATH" \
+        ensure_geo_data "$geo_trunc_dat"
+)
+[[ ! -e "${TMP_DIR}/geo-curl-called" ]] || fail "truncated geoip should be fixed from cache without curl"
+grep -q 'cached-geoip-PRIVATE' "${geo_trunc_dat}/geoip.dat" \
+    || fail "truncated geoip.dat should be replaced from cache"
+grep -q 'PRIVATE' "${geo_trunc_dat}/geoip.dat" \
+    || fail "replaced geoip.dat must contain PRIVATE"
 
 echo "PASS: linux_setup TUN regression checks"

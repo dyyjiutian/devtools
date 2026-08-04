@@ -171,41 +171,65 @@ tcp_reachable() {
 download_file_with_mirrors() {
     local dest="$1"; shift
     local urls=("$@") url max_time="${DOWNLOAD_MAX_TIME:-120}"
+    local tmp
     mkdir -p "$(dirname "$dest")"
+    tmp="${dest}.tmp.$$"
     for url in "${urls[@]}"; do
         info "下载: ${url%%\?*} ..."
+        rm -f "$tmp"
         if curl -fsSL --connect-timeout 25 --max-time "$max_time" \
-            --retry 2 --retry-delay 2 -o "$dest" "$url" \
-            && [[ -s "$dest" ]]; then
+            --retry 2 --retry-delay 2 -o "$tmp" "$url" \
+            && [[ -s "$tmp" ]]; then
+            mv "$tmp" "$dest"
             return 0
         fi
         warn "下载失败，尝试下一源..."
-        rm -f "$dest"
+        rm -f "$tmp"
     done
     return 1
 }
 
-# 从 cache/binaries 复制 geo 数据；缓存缺失或过小则返回 1
+# geoip 完整包约 17–20MB；截断到数 MB 时仍可能 >64KiB，但缺少 PRIVATE。
+GEOIP_MIN_BYTES="${GEOIP_MIN_BYTES:-8388608}"
+GEOSITE_MIN_BYTES="${GEOSITE_MIN_BYTES:-4194304}"
+
+geoip_file_ok() {
+    local f="$1"
+    [[ -f "$f" ]] && [[ $(file_size "$f") -ge $GEOIP_MIN_BYTES ]] && grep -aFq 'PRIVATE' "$f"
+}
+
+geosite_file_ok() {
+    local f="$1"
+    [[ -f "$f" ]] && [[ $(file_size "$f") -ge $GEOSITE_MIN_BYTES ]]
+}
+
+# 从 cache/binaries 复制 geo 数据；缓存无效则返回 1
 copy_cached_geo_file() {
-    local name="$1" dest="$2" min_size="$3"
+    local name="$1" dest="$2"
     local cached="${CACHE_DIR}/binaries/${name}"
-    if [[ -f "$cached" ]] && [[ $(file_size "$cached") -ge $min_size ]]; then
-        info "使用本地缓存: binaries/${name}"
-        cp "$cached" "$dest"
-        return 0
-    fi
-    return 1
+    case "$name" in
+        geoip.dat) geoip_file_ok "$cached" || return 1 ;;
+        geosite.dat) geosite_file_ok "$cached" || return 1 ;;
+        *) return 1 ;;
+    esac
+    info "使用本地缓存: binaries/${name}"
+    cp "$cached" "$dest"
 }
 
 ensure_geo_data() {
     local dat_dir="$1"
+    local force="${2:-false}"
     local geoip="${dat_dir}/geoip.dat"
     local geosite="${dat_dir}/geosite.dat"
-    local min_size=65536
     local need_geoip=false need_geosite=false
 
-    [[ ! -f "$geoip" ]] || [[ $(file_size "$geoip") -lt $min_size ]] && need_geoip=true
-    [[ ! -f "$geosite" ]] || [[ $(file_size "$geosite") -lt $min_size ]] && need_geosite=true
+    if $force; then
+        need_geoip=true
+        need_geosite=true
+    else
+        geoip_file_ok "$geoip" || need_geoip=true
+        geosite_file_ok "$geosite" || need_geosite=true
+    fi
 
     if ! $need_geoip && ! $need_geosite; then
         success "Geo 路由数据已就绪: ${dat_dir}"
@@ -214,10 +238,10 @@ ensure_geo_data() {
 
     mkdir -p "$dat_dir"
 
-    if $need_geoip && copy_cached_geo_file "geoip.dat" "$geoip" "$min_size"; then
+    if $need_geoip && copy_cached_geo_file "geoip.dat" "$geoip"; then
         need_geoip=false
     fi
-    if $need_geosite && copy_cached_geo_file "geosite.dat" "$geosite" "$min_size"; then
+    if $need_geosite && copy_cached_geo_file "geosite.dat" "$geosite"; then
         need_geosite=false
     fi
     if ! $need_geoip && ! $need_geosite; then
@@ -248,10 +272,12 @@ ensure_geo_data() {
     if $need_geoip; then
         download_file_with_mirrors "$geoip" "${geoip_urls[@]}" \
             || { error "geoip.dat 下载失败"; return 1; }
+        geoip_file_ok "$geoip" || { error "geoip.dat 无效（过小或缺少 PRIVATE，可能是截断下载）"; rm -f "$geoip"; return 1; }
     fi
     if $need_geosite; then
         download_file_with_mirrors "$geosite" "${geosite_urls[@]}" \
             || { error "geosite.dat 下载失败"; return 1; }
+        geosite_file_ok "$geosite" || { error "geosite.dat 无效（文件过小，可能是截断下载）"; rm -f "$geosite"; return 1; }
     fi
     unset DOWNLOAD_MAX_TIME
     success "Geo 路由数据已下载: ${dat_dir}"
@@ -282,11 +308,11 @@ validate_xray_config() {
     fi
     error "配置文件校验失败:"
     tail -10 /tmp/xray-config-test.log >&2 || true
-    if grep -qiE 'geo(ip|site)|geodata|not found|failed to load' /tmp/xray-config-test.log 2>/dev/null; then
-        warn "检测到 Geo 数据问题，尝试重新下载..."
-        ensure_geo_data "$XRAY_DAT_DIR" \
+    if grep -qiE 'geo(ip|site)|geodata|not found|failed to load|PRIVATE' /tmp/xray-config-test.log 2>/dev/null; then
+        warn "检测到 Geo 数据问题，强制刷新后重试..."
+        ensure_geo_data "$XRAY_DAT_DIR" true \
             && "$XRAY_BIN" run -test -config "$cfg" \
-            && { success "重新下载 Geo 数据后配置校验通过"; return 0; }
+            && { success "刷新 Geo 数据后配置校验通过"; return 0; }
     fi
     exit 1
 }
