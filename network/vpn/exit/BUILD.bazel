@@ -1,0 +1,14 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+sh_test(
+    name = "setup_test",
+    srcs = ["setup_test.sh"],
+    data = ["setup.sh"],
+    size = "small",
+    tags = [
+        "local",
+        "smoke",
+    ],
+)

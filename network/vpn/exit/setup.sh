@@ -71,6 +71,86 @@ expand_users_arg() {
     fi
 }
 
+# Cloudflare WARP 官方 RPM 源使用 $releasever，但目前仅发布 9/10。
+# Alibaba Cloud Linux / Anolis 的 VERSION_ID（3/4）会拼成 rpm/3、rpm/4 → 404。
+# Alinux 4 有 glibc 2.38：必须用 el9（el10 需要 GLIBC_2.39，装得上也可能跑不了）。
+resolve_warp_rpm_releasever() {
+    local releasever="${1:-}"
+    case "$releasever" in
+        9|10) echo "$releasever" ;;
+        *) echo "9" ;;
+    esac
+}
+
+write_cloudflare_warp_repo() {
+    local repo_file="${1:-/etc/yum.repos.d/cloudflare-warp.repo}"
+    local releasever
+    releasever="$(resolve_warp_rpm_releasever "${2:-}")"
+    cat >"$repo_file" <<EOF
+[cloudflare-warp-stable]
+name=cloudflare-warp-stable
+baseurl=https://pkg.cloudflareclient.com/rpm/${releasever}
+enabled=1
+type=rpm
+gpgcheck=1
+gpgkey=https://pkg.cloudflareclient.com/pubkey.gpg
+EOF
+}
+
+# 无桌面系统常缺 webkit2gtk3 / libappindicator（仅 GUI 托盘依赖）。
+# warp-cli / warp-svc 不链接它们；下载 RPM 后 --nodeps 安装即可。
+install_cloudflare_warp_rhel_cli_only() {
+    local tmpdir arch rpmfile
+    tmpdir="$(mktemp -d)"
+    arch="$(uname -m)"
+
+    if command -v dnf >/dev/null 2>&1; then
+        dnf install -y 'dnf-command(download)' >/dev/null 2>&1 \
+            || dnf install -y dnf-plugins-core >/dev/null 2>&1 \
+            || true
+        if ! dnf download --arch "${arch}" --destdir "${tmpdir}" cloudflare-warp; then
+            rm -rf "${tmpdir}"
+            error "dnf download cloudflare-warp 失败"
+            return 1
+        fi
+    else
+        yum install -y yum-utils >/dev/null 2>&1 || true
+        if ! yumdownloader --destdir "${tmpdir}" "cloudflare-warp.${arch}" \
+            && ! yumdownloader --destdir "${tmpdir}" cloudflare-warp; then
+            rm -rf "${tmpdir}"
+            error "yumdownloader cloudflare-warp 失败"
+            return 1
+        fi
+    fi
+
+    rpmfile="$(find "${tmpdir}" -maxdepth 1 -type f -name 'cloudflare-warp*.rpm' | head -1 || true)"
+    if [[ -z "${rpmfile}" ]]; then
+        rm -rf "${tmpdir}"
+        error "未能下载 cloudflare-warp RPM（arch=${arch}）"
+        return 1
+    fi
+    rpm -Uvh --nodeps "${rpmfile}"
+    rm -rf "${tmpdir}"
+}
+
+install_cloudflare_warp_rhel() {
+    # 先装 warp-svc 实际需要的运行时依赖（忽略已安装）。
+    yum install -y ca-certificates dbus desktop-file-utils iproute \
+        libpcap nftables nss-tools tpm2-tools >/dev/null 2>&1 || true
+
+    if yum install -y cloudflare-warp; then
+        return 0
+    fi
+
+    warn "标准 yum 安装失败（常见缺 webkit2gtk3 等 GUI 依赖），改用 CLI-only（rpm --nodeps）"
+    install_cloudflare_warp_rhel_cli_only
+}
+
+# 测试可 source 本脚本以复用上述 helper，避免 root / 安装副作用。
+if [[ "${EXIT_SETUP_SOURCE_ONLY:-false}" == "true" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+
 # ── 前置检查 ──────────────────────────────────────────────────────────────────
 [[ $EUID -eq 0 ]] || { error "请以 root 权限运行: sudo $0"; exit 1; }
 
@@ -133,11 +213,9 @@ step "安装配置 Cloudflare WARP（绕过 Cloudflare Bot 防护）"
 install_warp() {
     case $OS in
         rhel)
-            if [[ ! -f /etc/yum.repos.d/cloudflare-warp.repo ]]; then
-                curl -fsSL https://pkg.cloudflareclient.com/cloudflare-warp-ascii.repo \
-                    -o /etc/yum.repos.d/cloudflare-warp.repo
-            fi
-            yum install -y cloudflare-warp
+            # 幂等覆盖官方模板：避免 Alinux $releasever=4 指向不存在的 rpm/4。
+            write_cloudflare_warp_repo /etc/yum.repos.d/cloudflare-warp.repo "${VERSION_ID:-}"
+            install_cloudflare_warp_rhel
             ;;
         debian)
             curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
