@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # 轻量级 Bash 插件安装配置脚本
-# 安装以下工具并写入 ~/.bashrc 配置块:
+# 安装以下工具并写入 ~/.bashrc 配置块与 ~/.blerc:
 #   - ble.sh             命令历史自动建议 + 实时语法高亮
 #   - zoxide             智能目录跳转（替代 z/autojump）
 #   - fzf                模糊搜索（历史命令/文件/目录）
@@ -13,6 +13,9 @@ set -euo pipefail
 BASHRC="$HOME/.bashrc"
 CONFIG_MARKER="# === Lightweight Bash Plugins (devtools) ==="
 CONFIG_MARKER_END="# === End Lightweight Bash Plugins ==="
+BLERC="$HOME/.blerc"
+BLERC_MARKER="# === Lightweight Bash Plugins (devtools) ==="
+BLERC_MARKER_END="# === End Lightweight Bash Plugins ==="
 LINUX_PLUGIN_DIR="$HOME/.bash"
 LOCAL_BIN_DIR="$HOME/.local/bin"
 STARSHIP_CONFIG_DIR="$HOME/.config"
@@ -88,6 +91,7 @@ show_help() {
 用法: ./setup.sh [子命令] [选项] [插件...]
 
 轻量级 Bash 插件安装配置脚本
+安装后幂等写入 ~/.bashrc 与 ~/.blerc（关闭 ble 执行摘要标记）。
 
 子命令:
     install             安装插件（默认子命令）
@@ -503,6 +507,74 @@ configure_bashrc() {
     fi
 }
 
+# ---- 生成 ~/.blerc 配置块 ----
+# ble.sh 在 source 时自动加载 ~/.blerc（早于 ble-attach），适合放 bleopt。
+generate_blerc_config() {
+    echo "$BLERC_MARKER"
+    echo "# 关闭命令执行摘要: [ble: elapsed ...] / [ble: exit ...]"
+    echo "bleopt exec_elapsed_mark="
+    echo "bleopt exec_errexit_mark="
+    echo "bleopt exec_exit_mark="
+    echo "$BLERC_MARKER_END"
+}
+
+# ---- 写入 ~/.blerc ----
+configure_blerc() {
+    step "配置 ~/.blerc ..."
+
+    if [[ ! -f "$BLERC" ]]; then
+        if [[ "$DRY_RUN" == "false" ]]; then
+            touch "$BLERC"
+            info "已创建 $BLERC"
+        else
+            info "[试运行] 将要创建 $BLERC"
+        fi
+    fi
+
+    if grep -q "$BLERC_MARKER" "$BLERC" 2>/dev/null; then
+        warn "配置块已存在于 $BLERC，将替换为最新配置"
+        if [[ "$DRY_RUN" == "false" ]]; then
+            local backup="${BLERC}.backup.$(date +%Y%m%d_%H%M%S)"
+            local tmp
+            tmp="$(mktemp)"
+            cp "$BLERC" "$backup"
+            awk -v start="$BLERC_MARKER" -v end="$BLERC_MARKER_END" '
+                $0 == start { in_block = 1; next }
+                $0 == end { in_block = 0; next }
+                !in_block { print }
+            ' "$BLERC" > "$tmp"
+            printf '\n' >> "$tmp"
+            generate_blerc_config >> "$tmp"
+            mv "$tmp" "$BLERC"
+            success "已备份 ~/.blerc -> $backup"
+            success "已更新 $BLERC 中的配置块"
+        else
+            info "[试运行] 将替换 $BLERC 中已有配置块为:"
+            echo "---"
+            generate_blerc_config
+            echo "---"
+        fi
+        return 0
+    fi
+
+    if [[ "$DRY_RUN" == "false" ]]; then
+        if [[ -s "$BLERC" ]]; then
+            local backup="${BLERC}.backup.$(date +%Y%m%d_%H%M%S)"
+            cp "$BLERC" "$backup"
+            success "已备份 ~/.blerc -> $backup"
+        fi
+
+        printf '\n' >> "$BLERC"
+        generate_blerc_config >> "$BLERC"
+        success "已将配置块写入 $BLERC"
+    else
+        info "[试运行] 将要追加以下配置块到 $BLERC:"
+        echo "---"
+        generate_blerc_config
+        echo "---"
+    fi
+}
+
 # ---- 按插件安装 ----
 install_plugin() {
     local id="$1"
@@ -563,6 +635,9 @@ cmd_install() {
     echo ""
     configure_bashrc
 
+    echo ""
+    configure_blerc
+
     if [[ "$want_starship_config" == "true" ]]; then
         echo ""
         configure_starship_config
@@ -572,7 +647,7 @@ cmd_install() {
     success "安装完成！"
     echo ""
     echo "  后续操作:"
-    echo "  1. 运行 'source ~/.bashrc' 或重新打开终端以应用配置"
+    echo "  1. 运行 'source ~/.bashrc' 或重新打开终端以应用配置（含 ~/.blerc）"
     if [[ "$want_starship_config" == "true" ]]; then
         echo "  2. Starship 已默认初始化为 tokyo 样式"
     fi

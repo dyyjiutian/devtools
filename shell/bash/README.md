@@ -1,12 +1,12 @@
 # Bash 配置
 
-安装 ble.sh、zoxide、fzf 和 Starship，并幂等写入 ~/.bashrc。
+安装 ble.sh、zoxide、fzf 和 Starship，并幂等写入 ~/.bashrc 与 ~/.blerc。
 
 ~~~bash
 bash shell/bash/setup.sh --help
 bash shell/bash/setup.sh              # 完整安装
 bash shell/bash/setup.sh install      # 同上
-bash shell/bash/setup.sh install fzf  # 只装 fzf（仍写入完整 bashrc 配置块）
+bash shell/bash/setup.sh install fzf  # 只装 fzf（仍写入完整 bashrc / blerc 配置块）
 bash shell/bash/setup.sh list         # 列举插件与本机状态
 bash shell/bash/setup.sh install -n   # 试运行
 ~~~
@@ -15,7 +15,33 @@ bash shell/bash/setup.sh install -n   # 试运行
 
 Linux 安装优先使用 cache/ 中的二进制缓存。
 
+`~/.blerc` 由本脚本用 marker 托管块维护，默认关闭 ble.sh 的命令执行摘要
+（`[ble: elapsed ...]` / `[ble: exit ...]`）。用户自定义配置可写在 marker 外，重复运行只会替换托管块。
+
 ## 常见问题 (Issues)
+
+### 2026-08-06 命令执行后出现 [ble: elapsed ...] / [ble: exit ...] 摘要
+
+**现象**：启用 ble.sh 后，每条命令后可能出现耗时、CPU 占用或非零退出码提示，例如
+`[ble: elapsed 16.270s (CPU 101.5%)]`、`[ble: exit 127]`。
+
+**原因**：这是 ble.sh 默认的 `exec_elapsed_mark` / `exec_errexit_mark` / `exec_exit_mark`。
+
+**本脚本的处理**：安装时幂等写入 `~/.blerc` 托管块，将上述三项设为空以关闭摘要。
+已装过的环境重新运行 `bash shell/bash/setup.sh`（或 `install`）即可更新；然后
+`source ~/.bashrc` 或开新终端。
+
+**手动开关**（在交互式 ble 会话中立刻生效，或写入 `~/.blerc` marker 外）：
+
+~bash
+# 关闭
+bleopt exec_elapsed_mark=
+bleopt exec_errexit_mark=
+bleopt exec_exit_mark=
+# 恢复默认示例
+# bleopt exec_elapsed_mark='elapsed %s (CPU %s%%)'
+# bleopt exec_errexit_mark='exit %d'
+~
 
 ### 2026-07-27 方向键左右移动时会"按词跳"，无法逐字符移动
 

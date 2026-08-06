@@ -138,8 +138,11 @@ HOME="$TMP_DIR/bash-dry-home" PATH="$FAKE_BIN" \
   bash "$SETUP_SH" install -n >"$cli_dry" 2>&1 ||
   fail "setup.sh install -n failed: $(cat "$cli_dry")"
 assert_contains "$cli_dry" "试运行"
+assert_contains "$cli_dry" "bleopt exec_elapsed_mark="
 [[ ! -f "$TMP_DIR/bash-dry-home/.bashrc" ]] ||
   fail "dry-run must not create .bashrc when it did not exist"
+[[ ! -f "$TMP_DIR/bash-dry-home/.blerc" ]] ||
+  fail "dry-run must not create .blerc when it did not exist"
 
 if [[ "$DEVTOOLS_TEST_PROFILE" != "macos" ]]; then
 # install fzf only must not invoke zoxide online installer (curl) when zoxide missing
@@ -166,9 +169,34 @@ PATH="$single_bin:$FAKE_BIN" HOME="$single_home" DEVTOOLS_CACHE_DIR="$TMP_DIR/ca
 assert_file "$TMP_DIR/bash-single-fzf-install"
 [[ ! -e "$TMP_DIR/bash-single-curl" ]] || fail "install fzf must not curl-install zoxide/starship"
 assert_contains "$single_home/.bashrc" "Lightweight Bash Plugins"
+assert_file "$single_home/.blerc"
+assert_contains "$single_home/.blerc" "bleopt exec_elapsed_mark="
+assert_contains "$single_home/.blerc" "bleopt exec_errexit_mark="
+assert_contains "$single_home/.blerc" "bleopt exec_exit_mark="
 # starship.toml must NOT be written for fzf-only install
 [[ ! -f "$single_home/.config/starship.toml" ]] ||
   fail "fzf-only install must not write starship.toml"
+
+# Re-running must replace the managed blerc block and keep user content outside markers.
+printf '%s\n' \
+  "# user custom blerc" \
+  "bleopt prompt_eol_mark=custom" \
+  "# === Lightweight Bash Plugins (devtools) ===" \
+  "bleopt exec_elapsed_mark=stale" \
+  "# === End Lightweight Bash Plugins ===" \
+  "# after block" > "$single_home/.blerc"
+FZF_INSTALL_MARKER="$TMP_DIR/bash-blerc-idempotent-fzf" \
+PATH="$single_bin:$FAKE_BIN" HOME="$single_home" DEVTOOLS_CACHE_DIR="$TMP_DIR/cache" \
+  bash "$SETUP_SH" install fzf >"$TMP_DIR/bash-blerc-idempotent.log" 2>&1 ||
+  fail "blerc idempotent reinstall failed: $(cat "$TMP_DIR/bash-blerc-idempotent.log")"
+assert_contains "$single_home/.blerc" "# user custom blerc"
+assert_contains "$single_home/.blerc" "bleopt prompt_eol_mark=custom"
+assert_contains "$single_home/.blerc" "# after block"
+assert_contains "$single_home/.blerc" "bleopt exec_elapsed_mark="
+assert_not_contains "$single_home/.blerc" "bleopt exec_elapsed_mark=stale"
+blerc_block_count="$(grep -cF '# === Lightweight Bash Plugins (devtools) ===' "$single_home/.blerc" || true)"
+[[ "$blerc_block_count" -eq 1 ]] ||
+  fail "expected exactly one managed blerc block, got $blerc_block_count"
 
 # alias ble.sh
 alias_rc=0
