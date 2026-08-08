@@ -169,6 +169,23 @@ vim-plug 会提示确认后删除未声明的插件目录。
 
 ## Issues
 
+### 2026-08-08 — 大 Git 仓库里 Airline / GitGutter 拖慢打开与 Git 相关操作
+
+**问题表象**
+
+- 在大型 Git 仓库中打开 Vim 或切换 buffer 时，状态栏相关 Git 查询与 gutter 更新明显变慢。
+
+**根因**
+
+- Airline 的 `branch` 扩展会对仓库做分支 / dirty / untracked 检查。
+- vim-gitgutter 默认 `base_path` 会执行整库 `git diff --diff-filter=R --name-status`，做 rename 枚举。
+
+**解法**
+
+- `vimrc`：`g:airline#extensions#branch#enabled = 0`。
+- `vimrc`：在插件加载后覆盖 `gitgutter#utility#base_path`，按当前文件路径解析，跳过整库 rename 扫描（刚 rename、仍需按旧路径对 index 的极少数场景可能不准）。
+- 已有环境重新应用：`bash editors/vim/setup.sh`（或 `--dry-run` 预览）。
+
 ### 2026-07-30 — Vim 过旧时只能跳过 coc，无法一键升级
 
 **问题表象**

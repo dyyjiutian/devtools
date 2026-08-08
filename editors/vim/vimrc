@@ -304,13 +304,30 @@ let g:copilot_filetypes = {
 " ============================================================
 let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#formatter = 'unique_tail'
-let g:airline#extensions#branch#enabled = 1
+" Branch/dirty/untracked VCS checks can stall Vim in large git repos.
+let g:airline#extensions#branch#enabled = 0
 let g:airline#extensions#hunks#enabled = 1
 let g:airline#extensions#tabline#show_tab_nr = 1
 let g:airline#extensions#tabline#tab_nr_type = 1
 let g:airline#extensions#tabline#show_buffers = 0
 " let g:airline#extensions#nerdtree_statusline = 1
 let g:airline_theme = 'gruvbox'
+
+" ============================================================
+" GitGutter Settings (large-repo performance)
+" ============================================================
+" Default base_path runs whole-repo rename discovery:
+"   git diff --diff-filter=R --name-status [<base>]
+" That can make opening buffers slow in large repositories. Override to
+" resolve against the current file path only (skip rename enumeration).
+if exists('g:loaded_gitgutter')
+  silent! runtime autoload/gitgutter/utility.vim
+  if exists('*gitgutter#utility#repo_path')
+    function! gitgutter#utility#base_path(bufnr) abort
+      return gitgutter#utility#shellescape(gitgutter#utility#repo_path(a:bufnr, 0))
+    endfunction
+  endif
+endif
 
 " ============================================================
 " Gutentags Settings (ctags)

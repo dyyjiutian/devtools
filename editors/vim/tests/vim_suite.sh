@@ -46,6 +46,20 @@ test_vimrc_oscyank_linux_only() {
   pass "vimrc oscyank Linux-only ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_vimrc_git_perf_large_repo() {
+  local vimrc
+  vimrc="$(cat "$MODULE_ROOT/vimrc")"
+  assert_contains "$vimrc" "airline#extensions#branch#enabled = 0" \
+    "disables airline branch extension"
+  assert_contains "$vimrc" "gitgutter#utility#base_path" \
+    "overrides gitgutter base_path"
+  assert_contains "$vimrc" "diff --diff-filter=R --name-status" \
+    "documents whole-repo rename scan being skipped"
+  assert_contains "$vimrc" "gitgutter#utility#repo_path(a:bufnr, 0)" \
+    "base_path uses current file path only"
+  pass "vimrc git perf for large repos ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_unknown_flag() {
   local rc=0
   bash "$SETUP_SH" --not-a-real-flag >/dev/null 2>&1 || rc=$?
@@ -152,6 +166,7 @@ test_version_ge_leading_zeros() {
 
 test_help
 test_vimrc_oscyank_linux_only
+test_vimrc_git_perf_large_repo
 test_unknown_flag
 test_resolve_targets
 test_version_ge_leading_zeros
