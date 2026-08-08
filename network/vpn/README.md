@@ -117,7 +117,8 @@ sudo ./exit/manage.sh reset-stats alice
 - 统计基于 Xray Stats API，按用户 email（`alice@vpn`）分项记录上行/下行流量
 - 配额单位为 GB，`check-quotas` 子命令检查所有设有配额的用户，超限者从配置移除并热重载 Xray
 - `install-cron` 将 `check-quotas` 注册为每小时 cron，日志写入 `/var/log/vpn-quota.log`
-- 流量统计从 Xray 上次重启开始累计；月初重置可执行 `sudo ./exit/manage.sh reset-stats all`
+- 用量 = 持久化累计（`/var/lib/vpn-exit/traffic.tsv`）+ 当前 Xray 进程内计数；`add`/`remove`/`sync` 重载会保留已用流量
+- 月初或手动清零：`sudo ./exit/manage.sh reset-stats all`（同时清空持久化文件并重启 Xray）
 
 ---
 

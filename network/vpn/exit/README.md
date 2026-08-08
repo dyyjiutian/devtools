@@ -12,6 +12,14 @@ bash network/vpn/exit/setup_test.sh
 
 ## Issues
 
+### 2026-08-08 — 新增用户后全员流量被重新计费
+
+**表象：** `manage.sh add`（以及 `remove` / `sync` / 超限踢人）后，已有用户的用量从 0 重新累计，配额等于重新开始。
+
+**根因：** 上述操作通过 `systemctl restart xray` 应用 clients；Xray Stats API 计数仅存在进程内存，重启即丢失。
+
+**解法：** 重载前把各用户当前 session 用量写入 `/var/lib/vpn-exit/traffic.tsv`；展示与配额使用「持久化累计 + 当前 session」。仅 `reset-stats`（含每月 1 日 cron）清零。回归：`bash network/vpn/exit/manage_test.sh`。
+
 ### 2026-08-04 — Alibaba Cloud Linux 4 上 Cloudflare WARP 安装失败（源 404 / 缺 webkit2gtk3）
 
 **表象：** `exit/setup.sh` 安装 WARP 时失败，先后可能出现：

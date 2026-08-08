@@ -12,3 +12,14 @@ sh_test(
         "smoke",
     ],
 )
+
+sh_test(
+    name = "manage_test",
+    srcs = ["manage_test.sh"],
+    data = ["manage.sh"],
+    size = "small",
+    tags = [
+        "local",
+        "smoke",
+    ],
+)

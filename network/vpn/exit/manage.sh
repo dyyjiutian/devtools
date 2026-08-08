@@ -14,14 +14,15 @@ success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
 
-[[ $EUID -eq 0 ]] || { error "请以 root 权限运行: sudo $0 $*"; exit 1; }
-
-CONFIG_CACHE="/root/.vpn_exit_config"
-XRAY_BIN="/usr/local/bin/xray"
-XRAY_CONFIG="/usr/local/etc/xray/config.json"
+# Paths are overridable for regression tests (see manage_test.sh).
+CONFIG_CACHE="${VPN_EXIT_CONFIG:-/root/.vpn_exit_config}"
+XRAY_BIN="${VPN_XRAY_BIN:-/usr/local/bin/xray}"
+XRAY_CONFIG="${VPN_XRAY_CONFIG:-/usr/local/etc/xray/config.json}"
 XRAY_LOG_DIR="/var/log/xray"
-STATS_SERVER="127.0.0.1:10085"
+STATS_SERVER="${VPN_STATS_SERVER:-127.0.0.1:10085}"
 QUOTA_LOG="/var/log/vpn-quota.log"
+TRAFFIC_STORE="${VPN_TRAFFIC_STORE:-/var/lib/vpn-exit/traffic.tsv}"
+SYSTEMCTL_BIN="${VPN_SYSTEMCTL:-systemctl}"
 
 # ── 配置加载/写入 ──────────────────────────────────────────────────────────────
 load_config() {
@@ -56,12 +57,102 @@ write_config() {
     chmod 600 "$CONFIG_CACHE"
 }
 
+# ── 持久化流量（跨 Xray restart；仅 reset-stats / 月度 cron 清零）──────────────
+traffic_store_get() {
+    local user="$1"
+    local up=0 down=0 u u_up u_down
+    if [[ -f "$TRAFFIC_STORE" ]]; then
+        while IFS=$'\t' read -r u u_up u_down || [[ -n "${u:-}" ]]; do
+            [[ -n "${u:-}" ]] || continue
+            [[ "$u" == "$user" ]] || continue
+            up="${u_up:-0}"
+            down="${u_down:-0}"
+            break
+        done < "$TRAFFIC_STORE"
+    fi
+    echo "${up} ${down}"
+}
+
+traffic_store_set() {
+    local user="$1" up="$2" down="$3"
+    local dir tmp u u_up u_down
+    dir=$(dirname "$TRAFFIC_STORE")
+    mkdir -p "$dir"
+    tmp=$(mktemp "${dir}/.traffic.XXXXXX")
+    if [[ -f "$TRAFFIC_STORE" ]]; then
+        while IFS=$'\t' read -r u u_up u_down || [[ -n "${u:-}" ]]; do
+            [[ -n "${u:-}" ]] || continue
+            [[ "$u" == "$user" ]] && continue
+            printf '%s\t%s\t%s\n' "$u" "$u_up" "$u_down"
+        done < "$TRAFFIC_STORE" >"$tmp"
+    else
+        : >"$tmp"
+    fi
+    printf '%s\t%s\t%s\n' "$user" "$up" "$down" >>"$tmp"
+    mv -f "$tmp" "$TRAFFIC_STORE"
+    chmod 600 "$TRAFFIC_STORE" 2>/dev/null || true
+}
+
+traffic_store_add() {
+    local user="$1" d_up="$2" d_down="$3"
+    local up down
+    read -r up down < <(traffic_store_get "$user")
+    traffic_store_set "$user" "$((up + d_up))" "$((down + d_down))"
+}
+
+traffic_store_clear() {
+    local target="${1:-all}"
+    local dir tmp u u_up u_down
+    if [[ "$target" == "all" ]]; then
+        rm -f "$TRAFFIC_STORE"
+        return 0
+    fi
+    [[ -f "$TRAFFIC_STORE" ]] || return 0
+    dir=$(dirname "$TRAFFIC_STORE")
+    tmp=$(mktemp "${dir}/.traffic.XXXXXX")
+    while IFS=$'\t' read -r u u_up u_down || [[ -n "${u:-}" ]]; do
+        [[ -n "${u:-}" ]] || continue
+        [[ "$u" == "$target" ]] && continue
+        printf '%s\t%s\t%s\n' "$u" "$u_up" "$u_down"
+    done < "$TRAFFIC_STORE" >"$tmp"
+    mv -f "$tmp" "$TRAFFIC_STORE"
+}
+
+# Capture live Stats API counters for current USERS into a TSV snapshot file.
+snapshot_live_traffic() {
+    local snap_file="$1"
+    local u up down
+    : >"$snap_file"
+    for u in $USERS; do
+        read -r up down < <(get_user_session_traffic "$u")
+        printf '%s\t%s\t%s\n' "$u" "${up:-0}" "${down:-0}" >>"$snap_file"
+    done
+}
+
+commit_traffic_snapshot() {
+    local snap_file="$1"
+    local u up down
+    [[ -f "$snap_file" ]] || return 0
+    while IFS=$'\t' read -r u up down || [[ -n "${u:-}" ]]; do
+        [[ -n "${u:-}" ]] || continue
+        up="${up:-0}"
+        down="${down:-0}"
+        [[ "$up" == "0" && "$down" == "0" ]] && continue
+        traffic_store_add "$u" "$up" "$down"
+    done < "$snap_file"
+}
+
 # ── Xray 配置热更新（仅更新 clients 数组，其余设置保持不变）────────────────────
 reload_xray_clients() {
     [[ -f "$XRAY_CONFIG" ]] || {
         error "Xray 配置文件不存在: ${XRAY_CONFIG}，请先运行 exit/setup.sh"
         exit 1
     }
+
+    # Snapshot in-memory counters before restart wipes them.
+    local snap_file
+    snap_file=$(mktemp)
+    snapshot_live_traffic "$snap_file"
 
     # 构造 clients JSON 字符串（单行，传给 Python）
     local clients_arr="["
@@ -74,11 +165,11 @@ reload_xray_clients() {
     done
     clients_arr="${clients_arr}]"
 
-    python3 - "$clients_arr" <<'PYEOF'
-import json, sys
+    VPN_XRAY_CONFIG="$XRAY_CONFIG" python3 - "$clients_arr" <<'PYEOF'
+import json, os, sys
 
 clients = json.loads(sys.argv[1])
-config_path = '/usr/local/etc/xray/config.json'
+config_path = os.environ.get('VPN_XRAY_CONFIG', '/usr/local/etc/xray/config.json')
 
 with open(config_path) as f:
     config = json.load(f)
@@ -118,10 +209,18 @@ with open(config_path, 'w') as f:
     json.dump(config, f, indent=2, ensure_ascii=False)
 PYEOF
 
-    systemctl restart xray
-    sleep 1
-    systemctl is-active --quiet xray && success "Xray 已重载（${#USERS} 个用户）" \
-        || { error "Xray 重载失败: journalctl -u xray -n 20"; exit 1; }
+    "$SYSTEMCTL_BIN" restart xray
+    [[ "${MANAGE_SOURCE_ONLY:-false}" == "true" ]] || sleep 1
+    if "$SYSTEMCTL_BIN" is-active --quiet xray; then
+        # Only commit after a successful restart so we never double-count a live session.
+        commit_traffic_snapshot "$snap_file"
+        rm -f "$snap_file"
+        success "Xray 已重载（${#USERS} 个用户）"
+    else
+        rm -f "$snap_file"
+        error "Xray 重载失败: journalctl -u xray -n 20"
+        exit 1
+    fi
 }
 
 # ── 流量统计工具 ───────────────────────────────────────────────────────────────
@@ -135,8 +234,8 @@ bytes_to_human() {
     fi
 }
 
-# 查询单个用户的 up/down 字节数，失败时返回 "0 0"
-get_user_traffic() {
+# Raw Stats API counters for the current Xray process (lost on restart).
+get_user_session_traffic() {
     local user="$1"
     local email="${user}@vpn"
     local up=0 down=0 val
@@ -152,6 +251,15 @@ get_user_traffic() {
     down="${val:-0}"
 
     echo "${up} ${down}"
+}
+
+# Billed traffic = persisted (survives reload) + current session.
+get_user_traffic() {
+    local user="$1"
+    local store_up=0 store_down=0 live_up=0 live_down=0
+    read -r store_up store_down < <(traffic_store_get "$user")
+    read -r live_up live_down < <(get_user_session_traffic "$user")
+    echo "$((store_up + live_up)) $((store_down + live_down))"
 }
 
 stats_api_alive() {
@@ -244,6 +352,7 @@ cmd_remove() {
     (( count > 1 )) || { error "至少保留一个用户，无法删除 '${name}'"; exit 1; }
 
     USERS=$(echo "$USERS" | tr ' ' '\n' | grep -vxF "$name" | tr '\n' ' ' | xargs)
+    traffic_store_clear "$name"
 
     write_config
     reload_xray_clients
@@ -308,7 +417,7 @@ cmd_stats() {
     stats_api_alive || { warn "Stats API 不可用，请确认 Xray 正在运行"; exit 1; }
 
     echo ""
-    echo -e "${BOLD}━━━ 流量统计（累计，自上次重置/重启）━━━${RESET}"
+    echo -e "${BOLD}━━━ 流量统计（累计；add/remove/sync 重载不归零）━━━${RESET}"
     echo ""
     printf "%-14s  %-14s  %-14s  %-14s\n" "用户" "上行" "下行" "合计"
     printf '%0.s─' {1..60}; echo
@@ -330,9 +439,10 @@ cmd_reset_stats() {
 
     if [[ "$target" == "all" ]]; then
         info "重启 Xray 以重置所有用户流量统计..."
-        systemctl restart xray
-        sleep 1
-        systemctl is-active --quiet xray \
+        traffic_store_clear all
+        "$SYSTEMCTL_BIN" restart xray
+        [[ "${MANAGE_SOURCE_ONLY:-false}" == "true" ]] || sleep 1
+        "$SYSTEMCTL_BIN" is-active --quiet xray \
             && success "Xray 已重启，所有流量统计已归零" \
             || { error "Xray 重启失败"; exit 1; }
     else
@@ -340,6 +450,7 @@ cmd_reset_stats() {
         stats_api_alive || { warn "Stats API 不可用，无法单独重置；可用 reset-stats all 重启 Xray"; exit 1; }
 
         local email="${target}@vpn"
+        traffic_store_clear "$target"
         "$XRAY_BIN" api stats --server="$STATS_SERVER" \
             -name "user>>>${email}>>>traffic>>>uplink" --reset &>/dev/null || true
         "$XRAY_BIN" api stats --server="$STATS_SERVER" \
@@ -372,6 +483,7 @@ cmd_check_quotas() {
             used_str=$(bytes_to_human "$total")
             warn "用户 '${u}' 已用 ${used_str} ≥ 配额 ${quota}GB，正在移除..."
             USERS=$(echo "$USERS" | tr ' ' '\n' | grep -vxF "$u" | tr '\n' ' ' | xargs)
+            traffic_store_clear "$u"
             echo "${ts} [QUOTA] 用户 ${u}: 用量 ${used_str} 超出 ${quota}GB，已禁用" >> "$QUOTA_LOG"
             removed=true
         fi
@@ -389,7 +501,7 @@ cmd_check_quotas() {
 # ── 命令：sync ─────────────────────────────────────────────────────────────────
 cmd_sync() {
     load_config
-    info "将 Xray clients 与 ${CONFIG_CACHE} 同步并重载（流量计数会归零）..."
+    info "将 Xray clients 与 ${CONFIG_CACHE} 同步并重载（已用流量会保留）..."
     reload_xray_clients
     success "配置已同步，流量统计将按 <user>@vpn 计数"
 }
@@ -435,7 +547,7 @@ VPN 出口节点用户管理
   vless  <name> [relay_ip]   打印指定用户的 VLESS 链接（默认中继 IP: 198.51.100.11）
   stats  [name]              显示流量统计（可选：指定单用户）
   reset-stats [name|all]     重置流量计数（all 会重启 Xray）
-  sync                       同步 Xray clients 并重载（修复配置漂移，计数归零）
+  sync                       同步 Xray clients 并重载（保留已用流量）
   check-quotas               检查并执行配额限制（供 cron 调用）
   install-cron               安装每小时配额巡检 cron 任务
 
@@ -456,6 +568,12 @@ HELP
 }
 
 # ── 入口 ──────────────────────────────────────────────────────────────────────
+if [[ "${MANAGE_SOURCE_ONLY:-false}" == "true" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+
+[[ $EUID -eq 0 ]] || { error "请以 root 权限运行: sudo $0 $*"; exit 1; }
+
 COMMAND="${1:-help}"
 shift 2>/dev/null || true
 
