@@ -366,6 +366,21 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 ## Issues
 
+### 2026-08-09 — Neovim 0.12.x 打开文件时报 treesitter highlighter 崩溃
+
+**表象**：macOS（Homebrew nvim ≥ 0.12）打开 `setup.sh` 等文件时反复报
+`Decoration provider "start" (ns=nvim.treesitter.highlighter) ... treesitter.lua:197: attempt to call method 'range' (a nil value)`。
+
+**根因**：`nvim-treesitter` 被钉在 `branch = "master"`（注释误以为 master 是重写版）。上游默认分支已改为 `main`（完整重写版，需 Neovim 0.12+），`master` 是锁定给 Neovim ≤ 0.11 的旧版兼容分支并正在归档；在 0.12.x 上旧分支的 highlighter 解析路径直接崩溃。另：telescope 0.1.x 的 previewer 依赖 `nvim-treesitter.parsers.ft_to_lang()`/`configs.*`，这些在 `main` 重写版被移除，0.12 上 `gr` 预览与 `<leader>/` 都会报 `attempt to call field 'ft_to_lang' (a nil value)`。
+
+**解法**：按宿主 nvim 版本选分支——≥ 0.12 用 `main`（重写版，parser 装到 `~/.local/share/nvim/site`，需 `brew install tree-sitter-cli` 编译 parser；注意 `tree-sitter` 公式只含 C 库无 CLI），< 0.12 保持 `master`（Linux 0.10.4 / glibc 2.32 基线不变）。telescope 同样按版本分支：≥ 0.12 用 `master`（≥ v0.11.7，原生 `vim.treesitter`），< 0.12 保持 `0.1.x`。更新后执行：
+
+```bash
+brew install tree-sitter-cli   # macOS，仅 ≥ 0.12 需要
+brew install go                # gopls 由 mason 经 `go install` 安装，需 Go 工具链
+./setup.sh --update
+```
+
 ### 2026-07-30 — Alinux 3 安装 Neovim stable 失败（glibc）
 
 **表象**：`editors/nvim/setup.sh` 在 Alinux 3 上下载/运行最新 stable 失败，提示找不到可用包或动态链接器不满足要求。

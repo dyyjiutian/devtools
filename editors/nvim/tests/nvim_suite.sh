@@ -211,19 +211,24 @@ test_lsp_covers_go_and_c() {
   pass "nvim lsp covers Go and C/C++ ($DEVTOOLS_TEST_PROFILE)"
 }
 
-test_treesitter_pinned_to_master() {
+test_treesitter_branches_by_nvim_version() {
   local treesitter setup
   treesitter="$(cat "$MODULE_ROOT/lua/plugins/treesitter.lua")"
   setup="$(cat "$SETUP_SH")"
-  # Upstream's default branch is the rewrite, which drops parsers.ft_to_lang()
-  # that telescope 0.1.x previewers call.
-  assert_contains "$treesitter" 'branch = "master"' "pins nvim-treesitter to master"
-  assert_contains "$treesitter" 'require("nvim-treesitter.configs").setup(opts)' "uses master setup entry point"
-  assert_not_contains "$treesitter" 'require("nvim-treesitter").setup(opts)' "no rewrite-style setup call"
-  assert_contains "$treesitter" "prefer_git = true" "prefers git over curl tarball downloads"
-  assert_contains "$treesitter" "auto_install = false" "disables auto_install to avoid TSUpdate races"
+  # Upstream: main is the rewrite (Neovim 0.12+); master is the locked legacy
+  # branch (<= 0.11), kept for the Linux 0.10.4 / glibc 2.32 baseline.
+  assert_contains "$treesitter" 'branch = IS_012 and "main" or "master"' "branches on host nvim version"
+  assert_contains "$treesitter" 'lazy = false' "plugin does not support lazy-loading"
+  assert_contains "$treesitter" 'require("nvim-treesitter").setup {' "rewrite setup entry point"
+  assert_contains "$treesitter" 'require("nvim-treesitter.configs").setup {' "legacy setup entry point"
+  assert_contains "$treesitter" "vim.treesitter.start" "rewrite enables highlighting explicitly"
+  assert_contains "$treesitter" 'require("nvim-treesitter").install(PARSERS)' "rewrite seeds parsers explicitly"
+  assert_contains "$treesitter" "prefer_git = true" "legacy prefers git over curl tarball downloads"
+  assert_contains "$treesitter" "auto_install = false" "legacy disables auto_install to avoid TSUpdate races"
   assert_contains "$setup" "nvim-treesitter" "setup resets nvim-treesitter checkout"
-  pass "nvim treesitter pinned to master ($DEVTOOLS_TEST_PROFILE)"
+  # `tree-sitter` formula ships only libtree-sitter; the rewrite needs the CLI.
+  assert_contains "$setup" "tree-sitter-cli" "macOS installs tree-sitter-cli for the rewrite"
+  pass "nvim treesitter branches by nvim version ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_copilot_plugin_wired() {
@@ -327,6 +332,9 @@ test_telescope_ignore_patterns_are_escaped() {
   local telescope
   # Comments mention the buggy patterns, so assert against code lines only.
   telescope="$(grep -v '^[[:space:]]*--' "$MODULE_ROOT/lua/plugins/telescope.lua")"
+  # master (>= v0.11.7) for nvim 0.12+; 0.1.x calls nvim-treesitter legacy APIs
+  # the main rewrite drops, and is kept for the nvim 0.10 baseline.
+  assert_contains "$telescope" 'branch = IS_012 and "master" or "0.1.x"' "telescope branches on host nvim version"
   assert_contains "$telescope" '"/%.git/"' "escapes the dot in .git"
   assert_contains "$telescope" '"%.pyc$"' "uses a Lua pattern for .pyc"
   # Bare ".git" matches any char before "git", e.g. ~/workspace/github/.
@@ -545,7 +553,7 @@ test_linux_skips_when_nvim_present
 test_lsp_pins_for_nvim_010
 test_lsp_registers_servers_when_mason_fails
 test_lsp_covers_go_and_c
-test_treesitter_pinned_to_master
+test_treesitter_branches_by_nvim_version
 test_lazygit_pinned_for_nvim_010
 test_leader_keys_are_unique
 test_ide_plugins_present

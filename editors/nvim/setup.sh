@@ -298,7 +298,11 @@ install_nvim() {
 # --- Install dependencies ---
 install_deps_macos() {
     info "Installing dependencies via Homebrew..."
-    local deps=(node npm ripgrep fd git)
+    # tree-sitter-cli: nvim-treesitter main branch (rewrite, nvim 0.12+) builds
+    # parsers with `tree-sitter generate` + cc; brew is always 0.12+. Note the
+    # `tree-sitter` formula ships only the C library, not the CLI.
+    # go: mason-lspconfig auto-installs gopls via `go install`, so Go must exist.
+    local deps=(node npm ripgrep fd git tree-sitter-cli go)
     for dep in "${deps[@]}"; do
         if brew list "$dep" &>/dev/null 2>/dev/null; then
             success "$dep already installed"

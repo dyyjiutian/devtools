@@ -2,10 +2,15 @@
 -- Telescope: Fuzzy Finder
 -- ============================================================
 
+-- master (>= v0.11.7, uses vim.treesitter directly) for nvim 0.12+; the legacy
+-- 0.1.x line calls nvim-treesitter parsers.ft_to_lang()/configs.*, which the
+-- main rewrite drops, and is kept for the nvim 0.10 / Alinux 3 baseline.
+local IS_012 = vim.fn.has("nvim-0.12") == 1
+
 return {
   "nvim-telescope/telescope.nvim",
   event = "VimEnter",
-  branch = "0.1.x",
+  branch = IS_012 and "master" or "0.1.x",
   dependencies = {
     "nvim-lua/plenary.nvim",
     {
@@ -19,29 +24,31 @@ return {
     { "nvim-tree/nvim-web-devicons", enabled = vim.g.have_nerd_font },
   },
   config = function()
-    require("telescope").setup({
-      defaults = {
-        mappings = {
-          i = {
-            ["<C-k>"] = require("telescope.actions").move_selection_previous,
-            ["<C-j>"] = require("telescope.actions").move_selection_next,
-            ["<C-q>"] = require("telescope.actions").send_to_qflist + require("telescope.actions").open_qflist,
-          },
-        },
-        -- Lua patterns, not globs: an unescaped "." matches any character, so
-        -- ".git" also matched paths like ~/workspace/github/ and silently
-        -- dropped every result in them.
-        file_ignore_patterns = {
-          "^%.git/",
-          "/%.git/",
-          "^node_modules/",
-          "/node_modules/",
-          "^__pycache__/",
-          "/__pycache__/",
-          "%.pyc$",
-          "%.DS_Store$",
+    local defaults = {
+      mappings = {
+        i = {
+          ["<C-k>"] = require("telescope.actions").move_selection_previous,
+          ["<C-j>"] = require("telescope.actions").move_selection_next,
+          ["<C-q>"] = require("telescope.actions").send_to_qflist + require("telescope.actions").open_qflist,
         },
       },
+      -- Lua patterns, not globs: an unescaped "." matches any character, so
+      -- ".git" also matched paths like ~/workspace/github/ and silently
+      -- dropped every result in them.
+      file_ignore_patterns = {
+        "^%.git/",
+        "/%.git/",
+        "^node_modules/",
+        "/node_modules/",
+        "^__pycache__/",
+        "/__pycache__/",
+        "%.pyc$",
+        "%.DS_Store$",
+      },
+    }
+
+    require("telescope").setup({
+      defaults = defaults,
       pickers = {
         find_files = {
           theme = "dropdown",
