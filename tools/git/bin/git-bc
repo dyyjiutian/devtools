@@ -108,12 +108,18 @@ is_protected() {
 }
 
 # Map branch -> worktree path for branches checked out in any worktree.
-declare -A wt_path=()
+# Bash 3.2 compatible: no associative arrays (declare -A), so use parallel
+# indexed arrays and a linear lookup. Worktree count is small, so O(n) is fine.
+wt_branches=()
+wt_paths=()
 cur_wt=""
 while read -r key val; do
   case "$key" in
     worktree) cur_wt="$val" ;;
-    branch)   wt_path["${val#refs/heads/}"]="$cur_wt" ;;
+    branch)
+      wt_branches+=("${val#refs/heads/}")
+      wt_paths+=("$cur_wt")
+      ;;
   esac
 done < <(git worktree list --porcelain 2>/dev/null)
 
@@ -129,8 +135,15 @@ while read -r branch; do
   is_protected "$branch" && continue
   [[ -n "$current_branch" && "$branch" == "$current_branch" ]] && continue
 
-  if [[ -n "${wt_path[$branch]:-}" ]]; then
-    skipped_wt+=("$branch → ${wt_path[$branch]}")
+  wt=""
+  for i in "${!wt_branches[@]}"; do
+    if [[ "${wt_branches[$i]}" == "$branch" ]]; then
+      wt="${wt_paths[$i]}"
+      break
+    fi
+  done
+  if [[ -n "$wt" ]]; then
+    skipped_wt+=("$branch → $wt")
     continue
   fi
 

@@ -6,6 +6,7 @@ set -euo pipefail
 SETUP_SH="$MODULE_ROOT/setup.sh"
 SUBCMD_SH="$MODULE_ROOT/scripts/sub-command.sh"
 CONFIG_SH="$MODULE_ROOT/scripts/config.sh"
+GIT_BC="$MODULE_ROOT/bin/git-bc"
 
 test_help() {
   local out
@@ -534,6 +535,54 @@ test_subcmd_installs_sparse_clone() {
   pass "git sub-command installs sparse-clone ($DEVTOOLS_TEST_PROFILE)"
 }
 
+# Regression: git-bc used declare -A (Bash 4+), which fails under macOS Bash 3.2.
+# Build a repo with a merged branch and a worktree branch; both must be handled.
+test_bc_skips_worktree_and_flags_merged() {
+  local work out
+  work="$(mktemp -d "${TMPDIR:-/tmp}/git-bc.XXXXXX")"
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+  git init -q --bare "$work/origin.git"
+  git init -q "$work/repo"
+  git -C "$work/repo" config user.email "test@example.com"
+  git -C "$work/repo" config user.name "Test"
+  git -C "$work/repo" remote add origin "$work/origin.git"
+  git -C "$work/repo" checkout -q -b main
+  printf 'a\n' >"$work/repo/f"
+  git -C "$work/repo" add f
+  git -C "$work/repo" commit -qm init
+  git -C "$work/repo" push -q -u origin main
+  git -C "$work/repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+
+  # Branch checked out in a worktree must be skipped.
+  git -C "$work/repo" checkout -q -b wt-branch
+  printf 'c\n' >"$work/repo/h"
+  git -C "$work/repo" add h
+  git -C "$work/repo" commit -qm wt
+  git -C "$work/repo" push -q origin wt-branch
+  git -C "$work/repo" checkout -q main
+  git -C "$work/repo" worktree add -q "$work/wt" wt-branch
+
+  # Merged branch must be listed for deletion.
+  git -C "$work/repo" checkout -q -b feature1
+  printf 'b\n' >"$work/repo/g"
+  git -C "$work/repo" add g
+  git -C "$work/repo" commit -qm feature1
+  git -C "$work/repo" checkout -q main
+  git -C "$work/repo" merge -q --no-ff feature1 -m merge-feature1
+  git -C "$work/repo" push -q origin main
+  git -C "$work/repo" checkout -q main
+
+  out="$(cd "$work/repo" && bash "$GIT_BC" --dry-run 2>&1)" || {
+    echo "FAIL: git bc --dry-run failed: $out" >&2
+    rm -rf "$work"
+    return 1
+  }
+  assert_contains "$out" "feature1  (merged)" "merged branch is listed"
+  assert_contains "$out" "wt-branch →" "worktree branch is skipped"
+  rm -rf "$work"
+  pass "git bc skips worktree & flags merged ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_unknown_flag
 test_install_gh_branch
@@ -556,5 +605,6 @@ test_sparse_clone_append_requires_paths
 test_sparse_clone_dry_run_no_dir
 test_sparse_clone_root_only_and_paths_and_append
 test_subcmd_installs_sparse_clone
+test_bc_skips_worktree_and_flags_merged
 
 echo "PASS: git suite complete ($DEVTOOLS_TEST_PROFILE)"

@@ -187,6 +187,18 @@ git sparse-clone --help
 
 ## Issues
 
+### 2026-08-10 — macOS 上 `git bc` 报 `declare: -A: invalid option`
+
+**表象**：macOS 运行 `git bc` 立即报错退出：
+```
+/Users/devuser/.local/bin/git-bc: line 111: declare: -A: invalid option
+declare: usage: declare [-afFirtx] [-p] [name[=value] ...]
+```
+
+**根因**：`git bc` 用 `declare -A`（关联数组）记录 worktree 分支路径，该语法要求 Bash 4.0+；macOS 默认 `/bin/bash` 为 3.2，shebang `#!/usr/bin/env bash` 解析到 3.2 即失败，违反仓库「macOS Bash 3.2+」兼容基线。
+
+**解法**：改用 Bash 3.2 兼容的并行索引数组 `wt_branches`/`wt_paths` + 线性查找替换关联数组。已同步重装 `~/.local/bin/git-bc`，并在 `tools/git/tests/git_suite.sh` 增加回归测试 `test_bc_skips_worktree_and_flags_merged`（旧代码在 bash 3.2 下必失败）。
+
 ### 2026-07-30 — Linux 安装 git-delta 提示找不到软件
 
 **表象**：在部分 Ubuntu/Debian、RHEL/CentOS 系统运行 `bash tools/git/setup.sh` 时，系统仓库提示找不到 `git-delta`；首次包管理器安装失败后脚本直接跳过，CentOS 7 即使仓库内有离线资产也无法继续安装。
