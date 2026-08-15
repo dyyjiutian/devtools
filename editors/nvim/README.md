@@ -335,6 +335,7 @@ tracked as separate work.
 ./setup.sh --backup     # Backup existing config
 ./setup.sh --update     # Sync init.lua/lua/ config, then update plugins and LSP servers
 ./setup.sh --help       # Show help
+NVIM_SETUP_STRICT=1 ./setup.sh   # fail if plugin / treesitter sync is incomplete
 ```
 
 ### Neovim Commands
@@ -365,6 +366,14 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 2. Restart Neovim to re-install plugins
 
 ## Issues
+
+### 2026-08-15 — headless Lazy sync 未等克隆结束，镜像里打开文件会全量装插件
+
+**表象**：`alinux3-devbox` 里第一次 `nvim <file>` 会 clone 全部 lazy 插件。
+
+**根因**：构建期 `ENV HOME=/home/admin` 让 root 先占用 `~/.cache`，`admin` 无法创建 `~/.cache/nvim`，lazy.setup 失败后插件不会 clone。失败原先只告警。
+
+**解法**：在 bootstrap 前 `chown` `/home/admin`；`Lazy! sync` 后校验插件目录。容器构建设置 `NVIM_SETUP_STRICT=1`，缺插件即失败。
 
 ### 2026-08-09 — Neovim 0.12.x 打开文件时报 treesitter highlighter 崩溃
 

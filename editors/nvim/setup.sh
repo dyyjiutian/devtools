@@ -19,6 +19,9 @@ NVIM_VERSION="${NVIM_VERSION:-0.10.4}"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 NVIM_INSTALL_DIR="${NVIM_INSTALL_DIR:-$HOME/.local/nvim}"
 CONFIG_MARKER=".devtools-nvim"
+# Image / CI builds set this so a partial Lazy sync fails the run instead of
+# leaving only lazy.nvim and triggering a full install on first file open.
+NVIM_SETUP_STRICT="${NVIM_SETUP_STRICT:-0}"
 
 # --- Help ---
 show_help() {
@@ -46,6 +49,7 @@ Neovim Setup Script - 一键配置 Neovim 开发环境
   NVIM_VERSION         Linux tarball 版本（默认 ${NVIM_VERSION}）
   NVIM_INSTALL_DIR     Linux 解压目录（默认 ~/.local/nvim）
   DEVTOOLS_CACHE_DIR   离线缓存根目录（默认仓库 cache/）
+  NVIM_SETUP_STRICT    设为 1 时，插件 / treesitter 同步失败则退出（镜像构建）
 EOF
     # Keep keybindings in a separate literal block for readability
     cat <<'EOF'
@@ -166,10 +170,19 @@ _nvim_headless() {
     nvim --headless -c "$cmd" -c "qa!"
 }
 
+_nvim_strict() {
+    [[ "$NVIM_SETUP_STRICT" == "1" || "$NVIM_SETUP_STRICT" == "true" ]]
+}
+
+_lazy_root() {
+    echo "${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy"
+}
+
 # Drop plugins whose pinned tag/branch differs from upstream's default, so Lazy
 # re-clones them instead of keeping an incompatible checkout.
 _reset_pinned_plugins() {
-    local lazy_root="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy"
+    local lazy_root
+    lazy_root="$(_lazy_root)"
     rm -rf \
         "${lazy_root}/mason.nvim" \
         "${lazy_root}/mason-lspconfig.nvim" \
@@ -180,13 +193,68 @@ _reset_pinned_plugins() {
         "${lazy_root}/grug-far.nvim"
 }
 
+# Lazy! waits for clones. lua require("lazy").sync() needs a working
+# stdpath("cache"); if ~/.cache/nvim is unwritable, setup() aborts and
+# sync() then errors on a nil headless field.
+_LAZY_SYNC_CMD='Lazy! sync'
+
+_assert_lazy_plugins_installed() {
+    local lazy_root name count
+    lazy_root="$(_lazy_root)"
+    local required=(
+        lazy.nvim
+        tokyonight.nvim
+        nvim-treesitter
+        nvim-lspconfig
+        mason.nvim
+        telescope.nvim
+        nvim-cmp
+        nvim-tree.lua
+    )
+    for name in "${required[@]}"; do
+        if [[ ! -d "${lazy_root}/${name}" ]]; then
+            error "nvim plugin missing after sync: ${name}"
+            return 1
+        fi
+    done
+    count="$(find "$lazy_root" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+    if [[ "$count" -lt 40 ]]; then
+        error "nvim plugin count too low after sync: ${count} (expected >= 40)"
+        return 1
+    fi
+}
+
 _sync_lazy_plugins() {
     info "Syncing lazy.nvim plugins..."
     _reset_pinned_plugins
-    if _nvim_headless "Lazy! sync"; then
+    if _nvim_headless "${_LAZY_SYNC_CMD}"; then
         success "Plugins synced"
     else
+        if _nvim_strict; then
+            error "Lazy sync failed"
+            exit 1
+        fi
         warn "Lazy sync reported errors; open nvim and run :Lazy sync if needed"
+        return 0
+    fi
+    if ! _assert_lazy_plugins_installed; then
+        if _nvim_strict; then
+            exit 1
+        fi
+        warn "some nvim plugins are missing; open nvim and run :Lazy sync"
+    fi
+}
+
+_sync_treesitter_parsers() {
+    info "Installing treesitter parsers..."
+    if _nvim_headless "TSUpdateSync"; then
+        success "Treesitter parsers installed"
+    else
+        if _nvim_strict; then
+            error "TSUpdateSync failed"
+            exit 1
+        fi
+        warn "TSUpdateSync reported errors; open nvim and run :TSUpdate"
     fi
 }
 
@@ -381,6 +449,7 @@ update_all() {
 
     sync_config
     _sync_lazy_plugins
+    _sync_treesitter_parsers
 
     step "Updating LSP servers..."
     if _nvim_headless "MasonToolsUpdateSync"; then
@@ -508,9 +577,12 @@ main() {
     # Install Nerd Font
     install_nerd_font
 
-    # First run to install plugins (must quote Lazy! sync — see _nvim_headless)
+    # First run to install plugins (lua sync waits; see _LAZY_SYNC_LUA)
     step "Installing plugins (this may take a few minutes)..."
     _sync_lazy_plugins
+
+    step "Installing treesitter parsers..."
+    _sync_treesitter_parsers
 
     step "Installing LSP servers..."
     _install_mason_tools

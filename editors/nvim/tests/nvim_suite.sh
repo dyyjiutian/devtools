@@ -485,6 +485,7 @@ exit 0
   assert_file_exists "$cfg/.devtools-nvim" "update writes managed marker"
   assert_not_contains "$(cat "$cfg/init.lua")" "handwritten" "update overwrites init.lua"
   assert_contains "$(cat "$cmd_log")" "Lazy! sync" "update syncs plugins"
+  assert_contains "$(cat "$cmd_log")" "TSUpdateSync" "update refreshes treesitter parsers"
   assert_contains "$(cat "$cmd_log")" "MasonToolsUpdateSync" "update refreshes LSP servers"
 
   backups="$(find "$HOME/.config" -maxdepth 1 -name 'nvim.bak.*' | wc -l | tr -d ' ')"
@@ -530,11 +531,15 @@ test_setup_quotes_lazy_sync() {
   setup="$(cat "$SETUP_SH")"
   assert_contains "$setup" '_nvim_headless() {' "defines quoted headless helper"
   assert_contains "$setup" 'nvim --headless -c "$cmd" -c "qa!"' "passes Ex cmd as one -c argument"
-  assert_contains "$setup" '_nvim_headless "Lazy! sync"' "Lazy sync is a single quoted argument"
+  assert_contains "$setup" "_LAZY_SYNC_CMD='Lazy! sync'" "Lazy sync waits via bang command"
+  assert_contains "$setup" '_nvim_headless "${_LAZY_SYNC_CMD}"' "Lazy sync is a single quoted argument"
+  assert_contains "$setup" '_nvim_headless "TSUpdateSync"' "treesitter install is quoted"
   assert_contains "$setup" '_nvim_headless "MasonToolsInstallSync"' "Mason install is quoted"
   assert_contains "$setup" '_nvim_headless "MasonToolsUpdateSync"' "Mason update is quoted"
   # All plugin sync entry points go through helpers (no raw unquoted +Lazy!).
   assert_contains "$setup" '_sync_lazy_plugins' "uses _sync_lazy_plugins helper"
+  assert_contains "$setup" '_assert_lazy_plugins_installed' "verifies plugins after sync"
+  assert_contains "$setup" "NVIM_SETUP_STRICT" "image builds can fail on missing plugins"
   local raw_hits
   raw_hits="$(printf '%s\n' "$setup" | grep -E 'nvim --headless' | grep -v '_nvim_headless\|#' || true)"
   # Only the helper body may call nvim --headless directly.
@@ -544,6 +549,33 @@ test_setup_quotes_lazy_sync() {
     return 1
   fi
   pass "nvim setup quotes Lazy sync ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_setup_strict_fails_when_plugins_missing() {
+  local alt_bin="$HOME/nvim-strict-bin"
+  local out
+
+  mkdir -p "$alt_bin"
+  rm -rf "$HOME/.local/share/nvim/lazy"
+  _devtools_write_exec "$alt_bin/nvim" '
+if [[ "${1:-}" == "--version" ]]; then echo "NVIM v0.10.4"; fi
+exit 0
+'
+
+  out="$(
+    PATH="$alt_bin:$PATH" HOME="$HOME" NVIM_SETUP_STRICT=1 SETUP_NO_MAIN=1 /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      _sync_lazy_plugins
+    ' _ "$SETUP_SH" 2>&1
+  )" && {
+    echo "FAIL: strict sync succeeded without plugins: $out" >&2
+    return 1
+  }
+  assert_contains "$out" "plugin missing after sync" "strict mode reports missing plugins"
+  pass "nvim strict setup fails when plugins are missing ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_help
@@ -565,5 +597,6 @@ test_telescope_ignore_patterns_are_escaped
 test_update_syncs_config_then_plugins
 test_restore_flag_removed
 test_setup_quotes_lazy_sync
+test_setup_strict_fails_when_plugins_missing
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"
