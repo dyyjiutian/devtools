@@ -3,25 +3,27 @@
 # Interactively sets user identity and applies recommended git settings.
 #
 # Usage:
-#   ./config.sh            Apply all recommended git configurations
-#   ./config.sh --dry-run  Show what would be set without changing anything
+#   ./config.sh                 Apply all recommended git configurations
+#   ./config.sh --dry-run       Show what would be set without changing anything
+#   ./config.sh --skip-identity Apply recommended settings without user.name/email
 
 set -euo pipefail
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") [OPTION]
+Usage: $(basename "$0") [OPTION]...
 
 Interactively initialise git global configuration with recommended settings.
 Prompts for user.name and user.email (existing values shown as defaults).
 
 Options:
-  (none)       Apply all recommended git global configurations
-  --dry-run    Print what would be set without making any changes
-  --help       Show this help message and exit
+  (none)            Apply all recommended git global configurations
+  --dry-run         Print what would be set without making any changes
+  --skip-identity   Do not prompt for or write user.name / user.email
+  --help            Show this help message and exit
 
 Configuration applied:
-  Identity     user.name, user.email
+  Identity     user.name, user.email (skipped with --skip-identity)
   Core         editor, autocrlf, whitespace, ignorecase, precomposeunicode
   Pull/Rebase  pull.rebase, rebase.autoStash, rebase.autoSquash,
                merge.conflictstyle, merge.ff
@@ -35,22 +37,26 @@ Configuration applied:
                protocol.version, checkout.workers, maintenance.auto
 
 Examples:
-  $(basename "$0")             # interactive setup
-  $(basename "$0") --dry-run   # preview without applying
+  $(basename "$0")                       # interactive setup
+  $(basename "$0") --dry-run             # preview without applying
+  $(basename "$0") --skip-identity       # image / shared-home setup
 EOF
 }
 
 DRY_RUN=false
-case "${1:-}" in
-  --help)     usage; exit 0 ;;
-  --dry-run)  DRY_RUN=true ;;
-  "")         ;;
-  *)
-    echo "Unknown option: $1" >&2
-    echo "Run '$(basename "$0") --help' for usage." >&2
-    exit 1
-    ;;
-esac
+SKIP_IDENTITY=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help)          usage; exit 0 ;;
+    --dry-run)       DRY_RUN=true; shift ;;
+    --skip-identity) SKIP_IDENTITY=true; shift ;;
+    *)
+      echo "Unknown option: $1" >&2
+      echo "Run '$(basename "$0") --help' for usage." >&2
+      exit 1
+      ;;
+  esac
+done
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -88,14 +94,18 @@ fi
 
 header "User Identity"
 
-current_name=$(git config --global user.name  2>/dev/null || true)
-current_email=$(git config --global user.email 2>/dev/null || true)
+if [[ "$SKIP_IDENTITY" == true ]]; then
+  echo "  skipped (--skip-identity); not writing user.name / user.email"
+else
+  current_name=$(git config --global user.name  2>/dev/null || true)
+  current_email=$(git config --global user.email 2>/dev/null || true)
 
-prompt_with_default GIT_NAME  "Full name " "${current_name:-Your Name}"
-prompt_with_default GIT_EMAIL "Email     " "${current_email:-you@example.com}"
+  prompt_with_default GIT_NAME  "Full name " "${current_name:-Your Name}"
+  prompt_with_default GIT_EMAIL "Email     " "${current_email:-you@example.com}"
 
-git_config user.name  "$GIT_NAME"
-git_config user.email "$GIT_EMAIL"
+  git_config user.name  "$GIT_NAME"
+  git_config user.email "$GIT_EMAIL"
+fi
 
 # ── Core behavior ─────────────────────────────────────────────────────────────
 

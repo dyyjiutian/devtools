@@ -18,6 +18,7 @@ SKIP_ALIAS=false
 SKIP_CONFIG=false
 SKIP_DELTA=false
 SKIP_GH=false
+SKIP_IDENTITY=false
 SKIP_SUBCMD=false
 
 info()    { echo -e "\033[34m[INFO]\033[0m $1"; }
@@ -44,6 +45,7 @@ show_help() {
   --skip-gh         跳过 GitHub CLI (gh) 安装
   --skip-subcmd     跳过 git 子命令安装
   --skip-config     跳过 git config 配置
+  --skip-identity   写入推荐 git config，但不设置 user.name / user.email
   --skip-alias      跳过 shell alias 配置
 
 示例:
@@ -57,11 +59,12 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help)     show_help; exit 0 ;;
     -d|--dry-run)  DRY_RUN=true; shift ;;
-    --skip-alias)  SKIP_ALIAS=true; shift ;;
-    --skip-config) SKIP_CONFIG=true; shift ;;
-    --skip-delta)  SKIP_DELTA=true; shift ;;
-    --skip-gh)     SKIP_GH=true; shift ;;
-    --skip-subcmd) SKIP_SUBCMD=true; shift ;;
+    --skip-alias)    SKIP_ALIAS=true; shift ;;
+    --skip-config)   SKIP_CONFIG=true; shift ;;
+    --skip-delta)    SKIP_DELTA=true; shift ;;
+    --skip-gh)       SKIP_GH=true; shift ;;
+    --skip-identity) SKIP_IDENTITY=true; shift ;;
+    --skip-subcmd)   SKIP_SUBCMD=true; shift ;;
     *) error "未知选项: $1"; show_help; exit 1 ;;
   esac
 done
@@ -442,8 +445,15 @@ run_config() {
     return
   fi
   step "写入 git config ..."
+  local -a config_args=()
   if [[ "$DRY_RUN" == "true" ]]; then
-    bash "$SCRIPTS_DIR/config.sh" --dry-run
+    config_args+=(--dry-run)
+  fi
+  if [[ "$SKIP_IDENTITY" == "true" ]]; then
+    config_args+=(--skip-identity)
+  fi
+  if [[ ${#config_args[@]} -gt 0 ]]; then
+    bash "$SCRIPTS_DIR/config.sh" "${config_args[@]}"
   else
     bash "$SCRIPTS_DIR/config.sh"
   fi

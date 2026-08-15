@@ -111,10 +111,13 @@ Alibaba GitLab 采用 Gerrit 风格的 `refs/for/<主干>/<当前分支>` 提交
 交互式提示输入姓名和邮箱（自动读取已有值作为默认），随后一次性写入所有推荐的全局配置，以及 status / pull / fetch / checkout 性能与工作流优化。
 
 ```bash
-bash scripts/config.sh           # 交互式执行
-bash scripts/config.sh --dry-run # 预览，不修改任何配置
+bash scripts/config.sh                 # 交互式执行
+bash scripts/config.sh --dry-run       # 预览，不修改任何配置
+bash scripts/config.sh --skip-identity # 写入推荐配置，不设置 user.name / user.email
 bash scripts/config.sh --help
 ```
+
+`setup.sh --skip-identity` 会把该选项转给 `config.sh`，用于容器镜像等不应写入个人身份的场景。
 
 ### 配置项速览
 

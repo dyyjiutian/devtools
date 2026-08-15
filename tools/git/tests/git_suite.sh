@@ -13,6 +13,7 @@ test_help() {
   out="$(bash "$SETUP_SH" --help 2>&1)"
   assert_contains "$out" "dry-run" "setup --help mentions dry-run"
   assert_contains "$out" "--skip-gh" "setup --help mentions skip-gh"
+  assert_contains "$out" "--skip-identity" "setup --help mentions skip-identity"
   pass "git setup --help ($DEVTOOLS_TEST_PROFILE)"
 }
 
@@ -406,6 +407,33 @@ test_subcmd_install_idempotent() {
   pass "git sub-command install idempotent ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_config_skip_identity() {
+  local out
+  out="$(bash "$CONFIG_SH" --skip-identity --dry-run 2>&1)" || {
+    echo "FAIL: config --skip-identity --dry-run failed: $out" >&2
+    return 1
+  }
+  assert_contains "$out" "skipped (--skip-identity)" "skip-identity message"
+  assert_not_contains "$out" "Full name" "skip-identity must not prompt for name"
+  assert_contains "$out" "pull.rebase = true" "recommended config still previewed"
+  if [[ -f "$HOME/.gitconfig" ]]; then
+    echo "FAIL: skip-identity dry-run wrote $HOME/.gitconfig" >&2
+    return 1
+  fi
+  pass "git config --skip-identity ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_setup_skip_identity_dry_run() {
+  local out
+  out="$(bash "$SETUP_SH" --dry-run --skip-identity --skip-delta --skip-gh --skip-subcmd --skip-alias 2>&1)" || {
+    echo "FAIL: setup --skip-identity --dry-run failed: $out" >&2
+    return 1
+  }
+  assert_contains "$out" "skipped (--skip-identity)" "setup forwards skip-identity"
+  assert_not_contains "$out" "Full name" "setup skip-identity must not prompt"
+  pass "git setup --skip-identity dry-run ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_config_credential_helper() {
   local out
   # config.sh prompts for name/email even in dry-run; feed defaults.
@@ -598,6 +626,8 @@ test_setup_dry_run_skip_writes
 test_subcmd_dry_run
 test_subcmd_install_idempotent
 test_config_credential_helper
+test_config_skip_identity
+test_setup_skip_identity_dry_run
 test_sparse_clone_help
 test_sparse_clone_rejects_glob
 test_sparse_clone_rejects_negation
