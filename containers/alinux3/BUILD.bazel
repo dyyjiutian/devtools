@@ -1,12 +1,33 @@
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
 
-sh_test(
-    name = "container_scripts_syntax_test",
-    srcs = ["tests/run-docker-tests.sh"],
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "bootstrap.sh",
+    "docker-bake.hcl",
+    "Dockerfile",
+    "versions.env",
+])
+
+devtools_unit_test(
+    name = "image_unit_test",
+    suite = ":tests/unit/image_suite.sh",
     data = [
-        "entrypoint.sh",
-        "user-sync.sh",
-        "tests/entrypoint.bats",
+        "Dockerfile",
+        "bake.sh",
+        "bootstrap.sh",
+        "docker-bake.hcl",
+        "versions.env",
+        "//:README.md",
+        "//editors/nvim:nvim_srcs",
+        "//editors/vim:vim_srcs",
+        "//shell/bash:setup.sh",
+        "//shell/starship:configs",
+        "//terminal/tmux:tmux_srcs",
+        "//tools/git:setup.sh",
     ],
-    size = "small",
+    tags = [
+        "contract",
+        "smoke",
+    ],
 )

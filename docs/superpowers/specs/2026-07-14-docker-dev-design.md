@@ -1,5 +1,11 @@
 # Alibaba Cloud Linux 3 开发镜像设计
 
+## 当前范围（2026-08-15）
+
+先只交付 `devbox` target（linux/amd64，镜像 `alinux3-devbox:<YYYYMMDD-HHMM>`）：构建期复用 `tools/git`、`editors/vim`、`editors/nvim`、`terminal/tmux`、`shell/bash` 的 `setup.sh`，并带上 `rg` / `jq` / `bat` / `tree`，得到开箱可用的 Alinux 3 / OS 8 开发镜像。默认用户 `admin`，工作目录 `/home/admin`。Dev Container、`full` / `ssh` target、运行时 UID 同步和自动注入宿主机 `~/.ssh` 已从实现中拿掉，留到后续阶段。Bake 定义在 `containers/alinux3/docker-bake.hcl`。
+
+下文是最初的完整目标，其中过时的路径（`terminal/vim`、`vcs/git`、`agent/`）以当前仓库目录为准。
+
 ## 目标
 
 在本仓库中新增一个基于 Alibaba Cloud Linux 3 的通用开发镜像，开箱提供 bash、zsh、Starship、Vim、Neovim、Git 工具以及 Claude Code、Codex CLI、Cursor Agent CLI，并同时支持 Dev Container、普通 `docker run` 和 SSH 场景。

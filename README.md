@@ -24,6 +24,7 @@ devtools/
 ├── network/                      # FRP / proxy / VPN infrastructure
 ├── tools/                        # Bazel / Git / SSH standalone tools
 ├── agents/                       # Claude / Codex / Cursor Agent
+├── containers/                   # Alinux 3 开发镜像
 ├── cache/                        # Offline installation assets
 ├── docs/                         # Design documents and implementation plans
 └── tests/                        # Shell regression tests
@@ -31,21 +32,21 @@ devtools/
 
 ## Alibaba Cloud Linux 3 开发镜像
 
-`containers/alinux3/` 提供同时支持 Dev Container、普通 Docker 和 SSH 的开发镜像，包含 bash、zsh、Starship、Vim、Neovim、Git 工具以及 Claude Code、Codex CLI、Cursor Agent CLI。
+`containers/alinux3/` 提供基于 Alibaba Cloud Linux 3 的 x86_64 `devbox` 开发镜像。构建时会初始化 Git（含 lazygit / delta / 子命令）、Vim、Neovim、tmux、Bash（ble / fzf / zoxide / Starship），以及 `rg` / `jq` / `bat` / `tree`。镜像不写入 Git 身份，也不包含 Dev Container 或 SSH 变体。默认用户 `admin`，工作目录 `/home/admin`。标签为 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
 
 ```bash
-docker buildx bake alinux3-full --load
-scripts/devtools-container-run devtools-alinux3:full-dev
+bash containers/alinux3/bake.sh
+docker run --rm -it alinux3-devbox:latest
 ```
 
 没有 Buildx 时可使用：
 
 ```bash
-docker build --file containers/alinux3/Dockerfile --target full \
-  --tag devtools-alinux3:full-dev .
+docker build --platform linux/amd64 \
+  --file containers/alinux3/Dockerfile \
+  --tag alinux3-devbox:$(date +%Y%m%d-%H%M) \
+  --tag alinux3-devbox:latest .
 ```
-
-镜像预置 `root` 和 `admin`，启动时由 root 入口脚本按 `DEV_UID` / `DEV_GID` 同步 `admin`，然后以非 root 用户运行开发命令。推荐使用 `scripts/devtools-container-run`，不要直接使用 `docker run --user admin` 进行 UID/GID 同步。
 
 详细说明见 [`containers/alinux3/README.md`](containers/alinux3/README.md)。
 

@@ -1,56 +1,70 @@
 #!/usr/bin/env bash
+# Optional smoke test for a built alinux3-devbox image. Not registered in
+# default Bazel tests because it needs a Docker daemon and the built image.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-IMAGE="${DEVTOOLS_TEST_IMAGE:-devtools-alinux3:test}"
-TEST_UID="${TEST_UID:-1001}"
-TEST_GID="${TEST_GID:-1001}"
+IMAGE="${DEVTOOLS_TEST_IMAGE:-alinux3-devbox:latest}"
 
 fail() {
   echo "ERROR: $*" >&2
   exit 1
 }
 
-[[ -x "${ROOT_DIR}/containers/alinux3/entrypoint.sh" ]] || \
-  fail "missing executable entrypoint.sh"
-[[ -x "${ROOT_DIR}/containers/alinux3/user-sync.sh" ]] || \
-  fail "missing executable user-sync.sh"
+[[ -x "${ROOT_DIR}/containers/alinux3/bootstrap.sh" ]] || \
+  fail "missing executable bootstrap.sh"
+bash -n "${ROOT_DIR}/containers/alinux3/bootstrap.sh"
 
-bash -n "${ROOT_DIR}/containers/alinux3/entrypoint.sh"
-bash -n "${ROOT_DIR}/containers/alinux3/user-sync.sh"
-
+command -v docker >/dev/null 2>&1 || fail "docker command not found"
 docker image inspect "$IMAGE" >/dev/null 2>&1 || \
   fail "Docker image is not available: ${IMAGE}"
 
-WORKSPACE="$(mktemp -d)"
-cleanup() {
-  rm -rf "$WORKSPACE"
-}
-trap cleanup EXIT
+docker run --rm --platform linux/amd64 --user admin "$IMAGE" bash -c '
+  set -euo pipefail
+  test "${USER}" = admin
+  test "$(pwd)" = /home/admin
+  test -d "$HOME/.cache"
+  test -w "$HOME/.cache"
+  mkdir -p "$HOME/.cache/starship"
+'
 
-docker run --rm \
-  --user root \
-  --env DEV_UID="$TEST_UID" \
-  --env DEV_GID="$TEST_GID" \
-  --volume "${WORKSPACE}:/workspace" \
-  "$IMAGE" \
-  bash -lc '
-    test "$(id -un)" = admin
-    test "$(id -u)" = "${DEV_UID}"
-    test "$(id -g)" = "${DEV_GID}"
-    test "$HOME" = /home/admin
-    printf "%s\n" "$(id -u):$(id -g)" > /workspace/created-by-container
-  '
+docker run --rm --platform linux/amd64 --user admin "$IMAGE" bash -lc '
+  set -euo pipefail
+  test "$(id -un)" = admin
+  test "$HOME" = /home/admin
+  command -v git
+  command -v lazygit
+  command -v delta
+  command -v vim
+  command -v nvim
+  command -v tmux
+  command -v starship
+  command -v fzf
+  command -v zoxide
+  command -v jq
+  command -v tree
+  command -v bat
+  command -v rg
+  test -f "$HOME/.local/share/blesh/ble.sh"
+  test -f "$HOME/.bashrc"
+  grep -q "Lightweight Bash Plugins (devtools)" "$HOME/.bashrc"
+  test -f "$HOME/.blerc"
+  test -f "$HOME/.config/starship.toml"
+  test -f "$HOME/.vimrc"
+  test -f "$HOME/.config/nvim/init.lua"
+  test -d "$HOME/.local/share/nvim/lazy/lazy.nvim"
+  test -d "$HOME/.local/share/nvim/lazy/tokyonight.nvim"
+  test -d "$HOME/.local/share/nvim/lazy/nvim-treesitter"
+  test -d "$HOME/.local/share/nvim/lazy/telescope.nvim"
+  test -d "$HOME/.local/share/nvim/lazy/nvim-cmp"
+  test "$(find "$HOME/.local/share/nvim/lazy" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" -ge 40
+  test -f "$HOME/.tmux.conf"
+  test -x "$HOME/.local/bin/git-rb"
+  ! git config --global --get user.name
+  ! git config --global --get user.email
+  git config --global --get pull.rebase | grep -qx true
+'
 
-if stat -f '%u:%g' "${WORKSPACE}/created-by-container" >/dev/null 2>&1; then
-  OWNER="$(stat -f '%u:%g' "${WORKSPACE}/created-by-container")"
-else
-  OWNER="$(stat -c '%u:%g' "${WORKSPACE}/created-by-container")"
-fi
-
-[[ "$OWNER" == "${TEST_UID}:${TEST_GID}" ]] || \
-  fail "workspace file owner ${OWNER} != ${TEST_UID}:${TEST_GID}"
-
-echo "PASS: ${IMAGE} runtime user and workspace ownership"
+echo "PASS: ${IMAGE} toolchain and configuration"

@@ -1,79 +1,126 @@
 # Alibaba Cloud Linux 3 开发镜像
 
-该目录提供基于 Alibaba Cloud Linux 3 的通用开发镜像，包含 bash、zsh、Starship、Vim、Neovim、Git 工具以及三个 Agent CLI。
+基于 Alibaba Cloud Linux 3（RHEL 8 系）的 x86_64 开发镜像。构建时调用仓库里现有的模块安装器，开箱提供：
+
+- Git：`git`、`lazygit`、`delta`、`git rb/bc/wc/review/sparse-clone`，以及推荐 git 配置（**不**写入 `user.name` / `user.email`）
+- Vim / Neovim：分别运行 `editors/vim/setup.sh` 与 `editors/nvim/setup.sh`（Linux Neovim 固定 0.10.4，兼容 Alinux 3 glibc）
+- tmux 3.7b 与本仓库 `tmux.conf` / TPM 插件
+- Bash：ble.sh、fzf、zoxide、Starship（`shell/bash/setup.sh`）
+- 常见 CLI：`jq`、`tree`、`rg`、`bat`（与 `os/linux/packages.centos.list` 对齐；`cloc` 有包则装）
+
+当前只提供 `devbox` target，镜像名为 `alinux3-devbox:<YYYYMMDD-HHMM>`。Dev Container、运行时 UID 同步、自动挂载宿主机 `~/.ssh` 尚未实现。
 
 ## 构建
 
+需要 Docker，并建议使用 Buildx。默认锁定 `linux/amd64`：
+
+推荐用包装脚本，把本机 `127.0.0.1` 代理改写成构建容器能访问的 `host.docker.internal`，并把 Alinux dnf 源切到公网 `mirrors.aliyun.com`（国内源直连，GitHub 走代理）：
+
 ```bash
-docker buildx bake alinux3-minimal --load
-docker buildx bake alinux3-full --load
-docker buildx bake alinux3-ssh --load
+bash containers/alinux3/bake.sh
 ```
 
-如果本机只有 Docker CLI 而没有 Buildx，可直接构建 full 目标：
+也可以直接 bake（定义在本目录 `docker-bake.hcl`）。`bake` 是 Buildx 插件的能力，不绑定某个 docker-ce 小版本；Linux 上要有 `docker-buildx-plugin`（或 Docker Desktop）。Buildx 0.8+ 即可读这份 HCL。若本机开了代理，需要显式改成 Docker 主机地址：
 
 ```bash
-docker build \
+docker buildx bake -f containers/alinux3/docker-bake.hcl devbox --load \
+  --set '*.args.HTTP_PROXY=http://host.docker.internal:8001' \
+  --set '*.args.HTTPS_PROXY=http://host.docker.internal:8001'
+```
+
+没有 Buildx 时可使用：
+
+```bash
+docker build --platform linux/amd64 \
   --file containers/alinux3/Dockerfile \
-  --target full \
-  --tag devtools-alinux3:full-dev \
+  --tag alinux3-devbox:$(date +%Y%m%d-%H%M) \
+  --tag alinux3-devbox:latest \
   .
 ```
 
-默认镜像使用阿里云杭州地域的 Alibaba Cloud Linux 3 官方容器镜像。可通过 `BASE_IMAGE` 覆盖：
+默认基础镜像是阿里云杭州地域的 Alibaba Cloud Linux 3 官方容器镜像，可用 `BASE_IMAGE` 覆盖。
 
-```bash
-docker buildx bake alinux3-full \
-  --set '*.args.BASE_IMAGE=alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest' \
-  --load
-```
+构建会联网下载 Neovim、ble.sh、fzf、插件和 TPM 依赖，耗时较长。二进制优先使用仓库 `cache/binaries/`（可先跑 `bash cache/download.sh linux`）。
 
 ## 运行
 
-推荐使用仓库包装器，让容器内的 `admin` UID/GID 与宿主机一致：
+镜像默认用户是 `admin`（UID 1000），工作目录 `/home/admin`，启动 `bash`：
 
 ```bash
-scripts/devtools-container-run devtools-alinux3:full-dev
-scripts/devtools-container-run --user developer --uid 1001 --gid 1001 IMAGE
+docker run --rm -it alinux3-devbox:latest
 ```
 
-包装器会以 root 启动入口脚本，由入口脚本同步 `admin`，然后再以非 root 用户执行 zsh 或指定命令。
-
-也可以直接运行：
+进入后可直接使用 `git`、`lazygit`、`vim`、`nvim`、`tmux`、`rg`、`jq`、`bat`、`tree`。Bash 已配置 ble / fzf / zoxide / starship。Neovim 插件、treesitter parser 已在构建期装好，打开文件不应再触发全量安装。需要把当前目录挂进去时：
 
 ```bash
-docker run --rm -it \
-  --user root \
-  -e DEV_UID="$(id -u)" \
-  -e DEV_GID="$(id -g)" \
-  -v "$PWD:/workspace" \
-  IMAGE
+docker run --rm -it -v "$PWD:/workspace" -w /workspace alinux3-devbox:latest
 ```
 
-不要将 `docker run --user admin` 当作动态 UID/GID 同步方式；该写法会让入口脚本直接以镜像内置 UID 启动。
-
-## Dev Container
-
-项目中的 `.devcontainer/devcontainer.json` 使用 `admin` 作为远程用户，并允许 Dev Container 在创建或重建时同步 UID/GID。
-
-## SSH
-
-构建 SSH 变体后：
+Git 身份请在容器内自行设置，或把宿主机 `~/.gitconfig` 挂进去（下一阶段会处理 `~/.ssh` 与权限）：
 
 ```bash
-scripts/devtools-container-run --ssh IMAGE
-ssh -p 2222 admin@127.0.0.1
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
 ```
 
-SSH 公钥应通过 `/home/admin/.ssh/authorized_keys` volume 或 bind mount 提供。镜像默认禁止 root SSH 登录和密码登录。
+## 验证
 
-## 凭据
+宿主机契约测试（不需要 Docker）：
 
-镜像不包含任何 API Key 或登录状态。建议持久化或挂载：
-
-```text
-/home/admin/.claude
-/home/admin/.codex
-/home/admin/.cursor
-/home/admin/.ssh
+```bash
+bash -n containers/alinux3/bootstrap.sh
+bazel test //containers/alinux3:image_unit_test
 ```
+
+已构建镜像后的冒烟测试：
+
+```bash
+DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
+  bash containers/alinux3/tests/run-docker-tests.sh
+```
+
+## Issues
+
+### 2026-08-15 — 镜像 COPY 路径与仓库重组脱节，且误钉 Neovim 0.11
+
+**表象**：按旧 Dockerfile 构建会在复制已搬迁的 Vim / Git / Agent 配置时失败；即便改路径，Alinux 3 上也跑不了官方 Neovim 0.11 tarball。
+
+**根因**：这些配置已分别迁到 `editors`、`tools/git`、`shell`、`agents`；Alinux 3 的 glibc 是 2.32，Neovim 0.11+ 官方包需要 2.34+。
+
+**解法**：`alinux3-mini` 改为 COPY 当前模块目录，并在构建期以 `admin` 用户跑各模块 `setup.sh`。Neovim 继续走 `editors/nvim/setup.sh` 的 0.10.4 tarball。
+
+### 2026-08-15 — 构建期 dnf 走云内网源，且 groupadd 不在 PATH
+
+**表象**：`dnf install` 对 `mirrors.cloud.aliyuncs.com` 超时或只有几百 KB/s；装完包后 `groupadd: command not found`。
+
+**根因**：官方 Alinux 3 容器镜像的 yum 源指向云上内网镜像，本机 Docker 构建（即使开了 `127.0.0.1` 代理）也到不了。另外 Dockerfile 的 `PATH` 漏了 `/usr/sbin`。宿主机代理里的 `127.0.0.1` 在 build 容器里也不是 Docker 宿主机。
+
+**解法**：构建时把源改写成 `mirrors.aliyun.com`；`PATH` 补上 `/usr/sbin`；用 `containers/alinux3/bake.sh` 把 `127.0.0.1` 代理改写成 `host.docker.internal`，国内阿里云域名放进 `NO_PROXY`。
+
+### 2026-08-15 — docker run 后 ble.sh 报 USER 为空，starship 写不了 ~/.cache
+
+**表象**：`docker run -it IMAGE /bin/bash` 出现 `ble.sh: insane environment: $USER is empty`，以及 `Unable to create log dir "/home/admin/.cache/starship": Permission denied`。Apple Silicon 上还会有 amd64/arm64 platform warning。
+
+**根因**：非 login 的 `/bin/bash` 不会自动设置 `USER`。构建时 `ENV HOME=/home/admin` 让 root 的 `dnf` 在用户创建前写下了 `/home/admin/.cache`，属主是 root。platform warning 是因为镜像锁定 `linux/amd64`，在 arm64 Mac 上走 qemu。
+
+**解法**：镜像写入 `ENV USER=admin LOGNAME=admin`；bootstrap 结束后 `chown -R admin:admin /home/admin`。platform warning 可忽略，或显式加 `--platform linux/amd64`。
+
+### 2026-08-15 — 打开 nvim 文件时触发全量插件安装
+
+**表象**：镜像里 `nvim file` 会跑一遍 lazy.nvim 全量 clone（约 50 个插件），启动很慢。
+
+**根因**：`ENV HOME=/home/admin` 让 root 在用户创建前占用 `~/.cache`，`admin` 跑 nvim 时无法写 `~/.cache/nvim`，lazy.setup 失败；同步失败原先只告警。
+
+**解法**：useradd 之后立刻 `chown -R admin:admin /home/admin`；bootstrap 以 `NVIM_SETUP_STRICT=1` 跑 `Lazy! sync` 并校验插件目录；`sudo env` 透传 `HTTP(S)_PROXY`。重新构建：
+
+```bash
+bash containers/alinux3/bake.sh
+```
+
+### 2026-08-15 — 默认工作目录、常用 CLI 与镜像命名
+
+**表象**：`docker run` 落在 `/workspace`；缺少 `rg` / `jq` / `bat` / `tree`；bake target 仍叫 `alinux3-mini`。
+
+**根因**：早期 mini 镜像把工作区固定成 `/workspace`，系统包只覆盖构建依赖。
+
+**解法**：`WORKDIR /home/admin`；dnf 安装 `jq`/`tree`（`cloc`/`ripgrep`/`bat` 有包则装），bootstrap 再从 cache/GitHub 补 `bat`/`rg`；bake target 改为 `devbox`，标签 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
