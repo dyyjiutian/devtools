@@ -156,10 +156,11 @@ download_linux() {
     "${SCRIPTS_DIR}/install-release.sh"
 
   # 二进制包版本（来自 packages.centos.list；未列出的保持本地默认）
-  local yazi_version lazygit_version fzf_version zoxide_version nerd_fonts_version tmux_version
+  local yazi_version lazygit_version glow_version fzf_version zoxide_version nerd_fonts_version tmux_version
   local bat_version rg_version
   yazi_version="$(pkg_version yazi 0.3.3)"
   lazygit_version="$(pkg_version lazygit 0.44.1)"
+  glow_version="$(pkg_version glow 2.1.2)"
   fzf_version="$(pkg_version fzf 0.72.0)"
   zoxide_version="$(pkg_version zoxide 0.9.4)"
   nerd_fonts_version="$(pkg_version nerd-fonts 3.3.0)"
@@ -169,7 +170,7 @@ download_linux() {
   local starship_version="1.25.1"
   local xray_version="26.3.27"
 
-  info "版本: yazi=${yazi_version} lazygit=${lazygit_version} fzf=${fzf_version} zoxide=${zoxide_version} bat=${bat_version} rg=${rg_version} nerd-fonts=${nerd_fonts_version} tmux=${tmux_version}"
+  info "版本: yazi=${yazi_version} lazygit=${lazygit_version} glow=${glow_version} fzf=${fzf_version} zoxide=${zoxide_version} bat=${bat_version} rg=${rg_version} nerd-fonts=${nerd_fonts_version} tmux=${tmux_version}"
 
   # yazi (x86_64 / arm64) — musl 静态编译版，兼容 CentOS/RHEL 8（glibc 2.28）
   for arch in x86_64 aarch64; do
@@ -183,6 +184,13 @@ download_linux() {
     download \
       "https://github.com/jesseduffield/lazygit/releases/download/v${lazygit_version}/lazygit_${lazygit_version}_Linux_${arch}.tar.gz" \
       "${BINARIES_DIR}/lazygit_${lazygit_version}_Linux_${arch}.tar.gz"
+  done
+
+  # glow (x86_64 / arm64)
+  for arch in x86_64 arm64; do
+    download \
+      "https://github.com/charmbracelet/glow/releases/download/v${glow_version}/glow_${glow_version}_Linux_${arch}.tar.gz" \
+      "${BINARIES_DIR}/glow_${glow_version}_Linux_${arch}.tar.gz"
   done
 
   # fzf (x86_64 / arm64)

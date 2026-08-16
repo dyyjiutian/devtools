@@ -28,3 +28,4 @@ tmux              3.7b        module      tui   productivity,shell
 fzf               latest      apt         tui   productivity
 yazi              0.3.3       github      tui   productivity
 lazygit           0.44.1      github      tui   dev
+glow              2.1.2       github      tui   productivity

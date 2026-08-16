@@ -29,6 +29,16 @@ packages_list_has "$UBUNTU_LIST" bat ||
   { echo "FAIL: Ubuntu packages.list missing bat" >&2; return 1; }
 packages_list_has "$MACOS_LIST" rg ||
   { echo "FAIL: macOS packages.list missing rg" >&2; return 1; }
+packages_list_has "$MACOS_LIST" glow ||
+  { echo "FAIL: macOS packages.list missing glow" >&2; return 1; }
+packages_list_has "$UBUNTU_LIST" glow ||
+  { echo "FAIL: Ubuntu packages.list missing glow" >&2; return 1; }
+packages_list_has "$CENTOS_LIST" glow ||
+  { echo "FAIL: CentOS packages.list missing glow" >&2; return 1; }
+assert_eq "$(packages_list_get_version "$CENTOS_LIST" glow)" "2.1.2" \
+  "CentOS glow version"
+assert_eq "$(packages_list_get_version "$UBUNTU_LIST" glow)" "2.1.2" \
+  "Ubuntu glow version"
 
 assert_eq "$(packages_list_brew_formula rg)" "ripgrep" "rg Homebrew formula"
 assert_eq "$(packages_list_sys_pkg rg)" "ripgrep" "rg system package"

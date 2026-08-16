@@ -458,6 +458,8 @@ post_install_notes() {
   echo -e ""
   echo -e "  ${YELLOW}yazi${NC}: 终端文件管理器 — 启动: yazi"
   echo -e ""
+  echo -e "  ${YELLOW}glow${NC}: 终端 Markdown 预览 — 启动: glow README.md"
+  echo -e ""
   echo -e "  ${YELLOW}zoxide${NC}: 快速目录跳转，添加到 ~/.zshrc:"
   echo -e "    eval \"\$(zoxide init zsh)\""
   echo -e ""

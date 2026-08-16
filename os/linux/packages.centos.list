@@ -26,4 +26,5 @@ tmux              3.7b        module      tui   productivity,shell
 fzf               0.72.0      github      tui   productivity
 yazi              0.3.3       github      tui   productivity
 lazygit           0.44.1      github      tui   dev
+glow              2.1.2       github      tui   productivity
 nerd-fonts        3.3.0       font        tui   shell

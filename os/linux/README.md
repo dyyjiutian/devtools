@@ -42,4 +42,4 @@ bash os/linux/setup_centos.sh --check --kind cli --tag dev
 bash os/linux/aliyun_ecs_init.sh --help
 ```
 
-离线缓存版本（yazi/lazygit/fzf 等）以 `packages.centos.list` 为准，由 `cache/download.sh linux` 读取。
+离线缓存版本（yazi/lazygit/glow/fzf 等）以 `packages.centos.list` 为准，由 `cache/download.sh linux` 读取。

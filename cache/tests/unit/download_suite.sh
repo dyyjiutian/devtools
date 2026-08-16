@@ -142,6 +142,36 @@ fi
 grep -Fq 'command -v rpm' "$NODESOURCE_SCRIPT" ||
   fail "cached NodeSource script does not detect RPM systems"
 
+test_linux_download_includes_glow() {
+  local dir="$TMP_ROOT/linux-glow" fake_bin log
+  mkdir -p "$dir/binaries" "$dir/scripts" "$dir/fonts"
+  fake_bin="$dir/bin"
+  log="$dir/download.log"
+  mkdir -p "$fake_bin"
+  : >"$log"
+
+  BINARIES_DIR="$dir/binaries"
+  SCRIPTS_DIR="$dir/scripts"
+  FONTS_DIR="$dir/fonts"
+  download() {
+    printf '%s\t%s\n' "$1" "$2" >>"$log"
+  }
+  download_verified() {
+    :
+  }
+  download_git_delta() {
+    :
+  }
+
+  PATH="$fake_bin:$ORIGINAL_PATH" download_linux >/dev/null
+
+  grep -Fq $'https://github.com/charmbracelet/glow/releases/download/v2.1.2/glow_2.1.2_Linux_x86_64.tar.gz\t'"$dir/binaries/glow_2.1.2_Linux_x86_64.tar.gz" "$log" ||
+    fail "linux download missing glow x86_64 v2.1.2 tarball"
+  grep -Fq $'https://github.com/charmbracelet/glow/releases/download/v2.1.2/glow_2.1.2_Linux_arm64.tar.gz\t'"$dir/binaries/glow_2.1.2_Linux_arm64.tar.gz" "$log" ||
+    fail "linux download missing glow arm64 v2.1.2 tarball"
+  echo "PASS: Linux cache download includes pinned glow tarballs"
+}
+
 test_linux_download_includes_nvim() {
   local dir="$TMP_ROOT/linux-nvim" fake_bin log
   mkdir -p "$dir/binaries" "$dir/scripts" "$dir/fonts"
@@ -179,6 +209,7 @@ test_valid_cache_skips_download
 test_corrupt_cache_is_replaced_atomically
 test_failed_redownload_leaves_no_corrupt_target
 test_linux_download_includes_delta
+test_linux_download_includes_glow
 test_linux_download_includes_nvim
 
 echo "PASS: cache download unit suite"

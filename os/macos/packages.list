@@ -33,6 +33,7 @@ tmux              latest      brew        tui   productivity,shell
 fzf               latest      brew        tui   productivity
 yazi              latest      brew        tui   productivity
 lazygit           latest      brew        tui   dev
+glow              latest      brew        tui   productivity
 
 # GUI
 iterm2            latest      brew-cask   gui   shell

@@ -4,7 +4,7 @@
 在执行时会自动优先使用本地缓存，无需联网，适合网络受限环境或统一分发。
 
 运行 `download.sh` 可一键下载所有文件到对应子目录。
-Linux 二进制版本（yazi / lazygit / fzf / zoxide / nerd-fonts / tmux / node）从
+Linux 二进制版本（yazi / lazygit / glow / fzf / zoxide / nerd-fonts / tmux / node）从
 `os/linux/packages.centos.list` 读取，修改版本时只需更新该清单。
 Neovim 官方 portable tarball 固定为 v0.10.4（见 `editors/nvim/setup.sh`），不走 packages 清单；不用 AppImage（需 FUSE）。
 
@@ -39,6 +39,8 @@ cache/
 | `yazi-aarch64-unknown-linux-gnu.zip` | https://github.com/sxyazi/yazi/releases/download/v0.3.3/yazi-aarch64-unknown-linux-gnu.zip | Linux arm64 |
 | `lazygit_0.44.1_Linux_x86_64.tar.gz` | https://github.com/jesseduffield/lazygit/releases/download/v0.44.1/lazygit_0.44.1_Linux_x86_64.tar.gz | Linux x86_64 |
 | `lazygit_0.44.1_Linux_arm64.tar.gz` | https://github.com/jesseduffield/lazygit/releases/download/v0.44.1/lazygit_0.44.1_Linux_arm64.tar.gz | Linux arm64 |
+| `glow_2.1.2_Linux_x86_64.tar.gz` | https://github.com/charmbracelet/glow/releases/download/v2.1.2/glow_2.1.2_Linux_x86_64.tar.gz | Linux x86_64 |
+| `glow_2.1.2_Linux_arm64.tar.gz` | https://github.com/charmbracelet/glow/releases/download/v2.1.2/glow_2.1.2_Linux_arm64.tar.gz | Linux arm64 |
 | `fzf-0.72.0-linux_amd64.tar.gz` | https://github.com/junegunn/fzf/releases/download/v0.46.1/fzf-0.72.0-linux_amd64.tar.gz | Linux x86_64 |
 | `fzf-0.72.0-linux_arm64.tar.gz` | https://github.com/junegunn/fzf/releases/download/v0.46.1/fzf-0.72.0-linux_arm64.tar.gz | Linux arm64 |
 | `zoxide-0.9.4-x86_64-unknown-linux-musl.tar.gz` | https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.4/zoxide-0.9.4-x86_64-unknown-linux-musl.tar.gz | Linux x86_64 |

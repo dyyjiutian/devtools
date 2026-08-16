@@ -24,6 +24,7 @@
     source "$1"
     packages_list_has "$2" git
     packages_list_has "$2" rg
+    packages_list_has "$2" glow
     [[ "$(packages_list_brew_formula rg)" == "ripgrep" ]]
   ' _ "$PACKAGES_LIB" "$PACKAGES_LIST"
   [ "$status" -eq 0 ]

@@ -126,7 +126,7 @@ ${BOLD}选项:${NC}
   --skip-git          跳过 Git
   --skip-node         跳过 Node.js / npm
   --skip-cloc         跳过 cloc
-  --skip-tools        跳过终端工具 (tmux, fzf, yazi, zoxide, lazygit)
+  --skip-tools        跳过终端工具 (tmux, fzf, yazi, zoxide, lazygit, glow)
   --skip-fonts        跳过 Nerd Fonts
 
 ${BOLD}清单文件:${NC}
@@ -267,7 +267,7 @@ should_skip_package() {
     git) [[ "${SKIP_GIT:-false}" == true ]] && return 0 ;;
     node) [[ "${SKIP_NODE:-false}" == true ]] && return 0 ;;
     cloc) [[ "${SKIP_CLOC:-false}" == true ]] && return 0 ;;
-    tmux|fzf|yazi|zoxide|lazygit)
+    tmux|fzf|yazi|zoxide|lazygit|glow)
       [[ "${SKIP_TOOLS:-false}" == true ]] && return 0
       ;;
     nerd-fonts) [[ "${SKIP_FONTS:-false}" == true ]] && return 0 ;;
@@ -566,6 +566,40 @@ install_lazygit_github() {
   rm -rf "$tmpdir"
 }
 
+install_glow_github() {
+  local glow_version="$1"
+  if is_installed glow; then
+    success "glow 已安装：$(glow --version 2>/dev/null | head -1)"
+    return 0
+  fi
+
+  info "正在安装 glow v${glow_version}..."
+  local arch
+  arch=$(uname -m)
+  local glow_arch="$arch"
+  [[ "$arch" == "x86_64" ]] && glow_arch="x86_64"
+  [[ "$arch" == "aarch64" ]] && glow_arch="arm64"
+
+  local glow_filename="glow_${glow_version}_Linux_${glow_arch}.tar.gz"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  fetch "binaries/${glow_filename}" \
+    "https://github.com/charmbracelet/glow/releases/download/v${glow_version}/${glow_filename}" \
+    "$tmpdir/glow.tar.gz" 2>/dev/null
+  if [[ -f "$tmpdir/glow.tar.gz" ]]; then
+    if tar -xzf "$tmpdir/glow.tar.gz" -C "$tmpdir" glow 2>/dev/null; then
+      run_cmd mv "$tmpdir/glow" /usr/local/bin/glow
+      run_cmd chmod +x /usr/local/bin/glow
+      success "glow 安装完成：$(glow --version 2>/dev/null | head -1)"
+    else
+      warn "glow 解压失败"
+    fi
+  else
+    warn "glow 下载失败，请手动安装"
+  fi
+  rm -rf "$tmpdir"
+}
+
 install_bat_github() {
   local bat_version="$1"
   if packages_list_default_is_installed bat; then
@@ -721,6 +755,7 @@ install_package_entry() {
         yazi) install_yazi_github "$version" ;;
         zoxide) install_zoxide_github "$version" ;;
         lazygit) install_lazygit_github "$version" ;;
+        glow) install_glow_github "$version" ;;
         bat) install_bat_github "$version" ;;
         rg) install_rg_github "$version" ;;
         *) warn "未知 github 条目: $name" ;;
@@ -793,7 +828,7 @@ post_install_notes() {
   echo -e "    运行 ${BOLD}source ~/.bashrc${NC} 或重新登录以使 PATH 生效。"
   echo -e ""
   echo -e "  ${YELLOW}终端增强工具${NC}:"
-  echo -e "    tmux / fzf / yazi / zoxide / lazygit"
+  echo -e "    tmux / fzf / yazi / zoxide / lazygit / glow"
   echo -e "    zoxide: eval \"\$(zoxide init bash)\""
   echo -e ""
   echo -e "  ${YELLOW}Nerd Fonts${NC}: /usr/share/fonts/nerd-fonts/"

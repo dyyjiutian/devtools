@@ -56,7 +56,7 @@ ${BOLD}选项:${NC}
   --skip-git          跳过 Git / git-lfs
   --skip-node         跳过 Node.js
   --skip-cloc         跳过 cloc
-  --skip-tools        跳过终端工具 (tmux, fzf, yazi, zoxide, lazygit, gh)
+  --skip-tools        跳过终端工具 (tmux, fzf, yazi, zoxide, lazygit, glow, gh)
 
 ${BOLD}清单文件:${NC}
   ${PACKAGES_LIST}
@@ -157,7 +157,7 @@ should_skip_package() {
     git|git-lfs) [[ "${SKIP_GIT:-false}" == true ]] && return 0 ;;
     node) [[ "${SKIP_NODE:-false}" == true ]] && return 0 ;;
     cloc) [[ "${SKIP_CLOC:-false}" == true ]] && return 0 ;;
-    tmux|fzf|yazi|zoxide|lazygit|gh)
+    tmux|fzf|yazi|zoxide|lazygit|glow|gh)
       [[ "${SKIP_TOOLS:-false}" == true ]] && return 0
       ;;
   esac
@@ -368,6 +368,28 @@ install_lazygit_github() {
   rm -rf "$tmpdir"
 }
 
+install_glow_github() {
+  local version="$1"
+  if is_installed glow; then
+    success "glow 已安装：$(glow --version 2>/dev/null | head -1)"
+    return 0
+  fi
+  info "安装 glow v${version}..."
+  local arch; arch=$(uname -m)
+  local glow_arch="x86_64"
+  [[ "$arch" == "aarch64" ]] && glow_arch="arm64"
+  local tmpdir; tmpdir=$(mktemp -d)
+  local url="https://github.com/charmbracelet/glow/releases/download/v${version}/glow_${version}_Linux_${glow_arch}.tar.gz"
+  if curl -fsSL "$url" -o "$tmpdir/glow.tar.gz" 2>/dev/null && \
+     tar -xzf "$tmpdir/glow.tar.gz" -C "$tmpdir" glow 2>/dev/null; then
+    run_cmd install -m 755 "$tmpdir/glow" /usr/local/bin/glow
+    success "glow 安装完成：$(glow --version 2>/dev/null | head -1)"
+  else
+    warn "glow 安装失败"
+  fi
+  rm -rf "$tmpdir"
+}
+
 install_fzf_apt_or_git() {
   if is_installed fzf; then
     success "fzf 已安装"
@@ -434,6 +456,7 @@ install_package_entry() {
       case "$name" in
         yazi) install_yazi_github "$version" ;;
         lazygit) install_lazygit_github "$version" ;;
+        glow) install_glow_github "$version" ;;
         *) warn "未知 github 条目: $name" ;;
       esac
       ;;
@@ -497,6 +520,8 @@ post_install_notes() {
   echo -e "  ${YELLOW}GitHub CLI${NC}: 登录：${BOLD}gh auth login${NC}"
   echo -e ""
   echo -e "  ${YELLOW}zoxide${NC}: 添加到 ~/.bashrc：eval \"\$(zoxide init bash)\""
+  echo -e ""
+  echo -e "  ${YELLOW}glow${NC}: 终端 Markdown 预览 — 启动: glow README.md"
   echo -e ""
   echo -e "  ${YELLOW}下一步${NC}："
   echo -e "    languages/python/setup.sh    # Python + AI 包"
