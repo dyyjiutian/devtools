@@ -34,6 +34,8 @@ OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
 PACKAGES_LIST="${SCRIPT_DIR}/packages.centos.list"
 # shellcheck source=../lib/packages_list.sh
 source "${SCRIPT_DIR}/../lib/packages_list.sh"
+# shellcheck source=../lib/dnf_mirrors.sh
+source "${SCRIPT_DIR}/../lib/dnf_mirrors.sh"
 
 # 本地缓存优先下载：有缓存用缓存，否则从官方 URL 下载
 # 用法: fetch <cache相对路径> <官方URL> <输出文件>
@@ -49,13 +51,26 @@ fetch() {
 }
 
 # ─── Alibaba Cloud Linux / Docker repo helpers ───────────────────────────────────
-is_alibaba_linux_4() {
+alibaba_linux_major() {
   local ID="" VERSION_ID=""
   if [[ -r "$OS_RELEASE_FILE" ]]; then
     # shellcheck disable=SC1090
     source "$OS_RELEASE_FILE"
   fi
-  [[ "$ID" == "alinux" && "${VERSION_ID%%.*}" == "4" ]]
+  [[ "$ID" == "alinux" ]] || return 1
+  printf '%s\n' "${VERSION_ID%%.*}"
+}
+
+is_alibaba_linux_3() {
+  local major
+  major="$(alibaba_linux_major)" || return 1
+  [[ "$major" == "3" ]]
+}
+
+is_alibaba_linux_4() {
+  local major
+  major="$(alibaba_linux_major)" || return 1
+  [[ "$major" == "4" ]]
 }
 
 docker_repo_base_url() {
@@ -67,17 +82,21 @@ docker_repo_base_url() {
 }
 
 docker_repo_version() {
-  if ! is_alibaba_linux_4; then
-    return 0
-  fi
-
-  local version="${DOCKER_CENTOS_REPO_VERSION:-9}"
-  case "$version" in
-    9|10) echo "$version" ;;
-    *)
-      error "DOCKER_CENTOS_REPO_VERSION 必须是 9 或 10，当前: ${version}"
-      return 1
+  local major
+  major="$(alibaba_linux_major)" || return 1
+  case "$major" in
+    3) echo 8 ;;
+    4)
+      local version="${DOCKER_CENTOS_REPO_VERSION:-9}"
+      case "$version" in
+        9|10) echo "$version" ;;
+        *)
+          error "DOCKER_CENTOS_REPO_VERSION 必须是 9 或 10，当前: ${version}"
+          return 1
+          ;;
+      esac
       ;;
+    *) return 1 ;;
   esac
 }
 
@@ -87,8 +106,7 @@ render_docker_repo() {
 
   base_url="$(docker_repo_base_url)"
   sed_args=(-e "s|https://download.docker.com/linux/centos|${base_url}|g")
-  if is_alibaba_linux_4; then
-    version="$(docker_repo_version)" || return 1
+  if version="$(docker_repo_version)"; then
     sed_args+=(-e "s|\$releasever|${version}|g")
   fi
 
@@ -97,6 +115,21 @@ render_docker_repo() {
     error "Docker repo 配置为空: ${output}"
     return 1
   }
+}
+
+ensure_alinux3_epel_repo() {
+  is_alibaba_linux_3 || return 0
+  local dest="/etc/yum.repos.d/devtools-epel-8-aliyun.repo"
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] add ${dest} (Aliyun EPEL 8)"
+    return 0
+  fi
+  local tmp
+  tmp="$(mktemp --suffix=.repo)"
+  dnf_mirrors_write_epel_el8 "$tmp"
+  run_cmd cp "$tmp" "$dest"
+  rm -f "$tmp"
+  success "已添加 Aliyun EPEL 8: ${dest}"
 }
 
 # ─── 用法说明 ────────────────────────────────────────────────────────────────────
@@ -257,6 +290,7 @@ configure_os_base() {
   step "Part 1: OS 基础配置"
   check_root
   install_base_deps
+  ensure_alinux3_epel_repo
 }
 
 # ─── Part 2: packages.list 适配器 ────────────────────────────────────────────────
@@ -305,8 +339,15 @@ install_docker() {
   rendered_repo=$(mktemp --suffix=.repo)
   render_docker_repo "$tmp_repo" "$rendered_repo"
   run_cmd cp "$rendered_repo" /etc/yum.repos.d/docker-ce.repo
+  local aliyun_repo
+  aliyun_repo="$(mktemp --suffix=.repo)"
+  if dnf_mirrors_render_companion_repo "$rendered_repo" "$aliyun_repo"; then
+    info "添加 Docker Aliyun 镜像仓库..."
+    run_cmd cp "$aliyun_repo" /etc/yum.repos.d/docker-ce-aliyun.repo
+  fi
   rm -f "$tmp_repo"
   rm -f "$rendered_repo"
+  rm -f "$aliyun_repo"
 
   info "安装 Docker CE..."
   if is_alibaba_linux_4; then
@@ -377,6 +418,7 @@ install_node() {
   fetch "scripts/nodesource-setup-${node_version}.x" "https://rpm.nodesource.com/setup_${node_version}.x" "$tmp_node"
   run_cmd bash "$tmp_node"
   rm -f "$tmp_node"
+  info "Aliyun 镜像站无 NodeSource RPM，仅使用官方源 rpm.nodesource.com"
 
   run_cmd "$pkg_manager" install -y nodejs
 

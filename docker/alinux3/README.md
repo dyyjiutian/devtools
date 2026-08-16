@@ -7,6 +7,7 @@
 - tmux 3.7b 与本仓库 `tmux.conf` / TPM 插件
 - Bash：ble.sh、fzf、zoxide、Starship（`shell/bash/setup.sh`）
 - 常见 CLI：`jq`、`tree`、`rg`、`bat`（与 `os/linux/packages.centos.list` 对齐；`cloc` 有包则装）
+- DNF：Alinux 自带源改写到 `mirrors.aliyun.com`，并加入 Aliyun EPEL 8（el8）
 
 当前只提供 `devbox` target，镜像名为 `alinux3-devbox:<YYYYMMDD-HHMM>`。Dev Container、运行时 UID 同步、自动挂载宿主机 `~/.ssh` 尚未实现。
 
@@ -17,13 +18,13 @@
 推荐用包装脚本，把本机 `127.0.0.1` 代理改写成构建容器能访问的 `host.docker.internal`，并把 Alinux dnf 源切到公网 `mirrors.aliyun.com`（国内源直连，GitHub 走代理）：
 
 ```bash
-bash containers/alinux3/bake.sh
+bash docker/alinux3/bake.sh
 ```
 
 也可以直接 bake（定义在本目录 `docker-bake.hcl`）。`bake` 是 Buildx 插件的能力，不绑定某个 docker-ce 小版本；Linux 上要有 `docker-buildx-plugin`（或 Docker Desktop）。Buildx 0.8+ 即可读这份 HCL。若本机开了代理，需要显式改成 Docker 主机地址：
 
 ```bash
-docker buildx bake -f containers/alinux3/docker-bake.hcl devbox --load \
+docker buildx bake -f docker/alinux3/docker-bake.hcl devbox --load \
   --set '*.args.HTTP_PROXY=http://host.docker.internal:8001' \
   --set '*.args.HTTPS_PROXY=http://host.docker.internal:8001'
 ```
@@ -32,7 +33,7 @@ docker buildx bake -f containers/alinux3/docker-bake.hcl devbox --load \
 
 ```bash
 docker build --platform linux/amd64 \
-  --file containers/alinux3/Dockerfile \
+  --file docker/alinux3/Dockerfile \
   --tag alinux3-devbox:$(date +%Y%m%d-%H%M) \
   --tag alinux3-devbox:latest \
   .
@@ -68,15 +69,15 @@ git config --global user.email "you@example.com"
 宿主机契约测试（不需要 Docker）：
 
 ```bash
-bash -n containers/alinux3/bootstrap.sh
-bazel test //containers/alinux3:image_unit_test
+bash -n docker/alinux3/bootstrap.sh
+bazel test //docker/alinux3:image_unit_test
 ```
 
 已构建镜像后的冒烟测试：
 
 ```bash
 DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
-  bash containers/alinux3/tests/run-docker-tests.sh
+  bash docker/alinux3/tests/run-docker-tests.sh
 ```
 
 ## Issues
@@ -95,7 +96,7 @@ DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
 
 **根因**：官方 Alinux 3 容器镜像的 yum 源指向云上内网镜像，本机 Docker 构建（即使开了 `127.0.0.1` 代理）也到不了。另外 Dockerfile 的 `PATH` 漏了 `/usr/sbin`。宿主机代理里的 `127.0.0.1` 在 build 容器里也不是 Docker 宿主机。
 
-**解法**：构建时把源改写成 `mirrors.aliyun.com`；`PATH` 补上 `/usr/sbin`；用 `containers/alinux3/bake.sh` 把 `127.0.0.1` 代理改写成 `host.docker.internal`，国内阿里云域名放进 `NO_PROXY`。
+**解法**：构建时把源改写成 `mirrors.aliyun.com`；`PATH` 补上 `/usr/sbin`；用 `docker/alinux3/bake.sh` 把 `127.0.0.1` 代理改写成 `host.docker.internal`，国内阿里云域名放进 `NO_PROXY`。
 
 ### 2026-08-15 — docker run 后 ble.sh 报 USER 为空，starship 写不了 ~/.cache
 
@@ -114,7 +115,7 @@ DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
 **解法**：useradd 之后立刻 `chown -R admin:admin /home/admin`；bootstrap 以 `NVIM_SETUP_STRICT=1` 跑 `Lazy! sync` 并校验插件目录；`sudo env` 透传 `HTTP(S)_PROXY`。重新构建：
 
 ```bash
-bash containers/alinux3/bake.sh
+bash docker/alinux3/bake.sh
 ```
 
 ### 2026-08-15 — 默认工作目录、常用 CLI 与镜像命名
@@ -124,3 +125,11 @@ bash containers/alinux3/bake.sh
 **根因**：早期 mini 镜像把工作区固定成 `/workspace`，系统包只覆盖构建依赖。
 
 **解法**：`WORKDIR /home/admin`；dnf 安装 `jq`/`tree`（`cloc`/`ripgrep`/`bat` 有包则装），bootstrap 再从 cache/GitHub 补 `bat`/`rg`；bake target 改为 `devbox`，标签 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
+
+### 2026-08-16 — 第三方 DNF 源缺少 Aliyun companion，且 EPEL 未带上
+
+**表象**：构建或在 Alinux 3 上加 Docker CE / 额外包时，只有官方源；`$releasever=3` 对不上 Docker CE / EPEL 的 el8 树。
+
+**根因**：Dockerfile 只改写了 Alinux 自带源；`setup_centos.sh` 给 Alinux 3 保留了 `$releasever`。Aliyun 有 Docker CE 与 EPEL 8，但没有 GitHub CLI / NodeSource RPM。
+
+**解法**：镜像 COPY `os/lib/repos/epel-8-aliyun.repo`。`setup_centos.sh` 保留官方 Docker CE，并写 `docker-ce-aliyun.repo`；Alinux 3 钉 `centos/8`，基础阶段加 EPEL 8。gh / NodeSource 仍走官方源。

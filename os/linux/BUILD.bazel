@@ -27,6 +27,7 @@ devtools_unit_test(
     suite = ":tests/unit/repository_suite.sh",
     data = [
         ":linux_setup_srcs",
+        "//os/lib:dnf_mirrors_srcs",
         "//os/lib:packages_list.sh",
     ],
     tags = [
@@ -41,6 +42,7 @@ devtools_module_tests(
     module_root = ":setup_centos.sh",
     module_data = [
         ":linux_setup_srcs",
+        "//os/lib:dnf_mirrors_srcs",
         "//os/lib:packages_list.sh",
         "//terminal/tmux:tmux_srcs",
     ],

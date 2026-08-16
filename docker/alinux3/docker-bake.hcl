@@ -44,7 +44,7 @@ group "default" {
 
 target "devbox" {
   context    = "../.."
-  dockerfile = "containers/alinux3/Dockerfile"
+  dockerfile = "docker/alinux3/Dockerfile"
   platforms  = ["linux/amd64"]
   args = {
     BASE_IMAGE       = BASE_IMAGE

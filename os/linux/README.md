@@ -43,3 +43,21 @@ bash os/linux/aliyun_ecs_init.sh --help
 ```
 
 离线缓存版本（yazi/lazygit/glow/fzf 等）以 `packages.centos.list` 为准，由 `cache/download.sh linux` 读取。
+
+## DNF 源（官方 + Aliyun）
+
+`setup_centos.sh` 加第三方 DNF 源时保留官方地址，并在 Aliyun 有对应镜像时再写一份 companion：
+
+- **Docker CE**：官方 `download.docker.com` 与 `docker-ce-aliyun.repo`（`mirrors.aliyun.com/docker-ce`）并存。Alinux 3 钉 `centos/8`（自身 `$releasever` 是 3，不能直接用）。Alinux 4 仍走云内网 `mirrors.cloud.aliyuncs.com`，并钉 `centos/9`。
+- **NodeSource / GitHub CLI**：Aliyun 没有对应 RPM 镜像，只加官方源。
+- **EPEL 8**：仅 Alinux 3 在 OS 基础阶段写入 `devtools-epel-8-aliyun.repo`（`mirrors.aliyun.com/epel/8/Everything`）。
+
+## Issues
+
+### 2026-08-16 — Alinux 3 加 Docker CE 时 `$releasever=3` 无效
+
+**表象**：Alinux 3 的 `$releasever` 是 3，官方 / Aliyun Docker CE 都没有 `centos/3`。
+
+**根因**：原先只给 Alinux 4 钉了 `centos/9`，Alinux 3 原样保留 `$releasever`。
+
+**解法**：Alinux 3 钉 `centos/8`；官方 `docker-ce.repo` 与 Aliyun companion 一起写入。EPEL 同样钉 el8，不使用 `$releasever`。

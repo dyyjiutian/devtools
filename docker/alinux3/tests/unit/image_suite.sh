@@ -10,9 +10,9 @@ if [[ -z "${REPO_ROOT:-}" ]]; then
   fi
 fi
 
-BOOTSTRAP="${REPO_ROOT}/containers/alinux3/bootstrap.sh"
-DOCKERFILE="${REPO_ROOT}/containers/alinux3/Dockerfile"
-BAKE="${REPO_ROOT}/containers/alinux3/docker-bake.hcl"
+BOOTSTRAP="${REPO_ROOT}/docker/alinux3/bootstrap.sh"
+DOCKERFILE="${REPO_ROOT}/docker/alinux3/Dockerfile"
+BAKE="${REPO_ROOT}/docker/alinux3/docker-bake.hcl"
 ROOT_README="${REPO_ROOT}/README.md"
 
 fail() {
@@ -65,6 +65,9 @@ assert_contains "$dockerfile" "jq tree" "installs jq and tree from the centos pa
 assert_contains "$dockerfile" 'CMD ["bash"]' "image defaults to bash"
 assert_contains "$dockerfile" "/usr/sbin" "PATH includes /usr/sbin for groupadd"
 assert_contains "$dockerfile" "mirrors.aliyun.com" "rewrites Alinux repos to the public mirror"
+assert_contains "$dockerfile" "os/lib/repos/epel-8-aliyun.repo" "image adds Aliyun EPEL 8"
+assert_contains "$dockerfile" "devtools-epel-8-aliyun.repo" "EPEL 8 is installed as a managed repo file"
+assert_contains "$dockerfile" "docker/alinux3/bootstrap.sh" "Dockerfile copies bootstrap from docker/alinux3"
 assert_contains "$dockerfile" "ARG HTTP_PROXY" "accepts HTTP_PROXY build arg"
 assert_contains "$dockerfile" "NVIM_SETUP_STRICT=1" "bootstrap fails if nvim plugins are missing"
 assert_contains "$dockerfile" 'HTTP_PROXY="${HTTP_PROXY:-}"' "forwards HTTP_PROXY through sudo to bootstrap"
@@ -80,16 +83,30 @@ assert_contains "$bake" "alinux3-devbox" "bake tags alinux3-devbox"
 assert_contains "$bake" 'alinux3-devbox:latest' "bake also tags latest"
 assert_not_contains "$bake" "alinux3-mini" "bake target was renamed from alinux3-mini"
 assert_not_contains "$bake" "alinux3-minimal" "bake target was renamed from alinux3-minimal"
+assert_contains "$bake" 'dockerfile = "docker/alinux3/Dockerfile"' \
+  "bake dockerfile path follows the docker/ rename"
 assert_contains "$bake" 'platforms  = ["linux/amd64"]' "bake locks linux/amd64"
 assert_contains "$bake" "HTTP_PROXY" "bake forwards HTTP_PROXY"
+assert_not_contains "$bake" "containers/alinux3" "bake no longer points at containers/"
 
-BAKE_SH="${REPO_ROOT}/containers/alinux3/bake.sh"
+DOCKERIGNORE="${REPO_ROOT}/.dockerignore"
+assert_file "$DOCKERIGNORE"
+dockerignore="$(cat "$DOCKERIGNORE")"
+assert_contains "$dockerignore" "docker/alinux3/tests" "dockerignore excludes docker tests"
+assert_contains "$dockerignore" "!os/lib/repos/epel-8-aliyun.repo" \
+  "dockerignore keeps the Aliyun EPEL 8 repo in build context"
+assert_not_contains "$dockerignore" "containers/alinux3" \
+  "dockerignore no longer refers to containers/"
+
+BAKE_SH="${REPO_ROOT}/docker/alinux3/bake.sh"
 assert_file "$BAKE_SH"
 bash -n "$BAKE_SH" || fail "bake.sh failed bash -n"
 help_bake="$("$BAKE_SH" --help)"
 assert_contains "$help_bake" "host.docker.internal" "bake.sh help mentions Docker host proxy"
 dry_bake="$(IMAGE_TAG=20260815-2140 HTTP_PROXY=http://127.0.0.1:8001 "$BAKE_SH" --dry-run)"
 assert_contains "$dry_bake" "devbox" "bake.sh builds the devbox target"
+assert_contains "$dry_bake" "docker/alinux3/docker-bake.hcl" "bake.sh uses the renamed bake file"
+assert_not_contains "$dry_bake" "containers/alinux3" "bake.sh dry-run does not use containers/"
 assert_contains "$dry_bake" "devbox.context=" "bake.sh sets an explicit build context"
 assert_contains "$dry_bake" "TAG=20260815-2140" "bake.sh uses the minute-precision IMAGE_TAG"
 assert_contains "$dry_bake" "host.docker.internal:8001" "bake.sh rewrites loopback proxy"

@@ -24,6 +24,8 @@ ENV LANG=C.UTF-8 \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+COPY os/lib/repos/epel-8-aliyun.repo /etc/yum.repos.d/devtools-epel-8-aliyun.repo
+
 RUN set -eux; \
     case "${TARGETARCH}" in \
       amd64|x86_64) ;; \
@@ -76,7 +78,7 @@ COPY --chown=admin:admin tools/git /opt/devtools/tools/git
 COPY --chown=admin:admin editors/vim /opt/devtools/editors/vim
 COPY --chown=admin:admin editors/nvim /opt/devtools/editors/nvim
 COPY --chown=admin:admin terminal/tmux /opt/devtools/terminal/tmux
-COPY containers/alinux3/bootstrap.sh /usr/local/bin/devtools-bootstrap
+COPY docker/alinux3/bootstrap.sh /usr/local/bin/devtools-bootstrap
 
 RUN chmod 0755 /usr/local/bin/devtools-bootstrap \
  && sudo -u admin -H \

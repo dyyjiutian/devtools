@@ -69,6 +69,13 @@ case "$DEVTOOLS_TEST_PROFILE" in
 
     alinux_skip="$(bash "$ALINUX_SETUP" --dry-run --packages-only --skip-tools 2>&1)"
     assert_not_contains "$alinux_skip" "[dry-run] glow" "ALinux --skip-tools excludes glow"
+
+    alinux_base="$(bash "$ALINUX_SETUP" --dry-run --base-only 2>&1)"
+    if [[ "$DEVTOOLS_TEST_PROFILE" == "linux_alinux3" ]]; then
+      assert_contains "$alinux_base" "Aliyun EPEL 8" "ALinux 3 base adds Aliyun EPEL 8"
+    else
+      assert_not_contains "$alinux_base" "Aliyun EPEL 8" "ALinux 4 base does not add EPEL 8"
+    fi
     ;;
 
   *)

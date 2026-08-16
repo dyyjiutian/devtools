@@ -51,6 +51,7 @@ Linux 只识别 `apt`、`dnf`、`yum` 三类包管理器。安装 git-delta 时�
 
 - Ubuntu / Debian：临时使用阿里云 APT source，失败后回退当前系统 APT 仓库。
 - RHEL / CentOS / Rocky / AlmaLinux 8/9：临时使用阿里云 EPEL 仓库，失败后回退当前系统 DNF/YUM 仓库。
+- Alinux 3：临时使用阿里云 EPEL 8（`mirrors.aliyun.com/epel/8/Everything`），失败后回退当前系统 DNF/YUM 仓库。Alinux 4 不映射 CentOS EPEL。
 - CentOS 7 x86_64：优先校验并使用仓库缓存的 git-delta 0.19.2 musl 静态包；缓存缺失或损坏时从固定上游 URL 下载并校验，最后再回退 YUM/DNF 仓库。
 
 临时 source、repo、下载和解压目录会在成功或失败后清理。静态包固定使用 SHA-256 `f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b`，安装目标为 `/usr/local/bin/delta`。
@@ -208,7 +209,7 @@ declare: usage: declare [-afFirtx] [-p] [name[=value] ...]
 
 **根因**：原安装流程只调用当前系统仓库，失败后立即返回；没有临时镜像、已校验静态包或后续仓库回退。CentOS 7 的常用仓库也不提供所需版本。
 
-**解法**：Ubuntu/Debian 临时使用阿里云 APT source，RHEL 系 8/9 临时使用阿里云 EPEL；CentOS 7 x86_64 优先使用仓库内固定版本的 musl 静态包，缓存缺失或校验失败时从上游固定 URL 重下并校验 SHA-256。所有方式失败后再尝试当前 APT/DNF/YUM 仓库。
+**解法**：Ubuntu/Debian 临时使用阿里云 APT source，RHEL 系 8/9 临时使用阿里云 EPEL；Alinux 3 临时使用阿里云 EPEL 8；CentOS 7 x86_64 优先使用仓库内固定版本的 musl 静态包，缓存缺失或校验失败时从上游固定 URL 重下并校验 SHA-256。所有方式失败后再尝试当前 APT/DNF/YUM 仓库。GitHub CLI 仍加官方 `cli.github.com` RPM 源：Aliyun 没有对应镜像。
 
 ### 2026-07-27 — 大型仓库稀疏克隆步骤多、易配错
 

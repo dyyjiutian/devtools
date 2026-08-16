@@ -24,7 +24,7 @@ devtools/
 ├── network/                      # FRP / proxy / VPN infrastructure
 ├── tools/                        # Bazel / Git / SSH standalone tools
 ├── agents/                       # Claude / Codex / Cursor Agent
-├── containers/                   # Alinux 3 开发镜像
+├── docker/                       # Alinux 3 开发镜像
 ├── cache/                        # Offline installation assets
 ├── docs/                         # Design documents and implementation plans
 └── tests/                        # Shell regression tests
@@ -32,10 +32,10 @@ devtools/
 
 ## Alibaba Cloud Linux 3 开发镜像
 
-`containers/alinux3/` 提供基于 Alibaba Cloud Linux 3 的 x86_64 `devbox` 开发镜像。构建时会初始化 Git（含 lazygit / delta / 子命令）、Vim、Neovim、tmux、Bash（ble / fzf / zoxide / Starship），以及 `rg` / `jq` / `bat` / `tree`。镜像不写入 Git 身份，也不包含 Dev Container 或 SSH 变体。默认用户 `admin`，工作目录 `/home/admin`。标签为 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
+`docker/alinux3/` 提供基于 Alibaba Cloud Linux 3 的 x86_64 `devbox` 开发镜像。构建时会初始化 Git（含 lazygit / delta / 子命令）、Vim、Neovim、tmux、Bash（ble / fzf / zoxide / Starship），以及 `rg` / `jq` / `bat` / `tree`。镜像不写入 Git 身份，也不包含 Dev Container 或 SSH 变体。默认用户 `admin`，工作目录 `/home/admin`。标签为 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
 
 ```bash
-bash containers/alinux3/bake.sh
+bash docker/alinux3/bake.sh
 docker run --rm -it alinux3-devbox:latest
 ```
 
@@ -43,12 +43,12 @@ docker run --rm -it alinux3-devbox:latest
 
 ```bash
 docker build --platform linux/amd64 \
-  --file containers/alinux3/Dockerfile \
+  --file docker/alinux3/Dockerfile \
   --tag alinux3-devbox:$(date +%Y%m%d-%H%M) \
   --tag alinux3-devbox:latest .
 ```
 
-详细说明见 [`containers/alinux3/README.md`](containers/alinux3/README.md)。
+详细说明见 [`docker/alinux3/README.md`](docker/alinux3/README.md)。
 
 ## OS Initialization
 

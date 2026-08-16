@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+ALINUX_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 IMAGE="${DEVTOOLS_TEST_IMAGE:-alinux3-devbox:latest}"
 
 fail() {
@@ -13,9 +13,9 @@ fail() {
   exit 1
 }
 
-[[ -x "${ROOT_DIR}/containers/alinux3/bootstrap.sh" ]] || \
+[[ -x "${ALINUX_DIR}/bootstrap.sh" ]] || \
   fail "missing executable bootstrap.sh"
-bash -n "${ROOT_DIR}/containers/alinux3/bootstrap.sh"
+bash -n "${ALINUX_DIR}/bootstrap.sh"
 
 command -v docker >/dev/null 2>&1 || fail "docker command not found"
 docker image inspect "$IMAGE" >/dev/null 2>&1 || \

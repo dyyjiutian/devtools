@@ -1,0 +1,8 @@
+# Managed by devtools. Aliyun EPEL 8 for Alinux 3 (el8).
+# Pin el8. Alinux 3 reports VERSION_ID=3, which is not a valid EPEL tree.
+[devtools-epel-8-aliyun]
+name=Aliyun EPEL 8 (Alinux 3)
+baseurl=https://mirrors.aliyun.com/epel/8/Everything/$basearch/
+enabled=1
+gpgcheck=1
+gpgkey=https://mirrors.aliyun.com/epel/RPM-GPG-KEY-EPEL-8

@@ -2,7 +2,19 @@ load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["packages_list.sh"])
+exports_files([
+    "packages_list.sh",
+    "dnf_mirrors.sh",
+    "repos/epel-8-aliyun.repo",
+])
+
+filegroup(
+    name = "dnf_mirrors_srcs",
+    srcs = [
+        "dnf_mirrors.sh",
+        "repos/epel-8-aliyun.repo",
+    ],
+)
 
 devtools_unit_test(
     name = "packages_list_unit_test",
@@ -12,6 +24,18 @@ devtools_unit_test(
         "//os/linux:packages.centos.list",
         "//os/linux:packages.ubuntu.list",
         "//os/macos:packages.list",
+    ],
+    tags = [
+        "contract",
+        "smoke",
+    ],
+)
+
+devtools_unit_test(
+    name = "dnf_mirrors_unit_test",
+    suite = ":tests/unit/dnf_mirrors_suite.sh",
+    data = [
+        ":dnf_mirrors_srcs",
     ],
     tags = [
         "contract",

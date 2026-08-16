@@ -168,6 +168,10 @@ try_delta_aliyun_epel() {
   read -r os_id os_major codename < <(linux_release_info)
   case "$os_id" in
     rhel|centos|rocky|almalinux) ;;
+    alinux)
+      [[ "$os_major" == "3" ]] || return 1
+      os_major=8
+      ;;
     *) return 1 ;;
   esac
   case "$os_major" in
@@ -400,6 +404,7 @@ install_gh() {
           warn "GitHub CLI 安装失败，继续执行后续 Git 配置"
           return
         fi
+        info "Aliyun 镜像站无 GitHub CLI RPM，仅使用官方源 cli.github.com"
       elif command -v yum &>/dev/null; then
         if ! try_cmd sudo yum install -y gh; then
           warn "GitHub CLI 安装失败，继续执行后续 Git 配置"

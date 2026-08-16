@@ -109,9 +109,13 @@ test_install_delta_branch() {
       assert_contains "$out" "mirrors.aliyun.com/epel/9/Everything" "centos aliyun EPEL"
       assert_contains "$out" "dnf" "centos dnf install delta"
       ;;
-    linux_alinux3|linux_alinux4)
-      assert_contains "$out" "dnf install -y git-delta" "ALinux dnf install delta"
-      assert_not_contains "$out" "mirrors.aliyun.com/epel" "ALinux does not use CentOS EPEL mapping"
+    linux_alinux3)
+      assert_contains "$out" "mirrors.aliyun.com/epel/8/Everything" "ALinux 3 uses Aliyun EPEL 8"
+      assert_contains "$out" "dnf" "ALinux 3 dnf install delta"
+      ;;
+    linux_alinux4)
+      assert_contains "$out" "dnf install -y git-delta" "ALinux 4 dnf install delta"
+      assert_not_contains "$out" "mirrors.aliyun.com/epel" "ALinux 4 does not use CentOS EPEL mapping"
       ;;
     linux_ubuntu)
       assert_contains "$out" "mirrors.aliyun.com/ubuntu" "ubuntu aliyun APT"

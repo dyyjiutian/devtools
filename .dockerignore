@@ -2,7 +2,7 @@
 .worktrees
 **/.DS_Store
 **/*.md
-!containers/alinux3/README.md
+!docker/alinux3/README.md
 !shell/bash/README.md
 !tools/git/README.md
 !editors/vim/README.md
@@ -15,6 +15,9 @@ docs
 languages
 network
 os
+!os/lib
+!os/lib/repos
+!os/lib/repos/epel-8-aliyun.repo
 tests
 editors/cursor
 editors/vscode
@@ -28,4 +31,4 @@ terminal/yazi
 tools/bazel
 tools/ssh
 tools/git/tests
-containers/alinux3/tests
+docker/alinux3/tests
