@@ -1,0 +1,28 @@
+# Official-image E2E fixture: real apt, no fake PATH.
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        bash \
+        ca-certificates \
+        git \
+        curl \
+        sudo \
+        tar \
+        gzip \
+        build-essential \
+        libevent-dev \
+        libncurses-dev \
+        bison \
+        pkg-config \
+        nodejs \
+        npm \
+        ripgrep \
+    && rm -rf /var/lib/apt/lists/* \
+    && printf 'ALL ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/e2e \
+    && chmod 0440 /etc/sudoers.d/e2e
+
+WORKDIR /workspace
+CMD ["bash"]

@@ -1,10 +1,14 @@
 # Shared test infrastructure for repository modules.
+load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
+
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "lib/run_unit_test.sh",
     "lib/run_module_test.sh",
+    "lib/run_e2e_test.sh",
     "docker/run_in_docker.sh",
+    "docker/run_e2e_in_docker.sh",
 ])
 
 filegroup(
@@ -35,4 +39,28 @@ filegroup(
 filegroup(
     name = "profiles",
     srcs = glob(["profiles/**"], allow_empty = True),
+)
+
+devtools_unit_test(
+    name = "docker_runner_unit_test",
+    suite = ":tests/unit/docker_runner_suite.sh",
+    data = [
+        ":docker_files",
+    ],
+    tags = [
+        "contract",
+        "smoke",
+    ],
+)
+
+devtools_unit_test(
+    name = "e2e_runner_unit_test",
+    suite = ":tests/unit/e2e_runner_suite.sh",
+    data = [
+        ":docker_files",
+    ],
+    tags = [
+        "contract",
+        "smoke",
+    ],
 )

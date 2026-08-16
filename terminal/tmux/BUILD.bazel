@@ -1,4 +1,4 @@
-load("//tests/common/rules:devtools_tests.bzl", "devtools_module_tests")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_e2e_tests", "devtools_module_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -14,6 +14,7 @@ filegroup(
 exports_files([
     "setup.sh",
     "tests/tmux_suite.sh",
+    "tests/e2e/tmux_ops_suite.sh",
 ])
 
 devtools_module_tests(
@@ -30,5 +31,20 @@ devtools_module_tests(
     docker_profiles = [
         "linux_ubuntu",
         "linux_centos",
+        "linux_alinux3",
+        "linux_alinux4",
     ],
+)
+
+devtools_e2e_tests(
+    name = "tmux_ops",
+    suite = ":tests/e2e/tmux_ops_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":tmux_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
+    setup_args = ["--upgrade"],
 )

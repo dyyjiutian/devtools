@@ -108,6 +108,27 @@ E2E 成本较高，按需放在 `<module>/tests/e2e/`；只有确实跨多个模
 
 profile 兼容测试负责快速回答“脚本是否走到正确分支、生成正确命令”；真实 E2E 才能回答“该系统上是否真的安装成功”。macOS 不能用 Linux 容器替代，ALinux 也不能用 AlmaLinux/CentOS 镜像代替后宣称兼容。
 
+可选 L2 容器 Integration（`bazel test --config=docker`）在下列镜像里重跑同一套 suite，容器内仍注入 fake 命令：
+
+| L2 profile | 基础镜像 | 本地 tag |
+|---|---|---|
+| `linux_ubuntu` | `ubuntu:24.04` | `devtools-test:ubuntu` |
+| `linux_centos` | `almalinux:9` | `devtools-test:centos` |
+| `linux_alinux3` | `alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest` | `devtools-test:alinux3` |
+| `linux_alinux4` | `alibaba-cloud-linux-4-registry.cn-hangzhou.cr.aliyuncs.com/alinux4/alinux4:latest` | `devtools-test:alinux4` |
+
+当前声明了 `docker_profiles` 的模块是 `tools/git`、`terminal/tmux`、`editors/vim`（Ubuntu / AlmaLinux 9 / ALinux 3/4）、`editors/nvim` 和 `shell/bash`（Ubuntu / ALinux 3/4）。
+
+可选 E2E（真装，无 fake）用同一套官方 Ubuntu / ALinux 镜像，目标名 `//<module>:<name>_<profile>_e2e_test`：
+
+```bash
+bazel test --config=docker //terminal/tmux:tmux_ops_linux_ubuntu_e2e_test
+bazel test --config=docker //editors/vim:vim_ops_linux_ubuntu_e2e_test
+bazel test --config=docker //editors/nvim:nvim_ops_linux_ubuntu_e2e_test
+```
+
+第一刀覆盖 tmux prefix/mouse/window/pane、vim/nvim 打开真实文件与 Git blame、nvim telescope 查找。`gd` / `gr` 尚未纳入。
+
 ## 常用命令
 
 ```bash

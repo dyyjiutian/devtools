@@ -149,6 +149,8 @@ fi
 case "$PROFILE" in
   linux_ubuntu) DOCKERFILE="Dockerfile.ubuntu"; IMAGE_TAG="devtools-test:ubuntu" ;;
   linux_centos) DOCKERFILE="Dockerfile.centos"; IMAGE_TAG="devtools-test:centos" ;;
+  linux_alinux3) DOCKERFILE="Dockerfile.alinux3"; IMAGE_TAG="devtools-test:alinux3" ;;
+  linux_alinux4) DOCKERFILE="Dockerfile.alinux4"; IMAGE_TAG="devtools-test:alinux4" ;;
   *)
     echo "run_in_docker.sh: profile '$PROFILE' has no Docker image (macOS is L1-only)" >&2
     exit 1

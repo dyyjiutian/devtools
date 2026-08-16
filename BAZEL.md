@@ -30,6 +30,8 @@ bazel test //... --test_tag_filters=smoke
 
 `devtools_module_tests` 默认生成无 Docker 的 L1 profile 目标。当前兼容基线是 macOS、Ubuntu、Alibaba Cloud Linux 3/4 的 x86_64；`linux_centos` 仅作为部分历史适配器的内部回归 profile。
 
+L2 Docker 夹具（仍是 Integration，容器内使用 fake 命令）：`ubuntu:24.04`、`almalinux:9`，以及杭州 ACR 的官方 ALinux 3/4 镜像。
+
 示例：
 
 - `//os/linux:linux_setup_linux_ubuntu_test`
@@ -37,6 +39,10 @@ bazel test //... --test_tag_filters=smoke
 - `//os/linux:linux_setup_linux_alinux4_test`
 - `//shell/bash:bash_macos_test`
 - `//tools/git:git_linux_ubuntu_docker_test`（tag `requires-docker`）
+- `//tools/git:git_linux_alinux3_docker_test`（tag `requires-docker`）
+- `//tools/git:git_linux_alinux4_docker_test`（tag `requires-docker`）
+- `//shell/bash:bash_linux_ubuntu_docker_test`（tag `requires-docker`）
+- `//terminal/tmux:tmux_ops_linux_ubuntu_e2e_test`（tag `e2e` + `requires-docker`）
 
 ## 常用目标
 

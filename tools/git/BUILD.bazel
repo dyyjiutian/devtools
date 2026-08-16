@@ -26,6 +26,8 @@ devtools_module_tests(
     docker_profiles = [
         "linux_ubuntu",
         "linux_centos",
+        "linux_alinux3",
+        "linux_alinux4",
     ],
     module_data = [
         ":git_srcs",

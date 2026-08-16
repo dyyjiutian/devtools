@@ -106,3 +106,58 @@ def devtools_module_tests(
                 "local",
             ],
         )
+
+def devtools_e2e_tests(
+        name,
+        suite,
+        module_root,
+        module_data,
+        profiles,
+        setup_args = [],
+        tags = [],
+        size = "enormous"):
+    """Create official-image E2E tests that run real setup.sh (no OS fakes).
+
+    Args:
+      name: Short name (e.g. \"tmux_ops\").
+      suite: Label of the E2E ops suite.
+      module_root: Label of a file inside the module directory (usually setup.sh).
+      module_data: Extra labels needed at runtime.
+      profiles: Linux profiles with official Docker images.
+      setup_args: Extra flags forwarded to setup.sh (e.g. [\"--upgrade\"]).
+      tags: Extra tags added to every generated test.
+      size: Bazel test size (default enormous; real installs are slow).
+    """
+    setup_arg_flags = []
+    for arg in setup_args:
+        setup_arg_flags.extend(["--setup-arg", arg])
+
+    for profile in profiles:
+        sh_test(
+            name = "%s_%s_e2e_test" % (name, profile),
+            srcs = ["//tests/common:docker/run_e2e_in_docker.sh"],
+            args = [
+                "--profile",
+                profile,
+                "--suite",
+                "$(rootpath %s)" % suite,
+                "--module-root",
+                "$(rootpath %s)" % module_root,
+            ] + setup_arg_flags,
+            data = [
+                "//tests/common:lib_files",
+                "//tests/common:docker_files",
+                suite,
+                module_root,
+            ] + module_data,
+            size = size,
+            tags = tags + [
+                "e2e",
+                "compatibility",
+                "profile-%s" % profile,
+                "requires-docker",
+                "no-sandbox",
+                "requires-network",
+                "local",
+            ],
+        )

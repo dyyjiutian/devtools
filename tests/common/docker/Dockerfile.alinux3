@@ -1,0 +1,21 @@
+# L2 container portability fixture; not an E2E environment.
+FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Official ALinux images point yum/dnf at cloud-internal mirrors.
+# Rewrite them so local Docker builds can install the suite tools.
+RUN set -eux; \
+    find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
+      | while IFS= read -r repo; do \
+          sed -i \
+            -e 's|https\?://mirrors\.cloud\.aliyuncs\.com|https://mirrors.aliyun.com|g' \
+            -e 's|https\?://mirrors\.aliyuncs\.com|https://mirrors.aliyun.com|g' \
+            "$repo"; \
+        done; \
+    if command -v dnf >/dev/null 2>&1; then PM=dnf; else PM=yum; fi; \
+    "$PM" install -y git tar gzip; \
+    "$PM" clean all
+
+WORKDIR /workspace
+CMD ["bash"]
