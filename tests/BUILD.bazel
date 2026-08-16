@@ -8,6 +8,7 @@ sh_test(
     size = "small",
     tags = [
         "check",
+        "l1",
         "local",
         "no-sandbox",
         "smoke",

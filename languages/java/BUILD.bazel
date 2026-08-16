@@ -1,9 +1,26 @@
-load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
+load(
+    "//tests/common/rules:devtools_tests.bzl",
+    "devtools_e2e_tests",
+    "devtools_host_e2e_tests",
+    "devtools_module_tests",
+    "devtools_unit_test",
+)
 
 package(default_visibility = ["//visibility:public"])
 
+filegroup(
+    name = "java_srcs",
+    srcs = [
+        "README.md",
+        "setup.sh",
+    ],
+)
+
 exports_files([
     "setup.sh",
+    "tests/unit/java_suite.sh",
+    "tests/integration/java_suite.sh",
+    "tests/e2e/java_ops_suite.sh",
 ])
 
 devtools_unit_test(
@@ -11,5 +28,54 @@ devtools_unit_test(
     suite = ":tests/unit/java_suite.sh",
     data = [
         "setup.sh",
+    ],
+)
+
+devtools_module_tests(
+    name = "java",
+    suite = ":tests/integration/java_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":java_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+        "macos",
+    ],
+    docker_profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
+    tags = [
+        "cli",
+        "smoke",
+    ],
+)
+
+devtools_e2e_tests(
+    name = "java_ops",
+    suite = ":tests/e2e/java_ops_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":java_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
+    setup_args = [
+        "--skip-maven",
+        "--skip-gradle",
+    ],
+)
+
+devtools_host_e2e_tests(
+    name = "java_ops",
+    suite = ":tests/e2e/java_ops_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":java_srcs"],
+    setup_args = [
+        "--skip-maven",
+        "--skip-gradle",
     ],
 )

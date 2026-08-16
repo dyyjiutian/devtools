@@ -29,6 +29,14 @@ fssh prod -t ma       # session 子串唯一 → 直连；多个 → fzf；零�
 
 ## Issues
 
+### 2026-08-17 — `fssh --help` 在 `set -e` 下以 1 退出
+
+**表象**：L1 `//tools/ssh:ssh_*_test` 在 `setup --help` 之后立刻失败，`fssh --help` 无输出错误。
+
+**根因**：EXIT trap 里 `reset_terminal` 用 `[[ ... ]] || return`。未进入交互会话时 `[[` 失败，`return` 带着状态 1，覆盖了 `show_help` 的 `exit 0`。
+
+**解法**：改为 `return 0`。
+
 ### 2026-07-30 — fssh session 列表混入 nvm/npmrc 警告
 
 远端通过 `bash -lc` 跑 `tmux list-sessions` 以补齐 PATH；登录式 Bash 会初始化

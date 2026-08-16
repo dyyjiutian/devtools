@@ -4,17 +4,34 @@
 test --test_output=errors
 test --test_summary=detailed
 
-# L2 Docker tests are opt-in (require local Docker daemon)
-test --test_tag_filters=-requires-docker
+# Default: L1 only (host profile + fakes). L2/L3 are opt-in.
+test --test_tag_filters=-l2,-l3,-requires-docker,-requires-macos
 
-# Convenience: bazel test --config=docker //tools/git/...
-# Run outside the sandbox so the Docker socket and host docker group are visible.
-test:docker --test_tag_filters=requires-docker
+# L1 alias of the default filter (explicit in docs / CI).
+test:l1 --test_tag_filters=-l2,-l3,-requires-docker,-requires-macos
+
+# L2: Docker + fake commands. --config=docker stays as an alias.
+test:l2 --test_tag_filters=l2
+test:l2 --spawn_strategy=local
+test:l2 --strategy=TestRunner=standalone
+test:l2 --test_env=HOME
+test:l2 --test_env=USER
+test:l2 --test_env=DOCKER_HOST=unix:///var/run/docker.sock
+
+test:docker --test_tag_filters=l2
 test:docker --spawn_strategy=local
 test:docker --strategy=TestRunner=standalone
 test:docker --test_env=HOME
 test:docker --test_env=USER
 test:docker --test_env=DOCKER_HOST=unix:///var/run/docker.sock
+
+# L3: real setup (Linux Docker E2E and/or macOS host E2E).
+test:l3 --test_tag_filters=l3
+test:l3 --spawn_strategy=local
+test:l3 --strategy=TestRunner=standalone
+test:l3 --test_env=HOME
+test:l3 --test_env=USER
+test:l3 --test_env=DOCKER_HOST=unix:///var/run/docker.sock
 
 # Cache
 build --disk_cache=~/.cache/bazel-disk-cache

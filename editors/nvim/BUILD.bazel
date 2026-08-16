@@ -1,4 +1,4 @@
-load("//tests/common/rules:devtools_tests.bzl", "devtools_e2e_tests", "devtools_module_tests")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_e2e_tests", "devtools_host_e2e_tests", "devtools_module_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -45,4 +45,11 @@ devtools_e2e_tests(
         "linux_alinux3",
         "linux_alinux4",
     ],
+)
+
+devtools_host_e2e_tests(
+    name = "nvim_ops",
+    suite = ":tests/e2e/nvim_ops_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":nvim_srcs"],
 )

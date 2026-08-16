@@ -298,8 +298,8 @@ assert_file_not_contains "$firewall_log" 'nft delete table inet xray_client_tun'
 order_log="${TMP_DIR}/order.log"
 : > "$order_log"
 ORDER_LOG="$order_log" run_firewall_helper up
-firewall_line=$(rg -n 'nft add table inet xray_client_tun' "$order_log" | cut -d: -f1)
-route_line=$(rg -n -- '-4 route replace default dev xray0 table 1001' "$order_log" | cut -d: -f1)
+firewall_line=$(grep -n 'nft add table inet xray_client_tun' "$order_log" | cut -d: -f1)
+route_line=$(grep -n -- '-4 route replace default dev xray0 table 1001' "$order_log" | cut -d: -f1)
 [[ -n "$firewall_line" && -n "$route_line" && "$firewall_line" -lt "$route_line" ]] \
     || fail "firewall protection must be installed before TUN policy routes"
 ORDER_LOG="$order_log" run_firewall_helper down

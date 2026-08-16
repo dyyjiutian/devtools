@@ -205,12 +205,14 @@ paths.
 
 ```bash
 bash -n setup.sh
-bazel test //os/linux/... //shell/bash/...
-bash os/macos/run_bats.sh
+# L1 default (no Docker, no real install) — run after script changes
 bazel test //...
-bazel test //os/macos:macos_setup_bats_test
-bazel test //tools/git/... //terminal/tmux/...
+bazel test --config=l1 //languages/go/... //tools/git/...
+# Optional L2 (Docker + fakes)
+bazel test --config=l2 //tools/git/...
 ```
+
+Layer rules and CI keywords (`L1` / `L2` / `L3`) are in `tests/README.md`.
 
 If `bazel` or `bats` is unavailable, report that it was not run; never treat
 missing tooling as a passing result. Do not run real installers during routine

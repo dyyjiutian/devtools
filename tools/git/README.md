@@ -191,6 +191,14 @@ git sparse-clone --help
 
 ## Issues
 
+### 2026-08-17 — L1 `git_linux_centos_test` 在 macOS 上校验静态包失败
+
+**表象**：`bazel test //tools/git:git_linux_centos_test` 在 Darwin 上报 `FAIL: cached delta installed`。
+
+**根因**：CentOS 7 静态包路径用 `sha256sum` 校验；macOS 默认没有该命令，校验失败后不会安装缓存中的 delta。
+
+**解法**：`verify_delta_archive` 改为 `sha256sum` / `shasum -a 256`（含 `/usr/bin` 绝对路径），hermetic `PATH` 下也能校验。
+
 ### 2026-08-10 — macOS 上 `git bc` 报 `declare: -A: invalid option`
 
 **表象**：macOS 运行 `git bc` 立即报错退出：

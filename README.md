@@ -332,6 +332,23 @@ Mac Agent session notifications use the shared listener and hooks:
 
 Codex and Cursor Agent setup scripts are available under agents/codex/ and agents/cursor-agent/.
 
+## Testing (L1 / L2 / L3)
+
+分层与模块该跑到哪一层见 [`tests/README.md`](tests/README.md)。**改脚本后默认只跑 L1。**
+
+```bash
+# L1 — 本机 profile + fake（默认，无 Docker、无真装）
+bazel test //...
+
+# L2 — Docker + fake（需要 Docker）
+bazel test --config=l2 //...
+
+# L3 — 真装（可选；Linux Docker E2E，macOS 在 GitHub macos-26）
+bazel test --config=l3 --test_tag_filters=l3,-requires-macos //...
+```
+
+GitHub 有三条流水线 `L1` / `L2` / `L3`。在 commit 或 PR 标题里写整词 `L1`、`L2` 或 `L3` 时只跑对应层；都不写则三层都跑。
+
 ## Quick Start on a New Machine
 
 ```bash

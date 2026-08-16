@@ -1,0 +1,29 @@
+name: L1
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      l1: ${{ steps.select.outputs.l1 }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: select
+        env:
+          SELECT_LAYERS_MESSAGE: ${{ github.event.head_commit.message }} ${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}
+        run: bash tests/common/ci/select_layers.sh >> "$GITHUB_OUTPUT"
+
+  l1:
+    needs: select
+    if: needs.select.outputs.l1 == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - name: L1 host profile tests
+        run: bazel test --config=l1 //...

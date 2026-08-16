@@ -216,13 +216,29 @@ EOF
   return 1
 }
 
+file_sha256() {
+  local file="$1" bin
+  for bin in sha256sum /usr/bin/sha256sum /bin/sha256sum; do
+    if command -v "$bin" >/dev/null 2>&1 || [[ -x "$bin" ]]; then
+      "$bin" "$file" | awk '{print $1}'
+      return 0
+    fi
+  done
+  for bin in shasum /usr/bin/shasum; do
+    if command -v "$bin" >/dev/null 2>&1 || [[ -x "$bin" ]]; then
+      "$bin" -a 256 "$file" | awk '{print $1}'
+      return 0
+    fi
+  done
+  return 1
+}
+
 verify_delta_archive() {
   local archive="$1" actual
-  if ! command -v sha256sum &>/dev/null; then
-    warn "缺少 sha256sum，拒绝使用未校验的 git-delta 静态包"
+  actual="$(file_sha256 "$archive")" || {
+    warn "缺少 sha256sum/shasum，拒绝使用未校验的 git-delta 静态包"
     return 1
-  fi
-  actual="$(sha256sum "$archive" | awk '{print $1}')" || return 1
+  }
   [[ "$actual" == "$DELTA_ARCHIVE_SHA256" ]]
 }
 

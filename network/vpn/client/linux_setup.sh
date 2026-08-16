@@ -42,9 +42,15 @@ warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; }
 step()    { echo -e "\n${BOLD}==> $*${RESET}"; }
 
-if [[ "$(uname)" == "Darwin" ]]; then
-    error "本脚本仅支持 Linux。macOS 请使用 macos_setup.sh"
-    exit 1
+# Executed (not sourced) install/status/clean refuse Darwin; --help still works.
+if [[ "${BASH_SOURCE[0]}" == "$0" && "$(uname)" == "Darwin" ]]; then
+    case "${1:-}" in
+        --help|-h) ;;
+        *)
+            error "本脚本仅支持 Linux。macOS 请使用 macos_setup.sh"
+            exit 1
+            ;;
+    esac
 fi
 
 usage() {
@@ -288,7 +294,8 @@ port_listening() {
     fi
 }
 
-file_size() { stat -c%s "$1" 2>/dev/null || echo 0; }
+# GNU: stat -c%s; BSD/macOS: stat -f%z (L1 Darwin host must not treat cache as size 0)
+file_size() { stat -c%s "$1" 2>/dev/null || stat -f%z "$1" 2>/dev/null || echo 0; }
 
 tcp_reachable() {
     local host="$1" port="$2"

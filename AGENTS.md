@@ -116,24 +116,15 @@ bash languages/python/setup.sh --dry-run
 bash -n setup.sh
 bash -n languages/python/setup.sh
 
-# Linux 与 Bash 模块回归测试
-bazel test //os/linux/... //shell/bash/...
-
-# macOS Bats 测试（本地需要 bats；也可使用 Bazel）
-bash os/macos/run_bats.sh
-
-# Bazel 可用时
-bazel build //...
+# L1（默认，每次改脚本后应跑；无 Docker、无真装）
 bazel test //...
-bazel test //os/macos:macos_setup_bats_test
+bazel test --config=l1 //languages/go/... //tools/git/...
 
-# OS profile × module 矩阵（git / tmux；Linux 主机可测 macos profile）
-bazel test //tools/git/... //terminal/tmux/...
-# 可选 L2 Docker（需要本机 Docker）
-bazel test --config=docker //tools/git/... //terminal/tmux/...
+# L2（可选，需要 Docker）
+bazel test --config=l2 //tools/git/... //languages/go/...
 ```
 
-若环境没有 `bazel` 或 `bats`，明确记录未执行原因；不要把工具缺失误报为代码通过。对安装逻辑优先测试 `--help`、`--dry-run`、已有缓存路径、**重复执行（幂等）**和失败回滚路径；涉及 `setup.sh` 行为变更时，确认相关 Bazel 目标在适用的 `macos` / `linux_ubuntu` / `linux_alinux3` / `linux_alinux4` profile 上通过。
+分层、模块该跑到哪一层、以及 commit 里写 `L1`/`L2`/`L3` 只跑对应 CI，见 `tests/README.md`。若环境没有 `bazel` 或 `bats`，明确记录未执行原因；不要把工具缺失误报为代码通过。对安装逻辑优先测试 `--help`、`--dry-run`、已有缓存路径、**重复执行（幂等）**和失败回滚路径。
 
 ## Git 提交与 PR
 

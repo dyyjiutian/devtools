@@ -3,6 +3,11 @@
 # Does not inject fake uname / package managers.
 set -euo pipefail
 
+if [[ "${DEVTOOLS_E2E_REQUIRE_DARWIN:-}" == "1" && "$(uname -s)" != "Darwin" ]]; then
+  echo "run_e2e_test.sh: DEVTOOLS_E2E_REQUIRE_DARWIN=1 requires Darwin" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_COMMON_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 

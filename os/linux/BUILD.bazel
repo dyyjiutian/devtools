@@ -51,6 +51,11 @@ devtools_module_tests(
         "linux_alinux3",
         "linux_alinux4",
     ],
+    docker_profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
     tags = [
         "cli",
         "smoke",

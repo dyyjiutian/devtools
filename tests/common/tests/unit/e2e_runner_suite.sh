@@ -34,6 +34,7 @@ assert_not_contains "$runner" "run_module_test.sh" "E2E does not reuse the L2 fa
 host="$(cat "$HOST_RUNNER")"
 assert_contains "$host" "setup.sh" "E2E host runner runs module setup.sh"
 assert_not_contains "$host" "setup_os_profile" "E2E host runner does not inject OS fakes"
+assert_contains "$host" "DEVTOOLS_E2E_REQUIRE_DARWIN" "host runner can require Darwin for macOS L3"
 
 ubuntu="$(cat "$UBUNTU")"
 assert_contains "$ubuntu" "FROM ubuntu:24.04" "Ubuntu E2E uses Ubuntu 24.04"

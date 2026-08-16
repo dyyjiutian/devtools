@@ -23,7 +23,7 @@ fail() {
 assert_valid_delta() {
   local archive="$1" actual
   [[ -f "$archive" ]] || fail "missing archive: $archive"
-  actual="$(sha256sum "$archive" | awk '{print $1}')"
+  actual="$(file_sha256 "$archive")"
   [[ "$actual" == "$DELTA_SHA256" ]] || fail "unexpected checksum for $archive: $actual"
 }
 

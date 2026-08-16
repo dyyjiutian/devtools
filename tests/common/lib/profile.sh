@@ -13,23 +13,45 @@ EOF
   chmod +x "$path"
 }
 
+_devtools_resolve_host_tool() {
+  local tool="$1" real dir
+  real="$(command -v "$tool" 2>/dev/null || true)"
+  if [[ -n "$real" && -x "$real" ]]; then
+    printf '%s\n' "$real"
+    return 0
+  fi
+  for dir in /usr/bin /bin /usr/local/bin /opt/homebrew/bin; do
+    if [[ -x "$dir/$tool" ]]; then
+      printf '%s\n' "$dir/$tool"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Link a minimal set of host tools into fake_bin so PATH can exclude /usr/bin/gh etc.
 _devtools_link_host_tools() {
   local fake_bin="$1"
-  local tool real
+  local tool real shasum_bin
   local tools=(
     git head grep awk sed tr find mkdir cp ln rm cat tee bash mktemp
     basename dirname readlink wc date env true false chmod touch printf
     ls mv echo sort uniq sleep diff cut install getconf nproc gzip sha256sum tar node
-    df hostname whoami
+    df hostname whoami python3
   )
   for tool in "${tools[@]}"; do
-    real="$(command -v "$tool" 2>/dev/null || true)"
+    real="$(_devtools_resolve_host_tool "$tool" || true)"
     if [[ -n "$real" && -x "$real" ]]; then
       # Portable: macOS BSD ln has no GNU -d; -sf is enough for force symlink.
       ln -sf "$real" "$fake_bin/$tool"
     fi
   done
+  if [[ ! -x "$fake_bin/sha256sum" ]]; then
+    shasum_bin="$(_devtools_resolve_host_tool shasum || true)"
+    if [[ -n "$shasum_bin" ]]; then
+      _devtools_write_exec "$fake_bin/sha256sum" "exec $(printf '%q' "$shasum_bin") -a 256 \"\$@\""
+    fi
+  fi
 }
 
 # setup_os_profile <profile> <fake_bin_dir>

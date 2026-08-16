@@ -242,12 +242,12 @@ get_user_session_traffic() {
 
     val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
         -name "user>>>${email}>>>traffic>>>uplink" 2>/dev/null \
-        | grep -oP '"value":\s*"?\K[0-9]+' || echo "0")
+        | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
     up="${val:-0}"
 
     val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
         -name "user>>>${email}>>>traffic>>>downlink" 2>/dev/null \
-        | grep -oP '"value":\s*"?\K[0-9]+' || echo "0")
+        | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
     down="${val:-0}"
 
     echo "${up} ${down}"

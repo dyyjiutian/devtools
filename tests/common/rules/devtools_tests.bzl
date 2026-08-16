@@ -29,7 +29,10 @@ def devtools_unit_test(
             suite,
         ] + data,
         size = size,
-        tags = tags + ["unit"],
+        tags = tags + [
+            "l1",
+            "unit",
+        ],
     )
 
 def devtools_module_tests(
@@ -74,6 +77,7 @@ def devtools_module_tests(
             data = common_data,
             size = size,
             tags = tags + [
+                "l1",
                 "integration",
                 "compatibility",
                 "profile-%s" % profile,
@@ -97,6 +101,7 @@ def devtools_module_tests(
             ],
             size = "large",
             tags = tags + [
+                "l2",
                 "integration",
                 "compatibility",
                 "profile-%s" % profile,
@@ -152,6 +157,7 @@ def devtools_e2e_tests(
             ] + module_data,
             size = size,
             tags = tags + [
+                "l3",
                 "e2e",
                 "compatibility",
                 "profile-%s" % profile,
@@ -161,3 +167,56 @@ def devtools_e2e_tests(
                 "local",
             ],
         )
+
+def devtools_host_e2e_tests(
+        name,
+        suite,
+        module_root,
+        module_data,
+        setup_args = [],
+        tags = [],
+        size = "enormous"):
+    """Create a Darwin host E2E test (no Docker; used on GitHub macos-26).
+
+    Args:
+      name: Short name (e.g. \"tmux_ops\").
+      suite: Label of the E2E ops suite.
+      module_root: Label of a file inside the module directory (usually setup.sh).
+      module_data: Extra labels needed at runtime.
+      setup_args: Extra flags forwarded to setup.sh.
+      tags: Extra tags added to the test.
+      size: Bazel test size (default enormous; real installs are slow).
+    """
+    setup_arg_flags = []
+    for arg in setup_args:
+        setup_arg_flags.extend(["--setup-arg", arg])
+
+    sh_test(
+        name = "%s_macos_e2e_test" % name,
+        srcs = ["//tests/common:lib/run_e2e_test.sh"],
+        args = [
+            "--suite",
+            "$(rootpath %s)" % suite,
+            "--module-root",
+            "$(rootpath %s)" % module_root,
+        ] + setup_arg_flags,
+        data = [
+            "//tests/common:lib_files",
+            suite,
+            module_root,
+        ] + module_data,
+        env = {
+            "DEVTOOLS_E2E_REQUIRE_DARWIN": "1",
+        },
+        size = size,
+        tags = tags + [
+            "l3",
+            "e2e",
+            "compatibility",
+            "profile-macos",
+            "requires-macos",
+            "requires-network",
+            "no-sandbox",
+            "local",
+        ],
+    )

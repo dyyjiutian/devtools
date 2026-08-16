@@ -4,6 +4,7 @@ load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "ci/select_layers.sh",
     "lib/run_unit_test.sh",
     "lib/run_module_test.sh",
     "lib/run_e2e_test.sh",
@@ -58,6 +59,18 @@ devtools_unit_test(
     suite = ":tests/unit/e2e_runner_suite.sh",
     data = [
         ":docker_files",
+    ],
+    tags = [
+        "contract",
+        "smoke",
+    ],
+)
+
+devtools_unit_test(
+    name = "select_layers_unit_test",
+    suite = ":tests/unit/select_layers_suite.sh",
+    data = [
+        "ci/select_layers.sh",
     ],
     tags = [
         "contract",

@@ -22,7 +22,7 @@ close_master() {
 }
 
 reset_terminal() {
-    [[ "$INTERACTIVE_SESSION_STARTED" == "true" ]] || return
+    [[ "$INTERACTIVE_SESSION_STARTED" == "true" ]] || return 0
 
     printf '\033[?1000l'   # disable X10 mouse click reporting
     printf '\033[?1002l'   # disable mouse drag (button-event) reporting

@@ -1,4 +1,4 @@
-load("//tests/common/rules:devtools_tests.bzl", "devtools_e2e_tests", "devtools_module_tests")
+load("//tests/common/rules:devtools_tests.bzl", "devtools_e2e_tests", "devtools_host_e2e_tests", "devtools_module_tests")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -46,5 +46,13 @@ devtools_e2e_tests(
         "linux_alinux3",
         "linux_alinux4",
     ],
+    setup_args = ["--upgrade"],
+)
+
+devtools_host_e2e_tests(
+    name = "tmux_ops",
+    suite = ":tests/e2e/tmux_ops_suite.sh",
+    module_root = ":setup.sh",
+    module_data = [":tmux_srcs"],
     setup_args = ["--upgrade"],
 )

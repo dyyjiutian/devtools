@@ -523,6 +523,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## Issues
 
+### 2026-08-17 — L1 VPN 测试在 macOS 上失败
+
+**表象**：`linux_setup.sh --help` 直接报「仅支持 Linux」；`manage_test` 报 `grep: invalid option -- P`，流量断言错；`linux_setup_test` 在 geo 缓存步骤调用 curl 并报「geoip.dat 下载失败」。
+
+**根因**：Darwin 检查写在 `--help` 解析之前；`get_user_session_traffic` 用了 GNU `grep -P`；`file_size` 只用 GNU `stat -c%s`，在 BSD `stat` 上得到 0，缓存被当成无效。
+
+**解法**：直接执行时 `--help` 可用；`source` 时不做 Darwin 拦截。流量解析改用 `sed`。`file_size` 回退到 `stat -f%z`。
+
 ### 2026-08-04 — 国内网络下载 geoip.dat / geosite.dat 超时
 
 **症状**：`linux_setup.sh` / `macos_setup.sh` 安装时从 `cdn.jsdelivr.net` 拉

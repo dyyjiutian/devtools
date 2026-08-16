@@ -80,3 +80,13 @@ bash cache/download.sh linux    # 仅下载 Linux 所需
 将对应文件下载到 `scripts/` 或 `binaries/` 目录后 `git add` 提交即可。
 
 **自动生效**：setup 脚本会自动检测缓存目录，有缓存则直接使用，无缓存则联网下载。无需传任何参数。
+
+## Issues
+
+### 2026-08-17 — L1 `download_unit_test` 在 macOS 上找不到 `sha256sum`
+
+**表象**：`bazel test //cache:download_unit_test` 报 `sha256sum: command not found`，随后把合法缓存当成损坏并尝试下载。
+
+**根因**：`download_verified` 只调用 GNU `sha256sum`；Darwin 提供的是 `shasum -a 256`。
+
+**解法**：增加 `file_sha256`，按 `sha256sum` / `shasum` 回退。

@@ -29,6 +29,24 @@ success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
+# Portable SHA-256 (GNU sha256sum or macOS shasum).
+file_sha256() {
+  local file="$1" bin
+  for bin in sha256sum /usr/bin/sha256sum /bin/sha256sum; do
+    if command -v "$bin" >/dev/null 2>&1 || [[ -x "$bin" ]]; then
+      "$bin" "$file" | awk '{print $1}'
+      return 0
+    fi
+  done
+  for bin in shasum /usr/bin/shasum; do
+    if command -v "$bin" >/dev/null 2>&1 || [[ -x "$bin" ]]; then
+      "$bin" -a 256 "$file" | awk '{print $1}'
+      return 0
+    fi
+  done
+  return 1
+}
+
 # 下载单个文件，已存在则跳过
 download() {
   local url="$1"
@@ -55,7 +73,7 @@ download_verified() {
   local actual_sha256 tmp
 
   if [[ -f "$dest" ]]; then
-    actual_sha256="$(sha256sum "$dest" | awk '{print $1}')" || actual_sha256=""
+    actual_sha256="$(file_sha256 "$dest")" || actual_sha256=""
     if [[ "$actual_sha256" == "$expected_sha256" ]]; then
       info "已存在且校验通过，跳过: $(basename "$dest")"
       return 0
@@ -75,7 +93,7 @@ download_verified() {
     return 1
   fi
 
-  actual_sha256="$(sha256sum "$tmp" | awk '{print $1}')" || actual_sha256=""
+  actual_sha256="$(file_sha256 "$tmp")" || actual_sha256=""
   if [[ "$actual_sha256" != "$expected_sha256" ]]; then
     error "SHA-256 校验失败: $(basename "$dest")"
     rm -f "$tmp"

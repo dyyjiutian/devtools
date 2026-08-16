@@ -11,7 +11,9 @@ sh_test(
     ],
     size = "small",
     tags = [
+        "l1",
         "local",
+        "no-sandbox",
         "smoke",
     ],
 )

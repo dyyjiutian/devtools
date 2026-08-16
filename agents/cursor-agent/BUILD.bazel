@@ -33,4 +33,7 @@ devtools_module_tests(
         "linux_alinux4",
         "macos",
     ],
+    tags = [
+        "no-sandbox",
+    ],
 )
