@@ -200,12 +200,30 @@ packages_list_default_is_installed() {
   [[ -n "$cmd" ]] && command -v "$cmd" &>/dev/null
 }
 
+# Grow a column width to at least the display length of value.
+packages_list_width() {
+  local width="$1" value="$2"
+  local n=${#value}
+  if [[ "$n" -gt "$width" ]]; then
+    printf '%s\n' "$n"
+  else
+    printf '%s\n' "$width"
+  fi
+}
+
+packages_list_dashes() {
+  printf '%*s' "$1" '' | tr ' ' '-'
+}
+
 # Print install status for every entry (honors PACKAGES_FILTER_KIND / PACKAGES_FILTER_TAG).
 # If the caller defined package_is_installed(name, version, source), use it;
 # otherwise fall back to packages_list_default_is_installed.
+# Columns are sized from headers plus visible rows so STATUS stays aligned.
 packages_list_check() {
   local list_file="$1"
   local installed=0 missing=0 skipped=0
+  local name_w=4 version_w=7 source_w=6 kind_w=4 tags_w=4 status_w=6
+  local rows="" fmt
 
   if [[ ! -f "$list_file" ]]; then
     echo "packages_list_check: file not found: $list_file" >&2
@@ -215,9 +233,6 @@ packages_list_check() {
   if [[ -n "${PACKAGES_FILTER_KIND:-}" || -n "${PACKAGES_FILTER_TAG:-}" ]]; then
     echo "filters: kind=${PACKAGES_FILTER_KIND:-*} tag=${PACKAGES_FILTER_TAG:-*}"
   fi
-
-  printf '%-20s %-10s %-12s %-6s %-22s %s\n' "NAME" "VERSION" "SOURCE" "KIND" "TAGS" "STATUS"
-  printf '%-20s %-10s %-12s %-6s %-22s %s\n' "----" "-------" "------" "----" "----" "------"
 
   _packages_list_check_cb() {
     local name="$1" version="$2" source="$3" kind="$4" tags="$5" status
@@ -242,10 +257,39 @@ packages_list_check() {
         missing=$((missing + 1))
       fi
     fi
-    printf '%-20s %-10s %-12s %-6s %-22s %s\n' "$name" "$version" "$source" "$kind" "$tags" "$status"
+    name_w="$(packages_list_width "$name_w" "$name")"
+    version_w="$(packages_list_width "$version_w" "$version")"
+    source_w="$(packages_list_width "$source_w" "$source")"
+    kind_w="$(packages_list_width "$kind_w" "$kind")"
+    tags_w="$(packages_list_width "$tags_w" "$tags")"
+    status_w="$(packages_list_width "$status_w" "$status")"
+    rows="${rows}${name}"$'\t'"${version}"$'\t'"${source}"$'\t'"${kind}"$'\t'"${tags}"$'\t'"${status}"$'\n'
   }
 
   packages_list_foreach "$list_file" _packages_list_check_cb || return $?
+
+  fmt="%-${name_w}s %-${version_w}s %-${source_w}s %-${kind_w}s %-${tags_w}s %-${status_w}s\n"
+  # shellcheck disable=SC2059
+  printf "$fmt" "NAME" "VERSION" "SOURCE" "KIND" "TAGS" "STATUS"
+  # shellcheck disable=SC2059
+  printf "$fmt" \
+    "$(packages_list_dashes "$name_w")" \
+    "$(packages_list_dashes "$version_w")" \
+    "$(packages_list_dashes "$source_w")" \
+    "$(packages_list_dashes "$kind_w")" \
+    "$(packages_list_dashes "$tags_w")" \
+    "$(packages_list_dashes "$status_w")"
+
+  if [[ -n "$rows" ]]; then
+    while IFS=$'\t' read -r name version source kind tags status || [[ -n "${name:-}" ]]; do
+      [[ -z "${name:-}" ]] && continue
+      # shellcheck disable=SC2059
+      printf "$fmt" "$name" "$version" "$source" "$kind" "$tags" "$status"
+    done <<EOF
+${rows}
+EOF
+  fi
+
   echo ""
   if [[ "$skipped" -gt 0 ]]; then
     echo "summary: ${installed} installed, ${missing} missing (${skipped} filtered out)"

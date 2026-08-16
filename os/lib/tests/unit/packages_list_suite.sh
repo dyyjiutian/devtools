@@ -43,4 +43,39 @@ assert_eq "$(packages_list_get_version "$UBUNTU_LIST" glow)" "2.1.2" \
 assert_eq "$(packages_list_brew_formula rg)" "ripgrep" "rg Homebrew formula"
 assert_eq "$(packages_list_sys_pkg rg)" "ripgrep" "rg system package"
 
+assert_check_status_aligned() {
+  local out="$1" label="$2"
+  local header status_idx line idx
+  header="$(printf '%s\n' "$out" | awk '/^NAME /{print; exit}')"
+  [[ -n "$header" ]] || { echo "FAIL: ${label}: missing NAME header" >&2; return 1; }
+  status_idx="$(awk -v h="$header" 'BEGIN { print index(h, "STATUS") }')"
+  [[ "$status_idx" -gt 0 ]] || { echo "FAIL: ${label}: STATUS not in header" >&2; return 1; }
+  while IFS= read -r line; do
+    case "$line" in
+      NAME*|-*|""|filters:*|summary:*) continue ;;
+    esac
+    idx="$(awk -v s="$line" 'BEGIN {
+      n = match(s, /installed|missing/)
+      print n + 0
+    }')"
+    if [[ "$idx" -ne "$status_idx" ]]; then
+      echo "FAIL: ${label}: STATUS at column ${idx}, expected ${status_idx}" >&2
+      echo "  ${line}" >&2
+      return 1
+    fi
+  done <<<"$out"
+}
+
+CHECK_FIXTURE="$(mktemp "${TMPDIR:-/tmp}/packages-check.XXXXXX")"
+cat >"$CHECK_FIXTURE" <<'EOF'
+git               latest      brew        cli   dev
+rg                latest      brew        cli   productivity,diagnostic
+visual-studio-code latest     brew-cask   gui   productivity,dev
+EOF
+assert_check_status_aligned "$(packages_list_check "$CHECK_FIXTURE")" \
+  "fixture with long tags"
+rm -f "$CHECK_FIXTURE"
+assert_check_status_aligned "$(packages_list_check "$MACOS_LIST")" \
+  "macOS packages.list"
+
 pass "packages.list parser and repository manifests"
