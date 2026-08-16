@@ -186,6 +186,21 @@ vim-plug 会提示确认后删除未声明的插件目录。
 - `vimrc`：在插件加载后覆盖 `gitgutter#utility#base_path`，按当前文件路径解析，跳过整库 rename 扫描（刚 rename、仍需按旧路径对 index 的极少数场景可能不准）。
 - 已有环境重新应用：`bash editors/vim/setup.sh`（或 `--dry-run` 预览）。
 
+### 2026-08-16 — Alinux 3 镜像未升级 Vim，gd/gr 无映射
+
+**问题表象**
+
+- `alinux3-devbox` 里系统 Vim 是 8.0.1763，打开 `setup.sh` 按 `gd` / `gr` 没反应。
+
+**根因**
+
+- coc.nvim 需要 8.1.1719+；`vimrc` 把 `gd`/`gr` 包在 `has('patch-8.1.1719')` 里。镜像 bootstrap 调用 `editors/vim/setup.sh` 时没有 `--upgrade`，安装器按设计跳过 coc。
+
+**解法**
+
+- 镜像改为 `editors/vim/setup.sh --upgrade`（包管理器不够新则源码装到 `~/.local` 的 9.2.x，再装 coc-sh）。
+- 已有容器可手动：`bash /opt/devtools/editors/vim/setup.sh --upgrade`。
+
 ### 2026-07-30 — Vim 过旧时只能跳过 coc，无法一键升级
 
 **问题表象**

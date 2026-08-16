@@ -367,6 +367,18 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 ## Issues
 
+### 2026-08-16 — 构建期没装上 bashls，打开 setup.sh 时 gd/gr 没反应
+
+**表象**：`alinux3-devbox` 里 `nvim setup.sh` 按 `gd` / `gr` 没有映射、没有结果。`:LspInfo` 无 client。
+
+**根因**：`setup.sh` 的「Installing LSP servers」只跑 `MasonToolsInstallSync`，它只安装 `mason-tool-installer` 名单。`bashls` 写在 `mason-lspconfig` 的 `ensure_installed` 里，那是异步的，headless `qa!` 还没下完就退出。`gd`/`gr` 只在 `LspAttach` 后绑定。
+
+**解法**：把常用 LSP（`bashls`、`lua_ls`、`pyright`、`jsonls`、`yamlls`、`ts_ls`）放进 `mason-tool-installer`；`NVIM_SETUP_STRICT=1` 时校验 `~/.local/share/nvim/mason/packages/bash-language-server` 等目录。`gopls` / `clangd` 仍只由 `mason-lspconfig` 按需安装。已有环境：
+
+```bash
+cd editors/nvim && ./setup.sh --update
+```
+
 ### 2026-08-15 — headless Lazy sync 未等克隆结束，镜像里打开文件会全量装插件
 
 **表象**：`alinux3-devbox` 里第一次 `nvim <file>` 会 clone 全部 lazy 插件。

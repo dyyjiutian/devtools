@@ -48,6 +48,15 @@ bootstrap="$(cat "$BOOTSTRAP")"
 assert_contains "$bootstrap" "NVIM_SETUP_STRICT" "bootstrap enables strict nvim plugin install"
 assert_contains "$bootstrap" "install_bat" "bootstrap installs bat"
 assert_contains "$bootstrap" "install_rg" "bootstrap installs rg"
+assert_contains "$bootstrap" 'editors/vim/setup.sh" --upgrade' \
+  "bootstrap upgrades Vim so coc.nvim / gd / gr work on Alinux 3"
+nvim_setup="$(cat "${REPO_ROOT}/editors/nvim/setup.sh")"
+assert_contains "$nvim_setup" "_assert_mason_lsps_installed" \
+  "nvim setup fails the image build if bashls was not installed"
+nvim_lsp="$(cat "${REPO_ROOT}/editors/nvim/lua/plugins/lsp.lua")"
+nvim_tools="$(awk '/require\("mason-tool-installer"\)/,/debounce_hours/' <<<"$nvim_lsp")"
+assert_contains "$nvim_tools" '"bashls"' \
+  "mason-tool-installer waits for bashls during image bootstrap"
 
 dockerfile="$(cat "$DOCKERFILE")"
 assert_contains "$dockerfile" "COPY --chown=admin:admin editors/vim" "Dockerfile copies editors/vim"

@@ -12,6 +12,13 @@ _devtools_write_exec() {
   chmod +x "$path"
 }
 
+# Bazel runfiles expose lua/ as symlinks. macOS grep -R does not follow them.
+_lua_grep_count() {
+  local pattern="$1"
+  { find -L "$MODULE_ROOT/lua" -name '*.lua' -exec grep -h -o "$pattern" {} + || true; } \
+    | wc -l | tr -d ' '
+}
+
 # Build a minimal nvim-linux-x86_64 tarball matching upstream layout.
 make_fake_nvim_tarball() {
   local dest="$1"
@@ -275,12 +282,12 @@ test_copilot_plugin_wired() {
   assert_not_contains "$tab_block" "select_prev_item" "cmp <Tab> does not navigate prev"
 
   # <C-j> / <C-S-g> must be unique in insert mode across plugin specs.
-  hits="$( { grep -Rho '"i", *"<C-j>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+  hits="$(_lua_grep_count '"i", *"<C-j>"')"
   [[ "$hits" == "1" ]] || {
     echo "FAIL: insert-mode <C-j> mapped $hits times, expected 1" >&2
     return 1
   }
-  hits="$( { grep -Rho '"i", *"<C-S-g>"' "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+  hits="$(_lua_grep_count '"i", *"<C-S-g>"')"
   [[ "$hits" == "1" ]] || {
     echo "FAIL: insert-mode <C-S-g> mapped $hits times, expected 1" >&2
     return 1
@@ -367,9 +374,8 @@ test_leader_keys_are_unique() {
   assert_not_contains "$keymaps" '"<leader>d", [[' "no bare <leader>d delete mapping"
 
   # Mapping one key twice means load order silently decides the winner.
-  # -R follows symlinks: bazel runfiles expose lua/ as links.
   for key in "<leader>e" "<leader>q" "<leader>o" "<leader>tt" "<leader>cf" "<leader>sr"; do
-    hits="$( { grep -Rho "\"$key\"" "$MODULE_ROOT/lua" || true; } | wc -l | tr -d ' ')"
+    hits="$(_lua_grep_count "\"$key\"")"
     [[ "$hits" == "1" ]] || {
       echo "FAIL: $key mapped $hits times, expected 1" >&2
       return 1
@@ -444,6 +450,29 @@ test_format_and_tools_wired() {
     assert_contains "$lsp" "\"$tool\"," "mason installs $tool"
   done
   pass "nvim format and mason tools wired ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_lsp_mason_tools_preinstall_common_servers() {
+  # MasonToolsInstallSync only waits on mason-tool-installer. Servers that live
+  # solely in mason-lspconfig ensure_installed are started async and get killed
+  # by headless qa!, so gd/gr on .sh files stay unmapped in the image.
+  local tools
+  tools="$(awk '/require\("mason-tool-installer"\)/,/debounce_hours/' \
+    "$MODULE_ROOT/lua/plugins/lsp.lua")"
+  for name in bashls lua_ls pyright jsonls yamlls ts_ls; do
+    assert_contains "$tools" "\"$name\"" "mason-tool-installer waits for $name"
+  done
+  pass "nvim mason-tool-installer preinstalls common LSPs ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_setup_asserts_mason_bashls_when_strict() {
+  local setup
+  setup="$(cat "$SETUP_SH")"
+  assert_contains "$setup" "_assert_mason_lsps_installed" \
+    "setup verifies mason LSPs after install"
+  assert_contains "$setup" "bash-language-server" \
+    "strict setup requires bash-language-server"
+  pass "nvim setup asserts mason bashls when strict ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_update_syncs_config_then_plugins() {
@@ -551,6 +580,34 @@ test_setup_quotes_lazy_sync() {
   pass "nvim setup quotes Lazy sync ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_setup_strict_fails_when_mason_lsps_missing() {
+  local alt_bin="$HOME/nvim-mason-strict-bin"
+  local out
+
+  mkdir -p "$alt_bin"
+  rm -rf "$HOME/.local/share/nvim/mason"
+  _devtools_write_exec "$alt_bin/nvim" '
+if [[ "${1:-}" == "--version" ]]; then echo "NVIM v0.10.4"; fi
+exit 0
+'
+
+  out="$(
+    PATH="$alt_bin:$PATH" HOME="$HOME" NVIM_SETUP_STRICT=1 SETUP_NO_MAIN=1 /bin/bash -c '
+      setup="$1"
+      set --
+      # shellcheck disable=SC1090
+      source "$setup"
+      _install_mason_tools
+    ' _ "$SETUP_SH" 2>&1
+  )" && {
+    echo "FAIL: strict mason install succeeded without packages: $out" >&2
+    return 1
+  }
+  assert_contains "$out" "mason package missing after install" \
+    "strict mode reports missing mason LSPs"
+  pass "nvim strict setup fails when mason LSPs are missing ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_strict_fails_when_plugins_missing() {
   local alt_bin="$HOME/nvim-strict-bin"
   local out
@@ -591,12 +648,15 @@ test_leader_keys_are_unique
 test_ide_plugins_present
 test_ide_plugins_pinned_for_nvim_010
 test_format_and_tools_wired
+test_lsp_mason_tools_preinstall_common_servers
+test_setup_asserts_mason_bashls_when_strict
 test_copilot_plugin_wired
 test_lazy_cmd_stubs_for_user_commands
 test_telescope_ignore_patterns_are_escaped
 test_update_syncs_config_then_plugins
 test_restore_flag_removed
 test_setup_quotes_lazy_sync
+test_setup_strict_fails_when_mason_lsps_missing
 test_setup_strict_fails_when_plugins_missing
 
 echo "PASS: nvim suite complete ($DEVTOOLS_TEST_PROFILE)"

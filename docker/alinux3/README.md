@@ -3,7 +3,7 @@
 基于 Alibaba Cloud Linux 3（RHEL 8 系）的 x86_64 开发镜像。构建时调用仓库里现有的模块安装器，开箱提供：
 
 - Git：`git`、`lazygit`、`delta`、`git rb/bc/wc/review/sparse-clone`，以及推荐 git 配置（**不**写入 `user.name` / `user.email`）
-- Vim / Neovim：分别运行 `editors/vim/setup.sh` 与 `editors/nvim/setup.sh`（Linux Neovim 固定 0.10.4，兼容 Alinux 3 glibc）
+- Vim / Neovim：`editors/vim/setup.sh --upgrade`（Alinux 3 自带 Vim 8.0，升级到 9.2 后才装得了 coc / `gd` `gr`）与 `editors/nvim/setup.sh`（Linux Neovim 固定 0.10.4；构建期同步安装 `bashls` 等常用 LSP）
 - tmux 3.7b 与本仓库 `tmux.conf` / TPM 插件
 - Bash：ble.sh、fzf、zoxide、Starship（`shell/bash/setup.sh`）
 - 常见 CLI：`jq`、`tree`、`rg`、`bat`（与 `os/linux/packages.centos.list` 对齐；`cloc` 有包则装）
@@ -51,7 +51,7 @@ docker build --platform linux/amd64 \
 docker run --rm -it alinux3-devbox:latest
 ```
 
-进入后可直接使用 `git`、`lazygit`、`vim`、`nvim`、`tmux`、`rg`、`jq`、`bat`、`tree`。Bash 已配置 ble / fzf / zoxide / starship。Neovim 插件、treesitter parser 已在构建期装好，打开文件不应再触发全量安装。需要把当前目录挂进去时：
+进入后可直接使用 `git`、`lazygit`、`vim`、`nvim`、`tmux`、`rg`、`jq`、`bat`、`tree`。Bash 已配置 ble / fzf / zoxide / starship。Neovim 插件、treesitter parser 和常用 LSP（含 `bashls`）已在构建期装好，打开文件不应再触发全量安装；`gd` / `gr` 应对 `.sh` 立即生效。Vim 为 9.2 + coc-sh。需要把当前目录挂进去时：
 
 ```bash
 docker run --rm -it -v "$PWD:/workspace" -w /workspace alinux3-devbox:latest
@@ -81,6 +81,18 @@ DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
 ```
 
 ## Issues
+
+### 2026-08-16 — 镜像里 vim / nvim 打开 setup.sh 时 gd/gr 没反应
+
+**表象**：`alinux3-devbox` 里 `vim setup.sh` / `nvim setup.sh` 按 `gd`、`gr` 完全没反应。
+
+**根因**：两者都依赖 Shell LSP。系统 Vim 是 8.0.1763，低于 coc.nvim 的 8.1.1719，bootstrap 又没加 `--upgrade`，coc 和 `gd`/`gr` 映射整段被跳过。nvim 的 `MasonToolsInstallSync` 只等 `mason-tool-installer`；`bashls` 写在 `mason-lspconfig` 的异步 `ensure_installed` 里，headless `qa!` 时还没下完就退出，打开 `.sh` 时没有 client attach，`LspAttach` 里的 `gd`/`gr` 也就不会绑定。
+
+**解法**：bootstrap 改为 `editors/vim/setup.sh --upgrade`。把 `bashls` / `lua_ls` / `pyright` / `jsonls` / `yamlls` / `ts_ls` 放进 `mason-tool-installer`，`NVIM_SETUP_STRICT=1` 时校验 mason 包目录。`gopls` / `clangd` 仍只在 `mason-lspconfig` 里按需装。重新构建：
+
+```bash
+bash docker/alinux3/bake.sh
+```
 
 ### 2026-08-15 — 镜像 COPY 路径与仓库重组脱节，且误钉 Neovim 0.11
 

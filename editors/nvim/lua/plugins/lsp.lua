@@ -111,7 +111,12 @@ return {
 
     require("mason").setup()
 
-    -- Formatters, linters and debug adapters (not every LSP).
+    -- Formatters, linters, debug adapters, and the common LSPs that setup.sh
+    -- waits for via MasonToolsInstallSync. Servers only listed in
+    -- mason-lspconfig ensure_installed start async and get killed by headless
+    -- qa!, so gd/gr stay unmapped (e.g. bashls on setup.sh in the image).
+    -- gopls / clangd stay in mason-lspconfig only: they need Go / a large
+    -- clangd download and are optional on Alinux 3 images.
     -- Debounce avoids "X: installing" spam each start.
     require("mason-tool-installer").setup({
       ensure_installed = {
@@ -122,6 +127,12 @@ return {
         "shellcheck",
         "debugpy",
         "delve",
+        "lua_ls",
+        "pyright",
+        "bashls",
+        "jsonls",
+        "yamlls",
+        "ts_ls",
       },
       auto_update = false,
       run_on_start = true,

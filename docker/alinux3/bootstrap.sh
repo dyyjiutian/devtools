@@ -257,7 +257,7 @@ main() {
   run_module "${ROOT}/tools/git/setup.sh" --skip-identity --skip-delta
 
   step "vim"
-  run_module "${ROOT}/editors/vim/setup.sh"
+  run_module "${ROOT}/editors/vim/setup.sh" --upgrade
 
   step "nvim"
   run_module "${ROOT}/editors/nvim/setup.sh"

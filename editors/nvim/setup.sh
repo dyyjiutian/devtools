@@ -258,12 +258,48 @@ _sync_treesitter_parsers() {
     fi
 }
 
+_mason_packages_root() {
+    echo "${XDG_DATA_HOME:-$HOME/.local/share}/nvim/mason/packages"
+}
+
+# MasonToolsInstallSync only waits on mason-tool-installer. Confirm the
+# common LSPs actually landed so gd/gr work on first file open.
+_assert_mason_lsps_installed() {
+    local mason_root name
+    mason_root="$(_mason_packages_root)"
+    local required=(
+        bash-language-server
+        lua-language-server
+        pyright
+        json-lsp
+        yaml-language-server
+        typescript-language-server
+    )
+    for name in "${required[@]}"; do
+        if [[ ! -d "${mason_root}/${name}" ]]; then
+            error "mason package missing after install: ${name}"
+            return 1
+        fi
+    done
+}
+
 _install_mason_tools() {
     info "Installing Mason tools (formatters / ensured LSPs)..."
     if _nvim_headless "MasonToolsInstallSync"; then
         success "Mason tools installed"
     else
+        if _nvim_strict; then
+            error "MasonToolsInstallSync failed"
+            exit 1
+        fi
         warn "MasonToolsInstallSync reported errors; use :Mason if needed"
+        return 0
+    fi
+    if ! _assert_mason_lsps_installed; then
+        if _nvim_strict; then
+            exit 1
+        fi
+        warn "some mason LSPs are missing; open nvim and run :Mason"
     fi
 }
 

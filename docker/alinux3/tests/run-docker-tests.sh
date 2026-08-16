@@ -60,6 +60,12 @@ docker run --rm --platform linux/amd64 --user admin "$IMAGE" bash -lc '
   test -d "$HOME/.local/share/nvim/lazy/telescope.nvim"
   test -d "$HOME/.local/share/nvim/lazy/nvim-cmp"
   test "$(find "$HOME/.local/share/nvim/lazy" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d " ")" -ge 40
+  test -d "$HOME/.local/share/nvim/mason/packages/bash-language-server"
+  test -x "$HOME/.local/share/nvim/mason/bin/bash-language-server" \
+    -o -L "$HOME/.local/share/nvim/mason/bin/bash-language-server"
+  vim --version | head -1 | grep -F 'Vi IMproved 9.'
+  test -d "$HOME/.vim/plugged/coc.nvim"
+  test -d "$HOME/.config/coc/extensions/node_modules/coc-sh"
   test -f "$HOME/.tmux.conf"
   test -x "$HOME/.local/bin/git-rb"
   ! git config --global --get user.name
