@@ -51,7 +51,9 @@ Neovim Setup Script - 一键配置 Neovim 开发环境
   NVIM_INSTALL_DIR     Linux 解压目录（默认 ~/.local/nvim）
   DEVTOOLS_CACHE_DIR   离线缓存根目录（默认仓库 cache/）
   NVIM_SETUP_STRICT    设为 1 时，插件 / treesitter 同步失败则退出（镜像构建）
-  NVIM_SETUP_QUIET     设为 1 时，headless sync 不刷进度（避免 BuildKit 1MiB 日志上限）
+  NVIM_SETUP_QUIET     设为 1 时，headless sync 不刷进度（避免 BuildKit / Bazel 1MiB 日志上限）
+  NVIM_SETUP_SKIP_TREESITTER  设为 1 时跳过 TSUpdateSync（E2E ops 不依赖 parser）
+  NVIM_SETUP_SKIP_MASON       设为 1 时跳过 MasonToolsInstallSync（E2E ops 不依赖 LSP）
 EOF
     # Keep keybindings in a separate literal block for readability
     cat <<'EOF'
@@ -171,6 +173,14 @@ _nvim_quiet() {
     [[ "${NVIM_SETUP_QUIET:-}" == "1" || "${NVIM_SETUP_QUIET:-}" == "true" ]]
 }
 
+_nvim_skip_treesitter() {
+    [[ "${NVIM_SETUP_SKIP_TREESITTER:-}" == "1" || "${NVIM_SETUP_SKIP_TREESITTER:-}" == "true" ]]
+}
+
+_nvim_skip_mason() {
+    [[ "${NVIM_SETUP_SKIP_MASON:-}" == "1" || "${NVIM_SETUP_SKIP_MASON:-}" == "true" ]]
+}
+
 _nvim_headless() {
     local cmd="$1"
     local log
@@ -263,6 +273,10 @@ _sync_lazy_plugins() {
 }
 
 _sync_treesitter_parsers() {
+    if _nvim_skip_treesitter; then
+        info "Skipping treesitter parsers (NVIM_SETUP_SKIP_TREESITTER=1)"
+        return 0
+    fi
     info "Installing treesitter parsers..."
     if _nvim_headless "TSUpdateSync"; then
         success "Treesitter parsers installed"
@@ -301,6 +315,10 @@ _assert_mason_lsps_installed() {
 }
 
 _install_mason_tools() {
+    if _nvim_skip_mason; then
+        info "Skipping Mason tools (NVIM_SETUP_SKIP_MASON=1)"
+        return 0
+    fi
     info "Installing Mason tools (formatters / ensured LSPs)..."
     if _nvim_headless "MasonToolsInstallSync"; then
         success "Mason tools installed"

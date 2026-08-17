@@ -549,7 +549,7 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 **根因**：CI 默认并行跑多个特权 systemd 容器，cgroup 争用时 `systemctl is-system-running` 会长时间停在 `starting`。90s 超时不够。
 
-**解法**：等待加到 180s；E2E Linux job 使用 `--jobs=1`。
+**解法**：等待加到 180s。Linux E2E 使用 `--jobs=2`（ubuntu-latest 4 vCPU）；`run_compose_e2e.sh` 用 `flock` 串行化特权 systemd compose，避免 cgroup 争用。
 
 ### 2026-08-17 — L1 VPN 测试在 macOS 上失败
 

@@ -245,5 +245,5 @@ vim-plug 会提示确认后删除未声明的插件目录。
 
 **根因**：macOS E2E 默认并行，Homebrew 不能同时写 Cellar。
 
-**解法**：`.github/workflows/e2e.yml` 的 macOS job 使用 `--jobs=1`。
+**解法**：`.github/workflows/e2e.yml` 的 macOS job 使用 `--jobs=2`（macos-26 约 3–4 核）。`run_e2e_test.sh` 用目录锁串行化 `brew`，避免并行抢 Cellar。
 

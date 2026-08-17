@@ -382,7 +382,7 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 **根因**：ALinux 4 E2E 镜像只有 `gcc`，没有 `gcc-c++`。treesitter / mason 编译 parser 时可能刷大量错误。
 
-**解法**：`Dockerfile.e2e.alinux3` / `Dockerfile.e2e.alinux4` 安装 `gcc-c++`。
+**解法**：`Dockerfile.e2e.alinux3` / `Dockerfile.e2e.alinux4` 安装 `gcc-c++`。E2E 仍可能被 Lazy/Mason/TSUpdate 进度打满 Bazel 1MiB UI 上限而看不到真正的 Exit 1。`run_e2e_test.sh` 默认 `NVIM_SETUP_QUIET=1`，并跳过 ops 不需要的 `TSUpdateSync` / Mason（`NVIM_SETUP_SKIP_TREESITTER=1`、`NVIM_SETUP_SKIP_MASON=1`）。GitHub E2E 同时把 `--experimental_ui_max_stdouterr_bytes` 提到 10MiB。
 
 ### 2026-08-16 — 构建期没装上 bashls，打开 setup.sh 时 gd/gr 没反应
 

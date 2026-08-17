@@ -28,9 +28,10 @@ jobs:
       - uses: bazelbuild/setup-bazelisk@v3
       - name: E2E Linux Docker real setup
         # Comma-separated positive tags are OR. Use -requires-macos so Linux
-        # Docker E2E does not pick up Darwin host tests. --jobs=1 avoids
-        # privileged systemd containers starving each other.
-        run: bazel test --config=l3 --test_tag_filters=l3,-requires-macos --jobs=1 //...
+        # Docker E2E does not pick up Darwin host tests. GitHub ubuntu-latest
+        # has 4 vCPUs; --jobs=2 leaves headroom for nested Docker. Raise the
+        # UI log cap so a noisy nvim setup cannot hide the real Exit 1.
+        run: bazel test --config=l3 --test_tag_filters=l3,-requires-macos --jobs=2 --experimental_ui_max_stdouterr_bytes=10485760 //...
 
   e2e-macos:
     needs: select
@@ -43,5 +44,6 @@ jobs:
       - name: E2E macOS host real setup
         # requires-macos only (not l3,requires-macos). Bazel ORs positive tags,
         # so including l3 would also run Linux Docker E2E on Darwin.
-        # Serialize brew installs; parallel jobs lock Homebrew Cellar.
-        run: bazel test --config=l3 --test_tag_filters=requires-macos --jobs=1 //...
+        # macos-26 is 3–4 cores; --jobs=2. Homebrew is serialized via a lock
+        # in run_e2e_test.sh so parallel brew installs cannot lock Cellar.
+        run: bazel test --config=l3 --test_tag_filters=requires-macos --jobs=2 --experimental_ui_max_stdouterr_bytes=10485760 //...

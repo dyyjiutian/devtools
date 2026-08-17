@@ -150,9 +150,29 @@ if [[ "$(uname -s)" == Darwin ]]; then
   if [[ -d "${HOST_HOME}/Library/Caches/Homebrew" ]]; then
     export HOMEBREW_CACHE="${HOST_HOME}/Library/Caches/Homebrew"
   fi
+  # Serialize brew across --jobs=2 so Cellar locks cannot fail sibling tests.
+  real_brew="$(command -v brew 2>/dev/null || true)"
+  if [[ -n "$real_brew" && "$real_brew" != "$HOME/.local/bin/brew" ]]; then
+    cat > "$HOME/.local/bin/brew" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+lockdir="\${TMPDIR:-/tmp}/devtools-e2e-brew.lock"
+while ! mkdir "\$lockdir" 2>/dev/null; do
+  sleep 1
+done
+trap 'rmdir "\$lockdir" 2>/dev/null || true' EXIT
+"$real_brew" "\$@"
+EOF
+    chmod +x "$HOME/.local/bin/brew"
+  fi
 fi
 export DEVTOOLS_CACHE_DIR="${DEVTOOLS_CACHE_DIR:-$REPO_ROOT/cache}"
 export NVIM_SETUP_STRICT="${NVIM_SETUP_STRICT:-1}"
+# Headless Lazy/Mason/TSUpdate progress exceeds Bazel's 1MiB UI cap and hides
+# the real error. Ops suite does not need compiled parsers.
+export NVIM_SETUP_QUIET="${NVIM_SETUP_QUIET:-1}"
+export NVIM_SETUP_SKIP_TREESITTER="${NVIM_SETUP_SKIP_TREESITTER:-1}"
+export NVIM_SETUP_SKIP_MASON="${NVIM_SETUP_SKIP_MASON:-1}"
 
 # shellcheck source=tests/common/lib/assert.sh
 source "$TEST_COMMON_LIB/assert.sh"

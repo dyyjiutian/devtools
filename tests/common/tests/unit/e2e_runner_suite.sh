@@ -41,7 +41,11 @@ assert_contains "$host" "cleanup_tmp_home" "host runner ignores overlayfs rm fai
 assert_contains "$host" "HOMEBREW_NO_BOOTSNAP" "host runner disables Homebrew bootsnap under isolated HOME"
 assert_contains "$host" 'HOST_HOME}/.cargo/bin' "host runner keeps the runner cargo bin on PATH"
 assert_contains "$host" 'CARGO_HOME="${HOST_HOME}/.cargo"' "host runner reuses the machine CARGO_HOME"
-assert_contains "$host" 'ln -sfn "$CARGO_HOME" "$HOME/.cargo"' "host runner links isolated HOME to the machine cargo dir"
+assert_contains "$host" "NVIM_SETUP_STRICT" "host runner enables strict nvim plugin install"
+assert_contains "$host" "NVIM_SETUP_QUIET" "host runner suppresses nvim headless progress logs"
+assert_contains "$host" "NVIM_SETUP_SKIP_TREESITTER" "host runner skips treesitter parser compile"
+assert_contains "$host" "NVIM_SETUP_SKIP_MASON" "host runner skips Mason LSP install"
+assert_contains "$host" "devtools-e2e-brew.lock" "host runner serializes brew across parallel jobs"
 
 ubuntu="$(cat "$UBUNTU")"
 assert_contains "$ubuntu" "FROM ubuntu:24.04" "Ubuntu E2E uses Ubuntu 24.04"

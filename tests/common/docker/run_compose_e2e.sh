@@ -216,6 +216,13 @@ fi
 ensure_docker "${ORIGINAL_ARGS[@]}"
 ensure_compose
 
+# GitHub ubuntu-latest runs --jobs=2; serialize privileged systemd stacks
+# so cgroup contention cannot stall systemctl is-system-running.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"${TMPDIR:-/tmp}/devtools-e2e-compose.lock"
+  flock 9
+fi
+
 RUNFILES_ROOT="$(resolve_repo_root)"
 SOURCE_ROOT="$(resolve_source_root "$RUNFILES_ROOT")"
 

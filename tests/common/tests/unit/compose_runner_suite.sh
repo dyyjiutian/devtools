@@ -32,6 +32,7 @@ assert_contains "$runner" "--client-script" "accepts a client installer path"
 assert_contains "$runner" "devtools-e2e-client.env" "loads client env from the server"
 assert_contains "$runner" "compose_project_name" "isolates compose project names"
 assert_contains "$runner" "i -lt 180" "waits up to 180s for systemd"
+assert_contains "$runner" "devtools-e2e-compose.lock" "serializes privileged compose stacks"
 assert_contains "$runner" "docker_build_ipv4" "builds images with IPv4-first pull"
 assert_not_contains "$runner" "setup_os_profile" "Compose E2E does not inject OS fakes"
 
