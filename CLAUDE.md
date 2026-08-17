@@ -113,6 +113,7 @@ Provides only `gitroot` (cd to repo root); it stays an alias because `cd` must r
 All `.sh` scripts in this repository:
 - **Must** start with `set -euo pipefail` (after shebang / file header) for strict error handling
 - Target macOS Bash 3.2+; prefer `${VAR}` when a parameter expansion is adjacent to multibyte characters (see `languages/bash/pitfalls.md`)
+- Docker CLI commands must stay compatible with Docker CE 26. Do not unconditionally pass flags that 26's Buildx lacks (for example `docker buildx bake --allow`); probe the local CLI and add them only when advertised.
 - Include `--help` flag with usage information
 - Create backups before modifying existing files
 - Support `--dry-run` or similar preview modes where applicable
@@ -144,6 +145,8 @@ For new or changed shell functionality:
 - Keep scripts Bash 3.2-compatible and safe to rerun. Configuration changes must
   be idempotent and use markers, backups, or an equivalent managed update
   strategy; repeated runs must not duplicate or damage correct state.
+- Keep Docker CLI usage compatible with Docker CE 26. Do not require newer
+  bake/build flags such as `--allow` unless the local CLI advertises them.
 - Prefer existing interfaces and markers over global state or copied logic.
   Keep CLI handling, use-case orchestration, and system/package/network
   adapters separated.

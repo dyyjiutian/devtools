@@ -24,7 +24,7 @@
 bash docker/alinux3/bake.sh
 ```
 
-也可以直接 bake（定义在本目录 `docker-bake.hcl`）。`bake` 是 Buildx 插件的能力，不绑定某个 docker-ce 小版本；Linux 上要有 `docker-buildx-plugin`（或 Docker Desktop）。Buildx 0.8+ 即可读这份 HCL。若本机开了代理，需要显式改成 Docker 主机地址：
+也可以直接 bake（定义在本目录 `docker-bake.hcl`）。`bake` 是 Buildx 插件的能力。仓库 Docker CLI 兼容基线是 **Docker CE 26**；`bake.sh` 只在本地 `docker buildx bake --help` 列出 `--allow` 时才加上该 flag（Buildx 0.19+）。Linux 上要有 `docker-buildx-plugin`（或 Docker Desktop）。Buildx 0.8+ 即可读这份 HCL。若本机开了代理，需要显式改成 Docker 主机地址：
 
 ```bash
 docker buildx bake -f docker/alinux3/docker-bake.hcl devbox --load \
@@ -84,6 +84,14 @@ DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
 ```
 
 ## Issues
+
+### 2026-08-17 — `bake.sh --allow` 在 Docker CE 26 上 unknown flag
+
+**表象**：`bash docker/alinux3/bake.sh` 报 `unknown flag: --allow`。本机或目标环境是 Docker CE 26（或 Buildx < 0.19），不是 29。
+
+**根因**：`--allow fs.read=...` 是 Buildx 0.19+ 的 bake 文件系统授权。Docker CE 26 自带的 bake 没有这个 flag。脚本为了 worktree 主仓库 `.git` 无条件传了它。
+
+**解法**：以 Docker CE 26 为仓库 CLI 基线。`bake.sh` 先看 `docker buildx bake --help` 是否包含 `--allow`，没有就不传。仓库里其它构建命令（`docker build` / `docker build --platform`）本身就是 26 已有的，无需改。
 
 ### 2026-08-17 — 镜像里 `bash -lc` 找不到 go / java
 

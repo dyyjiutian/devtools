@@ -12,10 +12,11 @@ usage() {
 Usage: bake.sh [OPTION] [-- BAKE_ARG...]
 
 Build the linux/amd64 alinux3-devbox image with docker buildx bake.
-Rewrites 127.0.0.1/localhost in HTTP(S)_PROXY to host.docker.internal so
-the build container can reach a proxy running on the Docker host.
-Aliyun mirrors stay in NO_PROXY and are rewritten to mirrors.aliyun.com
-inside the Dockerfile.
+Compatible with Docker CE 26: bake --allow (Buildx 0.19+) is added only
+when the local CLI advertises it. Rewrites 127.0.0.1/localhost in
+HTTP(S)_PROXY to host.docker.internal so the build container can reach a
+proxy running on the Docker host. Aliyun mirrors stay in NO_PROXY and are
+rewritten to mirrors.aliyun.com inside the Dockerfile.
 
 The image is tagged alinux3-devbox:YYYYMMDD-HHMM (local time, minute)
 and alinux3-devbox:latest. Override with IMAGE_TAG.
@@ -64,8 +65,14 @@ NO_PROXY_VAL="$(join_no_proxy "${NO_PROXY:-${no_proxy:-}}")"
 IMAGE_TAG="${IMAGE_TAG:-$(date +%Y%m%d-%H%M)}"
 export TAG="$IMAGE_TAG"
 
-# Buildx 0.17+ filesystem entitlements: a linked worktree's git dir lives in
-# the main checkout, so bake asks to read that path before sending context.
+# A linked worktree's git dir lives in the main checkout. Newer Buildx bake
+# then needs fs.read on that path; Docker CE 26's bake has no --allow flag.
+bake_cli_supports_allow() {
+  local help_text
+  help_text="$(docker buildx bake --help 2>/dev/null || true)"
+  [[ "$help_text" == *"--allow"* ]]
+}
+
 git_common="$(git -C "$SCRIPT_DIR" rev-parse --git-common-dir 2>/dev/null || true)"
 if [[ -n "$git_common" && "$git_common" != /* ]]; then
   git_common="$(cd "$SCRIPT_DIR" && cd "$git_common" && pwd)"
@@ -78,7 +85,7 @@ fi
 CMD=(
   docker buildx bake -f "$BAKE_FILE" devbox --load
 )
-if [[ -n "$main_repo" ]]; then
+if [[ -n "$main_repo" ]] && bake_cli_supports_allow; then
   CMD+=(--allow "fs.read=${main_repo}")
 fi
 CMD+=(

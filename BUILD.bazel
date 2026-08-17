@@ -1,4 +1,6 @@
 exports_files([
     "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
     ".dockerignore",
 ])

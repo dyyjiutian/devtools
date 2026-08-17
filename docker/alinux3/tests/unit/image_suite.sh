@@ -15,6 +15,8 @@ ENTRYPOINT="${REPO_ROOT}/docker/alinux3/entrypoint.sh"
 DOCKERFILE="${REPO_ROOT}/docker/alinux3/Dockerfile"
 BAKE="${REPO_ROOT}/docker/alinux3/docker-bake.hcl"
 ROOT_README="${REPO_ROOT}/README.md"
+AGENTS_MD="${REPO_ROOT}/AGENTS.md"
+CLAUDE_MD="${REPO_ROOT}/CLAUDE.md"
 DOCKER_CE_REPO="${REPO_ROOT}/os/lib/repos/docker-ce-8.repo"
 DOCKER_CE_ALIYUN="${REPO_ROOT}/os/lib/repos/docker-ce-8-aliyun.repo"
 
@@ -43,6 +45,42 @@ assert_file "$DOCKERFILE"
 assert_file "$BAKE"
 assert_file "$DOCKER_CE_REPO"
 assert_file "$DOCKER_CE_ALIYUN"
+assert_file "$AGENTS_MD"
+assert_file "$CLAUDE_MD"
+
+run_bake_dry_run_with_fakes() {
+  local bake_help="$1"
+  local fake_dir dry_out
+  fake_dir="$(mktemp -d "${TMPDIR:-/tmp}/devtools-bake-fake.XXXXXX")"
+  mkdir -p "${fake_dir}/gitdir"
+  cat >"${fake_dir}/docker" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == buildx && "\${2:-}" == bake && "\${3:-}" == --help ]]; then
+  cat <<'HELP'
+${bake_help}
+HELP
+  exit 0
+fi
+echo "unexpected docker invocation: \$*" >&2
+exit 1
+EOF
+  cat >"${fake_dir}/git" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == -C ]]; then
+  shift 2
+fi
+if [[ "\${1:-}" == rev-parse && "\${2:-}" == --git-common-dir ]]; then
+  printf '%s\\n' "${fake_dir}/gitdir"
+  exit 0
+fi
+echo "unexpected git invocation: \$*" >&2
+exit 1
+EOF
+  chmod +x "${fake_dir}/docker" "${fake_dir}/git"
+  dry_out="$(PATH="${fake_dir}:${PATH}" IMAGE_TAG=20260815-2140 HTTP_PROXY=http://127.0.0.1:8001 "$BAKE_SH" --dry-run)"
+  rm -rf "$fake_dir"
+  printf '%s' "$dry_out"
+}
 
 bash -n "$BOOTSTRAP" || fail "bootstrap.sh failed bash -n"
 
@@ -181,7 +219,31 @@ assert_contains "$dry_bake" "devbox.context=" "bake.sh sets an explicit build co
 assert_contains "$dry_bake" "TAG=20260815-2140" "bake.sh uses the minute-precision IMAGE_TAG"
 assert_contains "$dry_bake" "host.docker.internal:8001" "bake.sh rewrites loopback proxy"
 assert_not_contains "$dry_bake" "127.0.0.1:8001" "bake.sh does not pass host loopback proxy"
-assert_contains "$(cat "$BAKE_SH")" 'fs.read=' "bake.sh can grant worktree git-dir read entitlement"
+bake_sh_src="$(cat "$BAKE_SH")"
+assert_contains "$bake_sh_src" "docker buildx bake --help" \
+  "bake.sh probes local bake CLI before passing --allow"
+assert_contains "$bake_sh_src" "Docker CE 26" \
+  "bake.sh documents the Docker CE 26 compatibility baseline"
+assert_contains "$bake_sh_src" 'fs.read=' "bake.sh can grant worktree git-dir read entitlement"
+dry_bake_old="$(run_bake_dry_run_with_fakes $'Usage: docker buildx bake\n  --load\n')"
+assert_not_contains "$dry_bake_old" "--allow" \
+  "bake.sh omits --allow when the local bake CLI is Docker CE 26 / Buildx without entitlements"
+assert_contains "$dry_bake_old" "host.docker.internal:8001" \
+  "fake Docker CE 26 bake dry-run still rewrites loopback proxy"
+dry_bake_new="$(run_bake_dry_run_with_fakes $'Usage: docker buildx bake\n  --allow\n  --load\n')"
+assert_contains "$dry_bake_new" "--allow" \
+  "bake.sh passes --allow when the local bake CLI advertises it"
+assert_contains "$dry_bake_new" "fs.read=" \
+  "bake.sh grants worktree git-dir read entitlement only on newer bake CLI"
+agents_md="$(cat "$AGENTS_MD")"
+claude_md="$(cat "$CLAUDE_MD")"
+assert_contains "$agents_md" "Docker CE 26" \
+  "root AGENTS.md records the Docker CE 26 compatibility baseline"
+assert_contains "$claude_md" "Docker CE 26" \
+  "root CLAUDE.md records the Docker CE 26 compatibility baseline"
+docker_readme="$(cat "${REPO_ROOT}/docker/alinux3/README.md")"
+assert_contains "$docker_readme" "Docker CE 26" \
+  "alinux3 README documents Docker CE 26 bake compatibility"
 assert_not_contains "$bake" "alinux3-full" "bake no longer defines full"
 assert_not_contains "$bake" "alinux3-ssh" "bake no longer defines ssh"
 

@@ -65,6 +65,7 @@
 - 修改或新增上述安装逻辑时，**必须补充配套 Bazel 测试**（优先 OS-profile × module 矩阵，见 `tests/common/`、`tests/README.md`、`BAZEL.md`），并在模块适用的 **`macos`**、**`linux_ubuntu`**、**`linux_alinux3`**、**`linux_alinux4`** profile 上通过（例如 `bazel test //path/to/module:...`）。当前兼容基线只覆盖 x86_64。
 - 破坏性操作、系统服务、代理/VPN、iptables、防火墙和远程节点操作必须明确权限、目标和回滚方式。
 - **兼容基线为 macOS Bash 3.2+**：不要无必要地引入仅 Bash 4+ 支持的语法；注意 `set -u` 下空数组展开、以及 `$VAR` 紧贴多字节字符等坑（见 `languages/bash/pitfalls.md`）。多字节邻接处使用 `${VAR}`。
+- **Docker 兼容基线为 Docker CE 26**：仓库内 `docker build` / `docker buildx bake` / `docker run` 必须能在 Docker CE 26 上运行。不要无条件使用 26 自带 Buildx 没有的 CLI（例如 `docker buildx bake --allow`，那是 Buildx 0.19+ / 较新 docker-ce 才有的）。新 flag 必须先探测本地 CLI 再按需添加。
 - 下载外部脚本或二进制时优先使用 `cache/` 中已有资产；变更下载源、版本、校验和或架构时补充测试。
 - **选择缓存或安装包时，优先依赖少、兼容性好的形态**：例如静态/musl 二进制、官方 portable tarball，优于需要额外运行时（如 AppImage 依赖 FUSE/`fusermount`）或仅适配较新 glibc 的构建；在 Alinux/CentOS 等偏旧环境上尤其要验证可运行。
 - 不提交 API Key、密码、UUID、私钥、个人机器路径或临时生成的配置。
