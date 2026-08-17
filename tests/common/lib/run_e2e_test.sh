@@ -105,6 +105,15 @@ else
 fi
 export MODULE_ROOT
 
+HOST_HOME="${HOME}"
+# Keep the machine rustup/cargo homes. Isolated HOME otherwise makes rustup
+# write shims into the temp cargo dir that cannot find the host toolchain.
+if [[ -z "${CARGO_HOME:-}" && -d "${HOST_HOME}/.cargo" ]]; then
+  export CARGO_HOME="${HOST_HOME}/.cargo"
+fi
+if [[ -z "${RUSTUP_HOME:-}" && -d "${HOST_HOME}/.rustup" ]]; then
+  export RUSTUP_HOME="${HOST_HOME}/.rustup"
+fi
 TMP_HOME="$(mktemp -d "${TMPDIR:-/tmp}/devtools-e2e-home.XXXXXX")"
 cleanup_tmp_home() {
   # Overlayfs (Docker) can fail `rm -rf` on npm caches with "Directory not empty".
@@ -113,8 +122,26 @@ cleanup_tmp_home() {
 trap cleanup_tmp_home EXIT
 export HOME="$TMP_HOME"
 mkdir -p "$HOME/.local/bin"
+
+path_prefix="$HOME/.local/bin:$HOME/.cargo/bin"
+if [[ -n "${CARGO_HOME:-}" ]]; then
+  path_prefix="${path_prefix}:${CARGO_HOME}/bin"
+fi
+if [[ -n "$HOST_HOME" && "$HOST_HOME" != "$HOME" ]]; then
+  path_prefix="${path_prefix}:${HOST_HOME}/.cargo/bin:${HOST_HOME}/.local/bin"
+fi
 # Apple Silicon / GitHub macos-26 Homebrew lives in /opt/homebrew, not /usr/local.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export PATH="${path_prefix}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+if [[ "$(uname -s)" == Darwin ]]; then
+  # Isolated HOME breaks Homebrew bootsnap (sorbet-runtime LoadError).
+  export HOMEBREW_NO_AUTO_UPDATE=1
+  export HOMEBREW_NO_ANALYTICS=1
+  export HOMEBREW_BOOTSNAP=0
+  export HOMEBREW_NO_BOOTSNAP=1
+  if [[ -d "${HOST_HOME}/Library/Caches/Homebrew" ]]; then
+    export HOMEBREW_CACHE="${HOST_HOME}/Library/Caches/Homebrew"
+  fi
+fi
 export DEVTOOLS_CACHE_DIR="${DEVTOOLS_CACHE_DIR:-$REPO_ROOT/cache}"
 export NVIM_SETUP_STRICT="${NVIM_SETUP_STRICT:-1}"
 

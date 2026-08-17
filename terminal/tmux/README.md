@@ -41,6 +41,14 @@ Linux 可能从源码构建；macOS 使用 Homebrew。配置以复制方式写�
 - 改为备份已有普通文件后 `cp` 覆盖；若目标已是软链则先删除再复制，避免写穿源文件。
 - 重新执行：`bash terminal/tmux/setup.sh`（或仅配置路径时 source 后调用 `deploy_config`）。
 
+### 2026-08-17 — GitHub macos-26 E2E 里 brew 报 sorbet-runtime LoadError
+
+**表象**：`tmux_ops_macos_e2e_test` 找到 brew 后立刻失败：`cannot load such file -- sorbet-runtime`。
+
+**根因**：E2E 把 `HOME` 指到临时目录，Homebrew bootsnap 缓存失效。
+
+**解法**：`run_e2e_test.sh` 设置 `HOMEBREW_NO_BOOTSNAP=1`，并把 runner 的 Homebrew cache 指回宿主机 HOME。
+
 ### 2026-07-30 — 无 `--upgrade` 时对已满足/过旧版本的处理不一致
 
 **问题表象**

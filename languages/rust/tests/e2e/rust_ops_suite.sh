@@ -2,11 +2,15 @@
 # Real rustc after setup.sh --skip-cargo-tools.
 set -euo pipefail
 
-if [[ -f "${HOME}/.cargo/env" ]]; then
+cargo_home="${CARGO_HOME:-${HOME}/.cargo}"
+if [[ -f "${cargo_home}/env" ]]; then
+  # shellcheck source=/dev/null
+  source "${cargo_home}/env"
+elif [[ -f "${HOME}/.cargo/env" ]]; then
   # shellcheck source=/dev/null
   source "${HOME}/.cargo/env"
 fi
-export PATH="${HOME}/.cargo/bin:${PATH:-}"
+export PATH="${cargo_home}/bin:${HOME}/.cargo/bin:${PATH:-}"
 
 if ! command -v rustc >/dev/null 2>&1; then
   echo "FAIL: rustc not on PATH after setup" >&2

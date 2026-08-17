@@ -239,3 +239,11 @@ vim-plug 会提示确认后删除未声明的插件目录。
 
 **解法**：cleanup trap 忽略 `rm` 失败。
 
+### 2026-08-17 — GitHub macos E2E 并行 brew 抢 Cellar 锁
+
+**表象**：`vim_ops_macos_e2e_test` 报 `A brew install vim process has already locked /opt/homebrew/Cellar/cmake`。nvim 同 job 里也在 `brew install`。
+
+**根因**：macOS E2E 默认并行，Homebrew 不能同时写 Cellar。
+
+**解法**：`.github/workflows/e2e.yml` 的 macOS job 使用 `--jobs=1`。
+

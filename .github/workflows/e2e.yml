@@ -43,4 +43,5 @@ jobs:
       - name: E2E macOS host real setup
         # requires-macos only (not l3,requires-macos). Bazel ORs positive tags,
         # so including l3 would also run Linux Docker E2E on Darwin.
-        run: bazel test --config=l3 --test_tag_filters=requires-macos //...
+        # Serialize brew installs; parallel jobs lock Homebrew Cellar.
+        run: bazel test --config=l3 --test_tag_filters=requires-macos --jobs=1 //...
