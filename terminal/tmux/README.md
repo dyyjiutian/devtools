@@ -49,6 +49,14 @@ Linux 可能从源码构建；macOS 使用 Homebrew。配置以复制方式写�
 
 **解法**：`run_e2e_test.sh` 设置 `HOMEBREW_NO_BOOTSNAP=1`，并把 runner 的 Homebrew cache 指回宿主机 HOME。
 
+### 2026-08-17 — macOS E2E 把 pbcopy yank 误判为失败
+
+**表象**：`tmux_ops_macos_e2e_test` 安装成功后断言 `copy-mode-vi y` 含 `copy-selection`，实际绑定是 `copy-pipe-and-cancel pbcopy`。
+
+**根因**：ops suite 按 Linux 的 `copy-selection` 检查；`tmux.conf` 在 Darwin 上走 pbcopy。
+
+**解法**：ops suite 按 `uname` 分别断言 Darwin `copy-pipe-and-cancel` 与 Linux `copy-selection`。
+
 ### 2026-07-30 — 无 `--upgrade` 时对已满足/过旧版本的处理不一致
 
 **问题表象**

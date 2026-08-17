@@ -23,7 +23,12 @@ assert_eq "$mouse" "on" "mouse is enabled"
 
 keys="$(tmux -L e2e list-keys -T copy-mode-vi)"
 assert_contains "$keys" "begin-selection" "copy-mode-vi v begins selection"
-assert_contains "$keys" "copy-selection" "copy-mode-vi y copies selection"
+y_binding="$(printf '%s\n' "$keys" | grep -E 'copy-mode-vi[[:space:]]+y[[:space:]]' || true)"
+if [[ "$(uname -s)" == Darwin ]]; then
+  assert_contains "$y_binding" "copy-pipe-and-cancel" "copy-mode-vi y copies via pbcopy"
+else
+  assert_contains "$y_binding" "copy-selection" "copy-mode-vi y copies selection"
+fi
 
 tmux -L e2e new-window -t ops
 tmux -L e2e split-window -h -t ops

@@ -183,9 +183,18 @@ test_clipboard_bindings() {
   pass "tmux.conf clipboard OS split ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_ops_clipboard_assertions() {
+  local ops
+  ops="$(cat "$MODULE_ROOT/tests/e2e/tmux_ops_suite.sh")"
+  assert_contains "$ops" "copy-pipe-and-cancel" "E2E ops accepts Darwin pbcopy yank"
+  assert_contains "$ops" "copy-selection" "E2E ops accepts Linux copy-selection yank"
+  pass "tmux E2E yank assertions are OS-split ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_unknown_flag
 test_clipboard_bindings
+test_ops_clipboard_assertions
 test_dry_run_default_no_upgrade
 test_dry_run_upgrade_branch
 test_no_upgrade_old_tmux_skips_rebuild

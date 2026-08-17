@@ -8,6 +8,7 @@ filegroup(
         "setup.sh",
         "tmux.conf",
         "README.md",
+        "tests/e2e/tmux_ops_suite.sh",
     ],
 )
 

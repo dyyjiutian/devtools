@@ -19,6 +19,19 @@ step()    { echo -e "\n${BOLD}${CYAN}▶ $*${NC}"; }
 
 is_installed() { command -v "$1" &>/dev/null; }
 
+# rustup's env script can read optional vars without defaults.
+source_cargo_env() {
+  local env_file="${CARGO_HOME:-$HOME/.cargo}/env"
+  if [[ ! -f "$env_file" && -f "$HOME/.cargo/env" ]]; then
+    env_file="$HOME/.cargo/env"
+  fi
+  [[ -f "$env_file" ]] || return 0
+  set +u
+  # shellcheck source=/dev/null
+  source "$env_file"
+  set -u
+}
+
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
@@ -85,9 +98,7 @@ install_rustup() {
   info "通过 rustup.rs 安装 Rust..."
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
 
-  # 加载 cargo 环境
-  # shellcheck source=/dev/null
-  [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
+  source_cargo_env
 
   if is_installed rustc; then
     success "Rust 安装完成：$(rustc --version)"
@@ -128,16 +139,14 @@ RCBLOCK
 
   success "Cargo 环境变量已写入 $rc_file"
 
-  # 当前 shell 立即生效
-  # shellcheck source=/dev/null
-  [[ -f "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
+  source_cargo_env
 }
 
 install_cargo_tools() {
   step "Cargo 开发工具安装"
 
   # 加载 cargo
-  export PATH="$HOME/.cargo/bin:$PATH"
+  export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.cargo/bin:$PATH"
 
   if ! is_installed cargo; then
     warn "cargo 命令未找到，跳过工具安装"
@@ -189,7 +198,7 @@ install_rust_analyzer() {
   fi
 
   # rustup 可以直接安装 rust-analyzer
-  export PATH="$HOME/.cargo/bin:$PATH"
+  export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.cargo/bin:$PATH"
   if is_installed rustup; then
     info "通过 rustup 安装 rust-analyzer..."
     rustup component add rust-analyzer 2>/dev/null && \

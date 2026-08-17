@@ -122,6 +122,15 @@ cleanup_tmp_home() {
 trap cleanup_tmp_home EXIT
 export HOME="$TMP_HOME"
 mkdir -p "$HOME/.local/bin"
+# Point the isolated HOME at the machine toolchain so setup.sh's
+# $HOME/.cargo/env and rustc shims resolve. rm -rf on the temp dir
+# removes the symlink, not the host cargo/rustup trees.
+if [[ -n "${CARGO_HOME:-}" && -d "$CARGO_HOME" && "$CARGO_HOME" != "$HOME/.cargo" ]]; then
+  ln -sfn "$CARGO_HOME" "$HOME/.cargo"
+fi
+if [[ -n "${RUSTUP_HOME:-}" && -d "$RUSTUP_HOME" && "$RUSTUP_HOME" != "$HOME/.rustup" ]]; then
+  ln -sfn "$RUSTUP_HOME" "$HOME/.rustup"
+fi
 
 path_prefix="$HOME/.local/bin:$HOME/.cargo/bin"
 if [[ -n "${CARGO_HOME:-}" ]]; then

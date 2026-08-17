@@ -29,7 +29,18 @@ test_dry_run() {
   pass "rust setup --dry-run ($DEVTOOLS_TEST_PROFILE)"
 }
 
+test_cargo_env_nounset() {
+  local setup ops
+  setup="$(cat "$SETUP_SH")"
+  ops="$(cat "$MODULE_ROOT/tests/e2e/rust_ops_suite.sh")"
+  assert_contains "$setup" "source_cargo_env" "rust setup sources cargo env via a helper"
+  assert_contains "$setup" "set +u" "rust setup disables nounset around cargo env"
+  assert_contains "$ops" "set +u" "rust E2E sources cargo env without nounset"
+  pass "rust cargo env nounset guards ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_unknown_flag
 test_dry_run
+test_cargo_env_nounset
 echo "PASS: rust suite complete ($DEVTOOLS_TEST_PROFILE)"

@@ -41,6 +41,7 @@ assert_contains "$host" "cleanup_tmp_home" "host runner ignores overlayfs rm fai
 assert_contains "$host" "HOMEBREW_NO_BOOTSNAP" "host runner disables Homebrew bootsnap under isolated HOME"
 assert_contains "$host" 'HOST_HOME}/.cargo/bin' "host runner keeps the runner cargo bin on PATH"
 assert_contains "$host" 'CARGO_HOME="${HOST_HOME}/.cargo"' "host runner reuses the machine CARGO_HOME"
+assert_contains "$host" 'ln -sfn "$CARGO_HOME" "$HOME/.cargo"' "host runner links isolated HOME to the machine cargo dir"
 
 ubuntu="$(cat "$UBUNTU")"
 assert_contains "$ubuntu" "FROM ubuntu:24.04" "Ubuntu E2E uses Ubuntu 24.04"
