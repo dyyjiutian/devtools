@@ -368,6 +368,14 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 ## Issues
 
+### 2026-08-17 — ALinux 4 nvim E2E 因 `dnf` 没有 ripgrep 包而失败
+
+**表象**：`nvim_ops_linux_alinux4_e2e_test` 报 `No match for argument: ripgrep`，随后 `FAIL: ripgrep (rg) not on PATH after setup`。同 job 的 Ubuntu / ALinux 3 通过（各自仓库有 `ripgrep` 包）。
+
+**根因**：`install_deps_linux` 的 `dnf` 分支只尝试 `dnf install -y ripgrep`，失败时仅 `warn` 继续；但 ALinux 4 默认仓库不提供 `ripgrep`，而 ops E2E 套件强制要求 `rg` 在 PATH 上。
+
+**解法**：新增 `_install_ripgrep_github_fallback`，复用 Neovim 自身安装用的 cache-first 策略（`cache/binaries/ripgrep-<version>-<arch>.tar.gz`，否则从 GitHub Release 下载），在包管理器装不上 `rg` 时把二进制解到 `~/.local/bin/rg`。已把 `ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz` 加入 `cache/binaries/`，与 `cache/download.sh` 现有的下载地址保持一致。
+
 ### 2026-08-17 — 镜像构建时 Lazy sync 进度把 BuildKit 日志打满
 
 **表象**：`bash docker/alinux3/bake.sh` 在 `Installing plugins` 阶段被掐掉，日志停在某个插件 `clone | remote: Counting objects`，没有 Docker `ERROR: failed to solve`。

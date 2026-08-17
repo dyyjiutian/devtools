@@ -16,6 +16,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NVIM_CONFIG_DIR="$HOME/.config/nvim"
 # Linux tarball 固定 v0.10.4：兼容 Alinux 3 / glibc 2.32；不用 AppImage（需 FUSE/fusermount）
 NVIM_VERSION="${NVIM_VERSION:-0.10.4}"
+# Some distros (e.g. Alibaba Cloud Linux 4) ship no `ripgrep` package at all;
+# keep a GitHub-release fallback so `rg` is still installed there.
+RG_VERSION="${RG_VERSION:-14.1.1}"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 NVIM_INSTALL_DIR="${NVIM_INSTALL_DIR:-$HOME/.local/nvim}"
 CONFIG_MARKER=".devtools-nvim"
@@ -452,6 +455,53 @@ install_deps_macos() {
     done
 }
 
+# Some package managers (dnf on Alibaba Cloud Linux 4, in particular) have no
+# `ripgrep` package at all, so `rg` stays missing after install_deps_linux.
+# Fall back to the same cache-first / GitHub-release tarball used for Neovim.
+_install_ripgrep_github_fallback() {
+    if command -v rg &>/dev/null; then
+        return 0
+    fi
+    info "ripgrep not available via package manager, installing v${RG_VERSION} from cache/GitHub release..."
+
+    local target filename cached url tmpdir rg_bin
+    case "$(uname -m)" in
+        aarch64|arm64) target="aarch64-unknown-linux-musl" ;;
+        *)             target="x86_64-unknown-linux-musl" ;;
+    esac
+    filename="ripgrep-${RG_VERSION}-${target}.tar.gz"
+    cached="${CACHE_DIR}/binaries/${filename}"
+    url="https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/${filename}"
+    tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/rg-extract.XXXXXX")"
+
+    _ensure_local_bin_path
+
+    if [[ -f "$cached" ]]; then
+        info "Using local cache: binaries/${filename}"
+        cp "$cached" "$tmpdir/rg.tar.gz"
+    elif ! curl -fL --retry 3 -o "$tmpdir/rg.tar.gz" "$url"; then
+        rm -rf "$tmpdir"
+        warn "Failed to download ripgrep release; rg will remain unavailable"
+        return 1
+    fi
+
+    if ! tar -xzf "$tmpdir/rg.tar.gz" -C "$tmpdir"; then
+        rm -rf "$tmpdir"
+        warn "Failed to extract ripgrep release; rg will remain unavailable"
+        return 1
+    fi
+
+    rg_bin="$(find "$tmpdir" -type f -name rg | head -1)"
+    if [[ -z "$rg_bin" ]]; then
+        rm -rf "$tmpdir"
+        warn "ripgrep release archive missing rg binary"
+        return 1
+    fi
+    install -m 755 "$rg_bin" "$HOME/.local/bin/rg"
+    rm -rf "$tmpdir"
+    success "ripgrep installed to ~/.local/bin/rg"
+}
+
 install_deps_linux() {
     info "Installing dependencies..."
     if command -v apt-get &>/dev/null; then
@@ -487,6 +537,8 @@ install_deps_linux() {
     else
         warn "Could not install dependencies automatically"
     fi
+
+    _install_ripgrep_github_fallback || true
 }
 
 install_deps() {
