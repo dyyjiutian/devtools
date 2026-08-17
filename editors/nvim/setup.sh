@@ -22,6 +22,7 @@ CONFIG_MARKER=".devtools-nvim"
 # Image / CI builds set this so a partial Lazy sync fails the run instead of
 # leaving only lazy.nvim and triggering a full install on first file open.
 NVIM_SETUP_STRICT="${NVIM_SETUP_STRICT:-0}"
+NVIM_SETUP_QUIET="${NVIM_SETUP_QUIET:-0}"
 
 # --- Help ---
 show_help() {
@@ -50,6 +51,7 @@ Neovim Setup Script - 一键配置 Neovim 开发环境
   NVIM_INSTALL_DIR     Linux 解压目录（默认 ~/.local/nvim）
   DEVTOOLS_CACHE_DIR   离线缓存根目录（默认仓库 cache/）
   NVIM_SETUP_STRICT    设为 1 时，插件 / treesitter 同步失败则退出（镜像构建）
+  NVIM_SETUP_QUIET     设为 1 时，headless sync 不刷进度（避免 BuildKit 1MiB 日志上限）
 EOF
     # Keep keybindings in a separate literal block for readability
     cat <<'EOF'
@@ -165,8 +167,23 @@ _ensure_local_bin_path() {
 
 # Run a Neovim Ex command headlessly. Always quote multi-word +cmd / -c args —
 # unquoted `+Lazy! sync` is split by the shell, so Lazy never runs.
+_nvim_quiet() {
+    [[ "${NVIM_SETUP_QUIET:-}" == "1" || "${NVIM_SETUP_QUIET:-}" == "true" ]]
+}
+
 _nvim_headless() {
     local cmd="$1"
+    local log
+    if _nvim_quiet; then
+        log="$(mktemp "${TMPDIR:-/tmp}/nvim-setup.XXXXXX")"
+        if nvim --headless -c "$cmd" -c "qa!" >"$log" 2>&1; then
+            rm -f "$log"
+            return 0
+        fi
+        tail -n 50 "$log" >&2 || true
+        rm -f "$log"
+        return 1
+    fi
     nvim --headless -c "$cmd" -c "qa!"
 }
 

@@ -6,8 +6,11 @@
 - Vim / Neovim：`editors/vim/setup.sh --upgrade`（Alinux 3 自带 Vim 8.0，升级到 9.2 后才装得了 coc / `gd` `gr`）与 `editors/nvim/setup.sh`（Linux Neovim 固定 0.10.4；构建期同步安装 `bashls` 等常用 LSP）
 - tmux 3.7b 与本仓库 `tmux.conf` / TPM 插件
 - Bash：ble.sh、fzf、zoxide、Starship（`shell/bash/setup.sh`）
-- 常见 CLI：`jq`、`tree`、`rg`、`bat`（与 `os/linux/packages.centos.list` 对齐；`cloc` 有包则装）
-- DNF：Alinux 自带源改写到 `mirrors.aliyun.com`，并加入 Aliyun EPEL 8（el8）
+- 常见 CLI：`jq`、`tree`、`rg`、`bat`、`yazi`（与 `os/linux/packages.centos.list` 对齐；`cloc` 有包则装）
+- Docker CE + 特权 DinD：构建期安装 `docker-ce` / `cli` / `containerd` / `buildx` / `compose`，`admin` 在 `docker` 组。`docker run --privileged` 时入口拉起里层 `dockerd`
+- Bazel（bazelisk / buildifier / starpls）、Go 1.23 + 工具链、Java 21（SDKMan + Maven / Gradle）
+- Agent CLI：Claude Code、Codex、Cursor Agent（含通用配置 / 插件 / cookbook skills；**不**写入 API key）
+- DNF：Alinux 自带源改写到 `mirrors.aliyun.com`，并加入 Aliyun EPEL 8 与 Docker CE el8（官方 + Aliyun companion）
 
 当前只提供 `devbox` target，镜像名为 `alinux3-devbox:<YYYYMMDD-HHMM>`。Dev Container、运行时 UID 同步、自动挂载宿主机 `~/.ssh` 尚未实现。
 
@@ -45,16 +48,16 @@ docker build --platform linux/amd64 \
 
 ## 运行
 
-镜像默认用户是 `admin`（UID 1000），工作目录 `/home/admin`，启动 `bash`：
+镜像以 root 入口启动，就绪后 drop 到 `admin`（UID 1000），工作目录 `/home/admin`。里层 Docker 需要特权：
 
 ```bash
-docker run --rm -it alinux3-devbox:latest
+docker run --privileged --rm -it alinux3-devbox:latest
 ```
 
-进入后可直接使用 `git`、`lazygit`、`vim`、`nvim`、`tmux`、`rg`、`jq`、`bat`、`tree`。Bash 已配置 ble / fzf / zoxide / starship。Neovim 插件、treesitter parser 和常用 LSP（含 `bashls`）已在构建期装好，打开文件不应再触发全量安装；`gd` / `gr` 应对 `.sh` 立即生效。Vim 为 9.2 + coc-sh。需要把当前目录挂进去时：
+不加 `--privileged` 仍能进 `admin` shell，但会提示 dockerd 不可用。里层 `dockerd` 优先 `overlay2`；在 Apple Silicon 的 qemu `linux/amd64` 上会回退 `vfs`。进入后可直接使用 `git`、`lazygit`、`vim`、`nvim`、`tmux`、`rg`、`jq`、`bat`、`tree`、`yazi`、`docker`、`bazel`、`go`、`java`，以及 `claude` / `codex` / `agent`（需自行 `login` 或挂入 key）。Bash 已配置 ble / fzf / zoxide / starship。Neovim 插件、treesitter parser 和常用 LSP（含 `bashls`）已在构建期装好。需要把当前目录挂进去时：
 
 ```bash
-docker run --rm -it -v "$PWD:/workspace" -w /workspace alinux3-devbox:latest
+docker run --privileged --rm -it -v "$PWD:/workspace" -w /workspace alinux3-devbox:latest
 ```
 
 Git 身份请在容器内自行设置，或把宿主机 `~/.gitconfig` 挂进去（下一阶段会处理 `~/.ssh` 与权限）：
@@ -81,6 +84,43 @@ DEVTOOLS_TEST_IMAGE=alinux3-devbox:latest \
 ```
 
 ## Issues
+
+### 2026-08-17 — 镜像里 `bash -lc` 找不到 go / java
+
+**表象**：`command -v go` / `java` 在 `docker run ... bash -lc` 下失败，二进制其实已装在 `/usr/local/go` 和 `~/.sdkman/candidates`。
+
+**根因**：`tools/bazel/setup.sh` 会创建 `~/.zshrc`。Go / Java 安装器只往第一个存在的 rc 写，结果 PATH 只在 zshrc。镜像默认 bash。
+
+**解法**：Dockerfile 把 Go 与 SDKMAN `current/bin` 写进 `ENV PATH`。Go / Java 安装器同时写入 `~/.bashrc` 和已有的 `~/.zshrc`。
+
+### 2026-08-17 — 构建期 Java/SDKMAN 在 `set -u` 下失败
+
+**表象**：bootstrap 跑到 `java` 后：`sdkman-init.sh: line 20: SDKMAN_CANDIDATES_API: unbound variable`，或 `sdkman-install.sh: line 24: $3: unbound variable`。
+
+**根因**：镜像 bootstrap 与 `languages/java/setup.sh` 都开了 `set -u`，SDKMAN 脚本会读未设置的变量和可选 `$3`。
+
+**解法**：`languages/java/setup.sh` 用 `source_sdkman_init` / `run_sdk` 在调用 SDKMAN 时暂时 `set +u`；`maven` / `gradle` 不再把字面量 `latest` 传给 `sdk install`。
+
+### 2026-08-17 — bake 在 nvim Lazy sync 时被 1MiB 日志上限掐断
+
+**表象**：构建跑到 `Installing plugins` 后退出码 1，日志停在某个插件的 `clone` 进度，没有 `failed to solve`。
+
+**根因**：lazy.nvim 的 git 进度刷满 BuildKit 默认约 1MiB 的步进日志。
+
+**解法**：构建期加 `NVIM_SETUP_QUIET=1`，headless sync 不再把进度打到 stdout。
+
+### 2026-08-17 — Apple Silicon 上特权 DinD 的 overlay2 起不来
+
+**表象**：`docker run --privileged --platform linux/amd64 alinux3-devbox:latest` 后 `docker info` 连不上里层 daemon。日志里是 `failed to mount overlay: invalid argument` / `driver not supported: overlay2`。
+
+**根因**：镜像锁定 `linux/amd64`，在 arm64 Docker Desktop 上走 qemu。嵌套容器里 overlayfs 经常不可用，官方 `overlay2` 图驱动会立刻退出。
+
+**解法**：入口先试 `overlay2`，失败则清掉 `/var/lib/docker` 再回退 `vfs`。真机 Linux/amd64 仍走 overlay2。验证：
+
+```bash
+docker run --privileged --rm --platform linux/amd64 alinux3-devbox:latest \
+  bash -lc 'docker info'
+```
 
 ### 2026-08-16 — 镜像里 vim / nvim 打开 setup.sh 时 gd/gr 没反应
 

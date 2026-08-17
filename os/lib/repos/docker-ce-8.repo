@@ -1,0 +1,8 @@
+# Managed by devtools. Official Docker CE for Alinux 3 (el8).
+# Pin centos/8. Alinux 3 reports VERSION_ID=3, which is not a valid Docker CE tree.
+[docker-ce-stable]
+name=Docker CE Stable - $basearch
+baseurl=https://download.docker.com/linux/centos/8/$basearch/stable
+enabled=1
+gpgcheck=1
+gpgkey=https://download.docker.com/linux/centos/gpg

@@ -9,3 +9,4 @@
   当前可映射 Docker CE（`download.docker.com/linux/centos` → `mirrors.aliyun.com/docker-ce`）。
   Aliyun 没有 GitHub CLI / NodeSource 的 RPM 镜像，这两处只保留官方源。
   [`repos/epel-8-aliyun.repo`](repos/epel-8-aliyun.repo) 是钉死 el8 的 Aliyun EPEL，供 Alinux 3 使用。
+  [`repos/docker-ce-8.repo`](repos/docker-ce-8.repo) 与 [`repos/docker-ce-8-aliyun.repo`](repos/docker-ce-8-aliyun.repo) 是钉死 `centos/8` 的 Docker CE 官方源与 Aliyun companion，供 Alinux 3 镜像使用。

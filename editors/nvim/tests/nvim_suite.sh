@@ -569,6 +569,7 @@ test_setup_quotes_lazy_sync() {
   assert_contains "$setup" '_sync_lazy_plugins' "uses _sync_lazy_plugins helper"
   assert_contains "$setup" '_assert_lazy_plugins_installed' "verifies plugins after sync"
   assert_contains "$setup" "NVIM_SETUP_STRICT" "image builds can fail on missing plugins"
+  assert_contains "$setup" "NVIM_SETUP_QUIET" "image builds can suppress headless progress logs"
   local raw_hits
   raw_hits="$(printf '%s\n' "$setup" | grep -E 'nvim --headless' | grep -v '_nvim_headless\|#' || true)"
   # Only the helper body may call nvim --headless directly.

@@ -47,6 +47,16 @@ docker run --rm --platform linux/amd64 --user admin "$IMAGE" bash -lc '
   command -v tree
   command -v bat
   command -v rg
+  command -v docker
+  command -v bazel
+  command -v yazi
+  command -v go
+  command -v java
+  command -v claude
+  command -v codex
+  command -v agent || command -v cursor-agent
+  test ! -e "$HOME/.claude/.profile-keys"
+  test ! -e "$HOME/.codex/.profile-keys"
   test -f "$HOME/.local/share/blesh/ble.sh"
   test -f "$HOME/.bashrc"
   grep -q "Lightweight Bash Plugins (devtools)" "$HOME/.bashrc"
@@ -72,5 +82,13 @@ docker run --rm --platform linux/amd64 --user admin "$IMAGE" bash -lc '
   ! git config --global --get user.email
   git config --global --get pull.rebase | grep -qx true
 '
+
+if [[ "${DEVTOOLS_TEST_DIND:-}" == "1" ]]; then
+  docker run --rm --privileged --platform linux/amd64 "$IMAGE" bash -lc '
+    set -euo pipefail
+    docker info >/dev/null
+    docker version >/dev/null
+  '
+fi
 
 echo "PASS: ${IMAGE} toolchain and configuration"

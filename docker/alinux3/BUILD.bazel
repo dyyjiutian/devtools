@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "bootstrap.sh",
+    "entrypoint.sh",
     "docker-bake.hcl",
     "Dockerfile",
     "versions.env",
@@ -16,6 +17,7 @@ devtools_unit_test(
         "Dockerfile",
         "bake.sh",
         "bootstrap.sh",
+        "entrypoint.sh",
         "docker-bake.hcl",
         "versions.env",
         "//:.dockerignore",
@@ -26,7 +28,15 @@ devtools_unit_test(
         "//shell/bash:setup.sh",
         "//shell/starship:configs",
         "//terminal/tmux:tmux_srcs",
+        "//terminal/yazi:setup.sh",
         "//tools/git:setup.sh",
+        "//tools/bazel:setup.sh",
+        "//languages/go:setup.sh",
+        "//languages/java:setup.sh",
+        "//agents/claude:setup.sh",
+        "//agents/codex:setup.sh",
+        "//agents/cursor-agent:setup.sh",
+        "//agents/cookbook:setup.sh",
     ],
     tags = [
         "contract",

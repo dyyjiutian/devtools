@@ -26,6 +26,10 @@ variable "RG_VERSION" {
   default = "14.1.1"
 }
 
+variable "YAZI_VERSION" {
+  default = "0.3.3"
+}
+
 variable "HTTP_PROXY" {
   default = ""
 }
@@ -52,6 +56,7 @@ target "devbox" {
     LAZYGIT_VERSION  = LAZYGIT_VERSION
     BAT_VERSION      = BAT_VERSION
     RG_VERSION       = RG_VERSION
+    YAZI_VERSION     = YAZI_VERSION
     HTTP_PROXY       = HTTP_PROXY
     HTTPS_PROXY      = HTTPS_PROXY
     NO_PROXY         = NO_PROXY

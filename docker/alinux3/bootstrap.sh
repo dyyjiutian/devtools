@@ -9,6 +9,7 @@ CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${ROOT}/cache}"
 LAZYGIT_VERSION="${LAZYGIT_VERSION:-0.44.1}"
 BAT_VERSION="${BAT_VERSION:-0.25.0}"
 RG_VERSION="${RG_VERSION:-14.1.1}"
+YAZI_VERSION="${YAZI_VERSION:-0.3.3}"
 DELTA_VERSION="${DELTA_VERSION:-0.19.2}"
 DELTA_TARGET="x86_64-unknown-linux-musl"
 DELTA_ARCHIVE="delta-${DELTA_VERSION}-${DELTA_TARGET}.tar.gz"
@@ -25,8 +26,8 @@ usage() {
 Usage: bootstrap.sh [OPTION]
 
 Install and configure the Alinux 3 devbox toolchain for the current user:
-  lazygit, git-delta, bat, rg, bash (ble/fzf/zoxide/starship), git setup,
-  vim, nvim, and tmux.
+  lazygit, git-delta, bat, rg, yazi, bash (ble/fzf/zoxide/starship), git setup,
+  vim, nvim, tmux, bazel, go, java, and agent CLIs (no API keys).
 
 Options:
   -h, --help     Show this help
@@ -169,6 +170,42 @@ install_rg() {
   install_user_bin rg "$url" "binaries/${filename}" "ripgrep-${RG_VERSION}-${target}/rg"
 }
 
+install_yazi() {
+  local arch target filename url dest tmpdir archive cached
+  arch="$(linux_arch)"
+  target="${arch}-unknown-linux-musl"
+  filename="yazi-${target}.zip"
+  url="https://github.com/sxyazi/yazi/releases/download/v${YAZI_VERSION}/${filename}"
+  dest="${HOME}/.local/bin/yazi"
+  if command -v yazi >/dev/null 2>&1; then
+    success "yazi already installed: $(yazi --version 2>/dev/null | head -1 || echo present)"
+    return 0
+  fi
+  if [[ "$DRY_RUN" == "true" ]]; then
+    info "[dry-run] install yazi ${YAZI_VERSION} from ${url}"
+    return 0
+  fi
+
+  step "install yazi ${YAZI_VERSION} ..."
+  mkdir -p "${HOME}/.local/bin"
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/devtools-yazi.XXXXXX")"
+  archive="${tmpdir}/${filename}"
+  cached="${CACHE_DIR}/binaries/${filename}"
+  if [[ -f "$cached" ]]; then
+    info "using cache: binaries/${filename}"
+    cp "$cached" "$archive"
+  else
+    curl -fsSL "$url" -o "$archive"
+  fi
+  unzip -q "$archive" -d "$tmpdir"
+  install -m 0755 "${tmpdir}/yazi-${target}/yazi" "$dest"
+  if [[ -f "${tmpdir}/yazi-${target}/ya" ]]; then
+    install -m 0755 "${tmpdir}/yazi-${target}/ya" "${HOME}/.local/bin/ya"
+  fi
+  rm -rf "$tmpdir"
+  success "yazi installed -> ${dest}"
+}
+
 ensure_login_bashrc() {
   local profile="${HOME}/.bash_profile"
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -215,14 +252,52 @@ run_module() {
   shift
   require_module "$script"
   if [[ "$DRY_RUN" == "true" ]]; then
-    if [[ "$script" == *"/editors/nvim/setup.sh" ]]; then
-      info "[dry-run] ${script}"
-      return 0
-    fi
+    case "$script" in
+      */editors/nvim/setup.sh|*/agents/*/setup.sh)
+        info "[dry-run] ${script} $*"
+        return 0
+        ;;
+    esac
     bash "$script" --dry-run "$@"
     return 0
   fi
   bash "$script" "$@"
+}
+
+agent_cli_present() {
+  local bin
+  for bin in "$@"; do
+    if command -v "$bin" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+run_agent_install() {
+  local script="$1"
+  shift
+  require_module "$script"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    info "[dry-run] ${script} install && ${script} sync"
+    return 0
+  fi
+  if ! bash "$script" install; then
+    if ! agent_cli_present "$@"; then
+      error "agent CLI missing after install: $*"
+      exit 1
+    fi
+    warn "agent install reported errors (plugins may need login): ${script}"
+  fi
+  bash "$script" sync || warn "agent sync failed; continuing: ${script}"
+}
+
+strip_agent_keys() {
+  if [[ "$DRY_RUN" == "true" ]]; then
+    info "[dry-run] remove ~/.claude/.profile-keys ~/.codex/.profile-keys"
+    return 0
+  fi
+  rm -f "${HOME}/.claude/.profile-keys" "${HOME}/.codex/.profile-keys"
 }
 
 main() {
@@ -243,11 +318,23 @@ main() {
   require_module "${ROOT}/editors/vim/setup.sh"
   require_module "${ROOT}/editors/nvim/setup.sh"
   require_module "${ROOT}/terminal/tmux/setup.sh"
+  require_module "${ROOT}/terminal/yazi/setup.sh"
+  require_module "${ROOT}/tools/bazel/setup.sh"
+  require_module "${ROOT}/languages/go/setup.sh"
+  require_module "${ROOT}/languages/java/setup.sh"
+  require_module "${ROOT}/agents/claude/setup.sh"
+  require_module "${ROOT}/agents/codex/setup.sh"
+  require_module "${ROOT}/agents/cursor-agent/setup.sh"
+  require_module "${ROOT}/agents/cookbook/setup.sh"
+
+  export SDKMAN_AUTO_ANSWER="${SDKMAN_AUTO_ANSWER:-true}"
+  export npm_config_prefix="${npm_config_prefix:-${HOME}/.local}"
 
   install_lazygit
   install_delta
   install_bat
   install_rg
+  install_yazi
   ensure_login_bashrc
 
   step "bash plugins (ble / fzf / zoxide / starship)"
@@ -265,6 +352,30 @@ main() {
   step "tmux"
   run_module "${ROOT}/terminal/tmux/setup.sh" --upgrade
   install_tmux_plugins
+
+  step "yazi config"
+  run_module "${ROOT}/terminal/yazi/setup.sh"
+
+  step "bazel"
+  run_module "${ROOT}/tools/bazel/setup.sh"
+
+  step "go"
+  run_module "${ROOT}/languages/go/setup.sh"
+
+  step "java"
+  run_module "${ROOT}/languages/java/setup.sh"
+
+  step "agent CLIs (install + sync, no API keys)"
+  run_agent_install "${ROOT}/agents/claude/setup.sh" claude
+  run_agent_install "${ROOT}/agents/codex/setup.sh" codex
+  run_agent_install "${ROOT}/agents/cursor-agent/setup.sh" agent cursor-agent
+  if [[ "$DRY_RUN" == "true" ]]; then
+    info "[dry-run] ${ROOT}/agents/cookbook/setup.sh sync --copy --target all"
+  else
+    bash "${ROOT}/agents/cookbook/setup.sh" sync --copy --target all \
+      || warn "cookbook sync failed; continuing"
+  fi
+  strip_agent_keys
 
   success "image bootstrap complete"
 }

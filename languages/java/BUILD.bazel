@@ -1,0 +1,15 @@
+load("//tests/common/rules:devtools_tests.bzl", "devtools_unit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "setup.sh",
+])
+
+devtools_unit_test(
+    name = "java_unit_test",
+    suite = ":tests/unit/java_suite.sh",
+    data = [
+        "setup.sh",
+    ],
+)

@@ -32,11 +32,11 @@ devtools/
 
 ## Alibaba Cloud Linux 3 开发镜像
 
-`docker/alinux3/` 提供基于 Alibaba Cloud Linux 3 的 x86_64 `devbox` 开发镜像。构建时会初始化 Git（含 lazygit / delta / 子命令）、Vim 9.2 + coc、Neovim（含 `bashls` 等常用 LSP）、tmux、Bash（ble / fzf / zoxide / Starship），以及 `rg` / `jq` / `bat` / `tree`。镜像不写入 Git 身份，也不包含 Dev Container 或 SSH 变体。默认用户 `admin`，工作目录 `/home/admin`。标签为 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
+`docker/alinux3/` 提供基于 Alibaba Cloud Linux 3 的 x86_64 `devbox` 开发镜像。构建时会初始化 Git（含 lazygit / delta / 子命令）、Vim 9.2 + coc、Neovim（含 `bashls` 等常用 LSP）、tmux、Bash（ble / fzf / zoxide / Starship）、`rg` / `jq` / `bat` / `tree` / `yazi`、Docker CE（特权 DinD）、Bazel、Go、Java，以及 Claude / Codex / Cursor Agent CLI（无 API key）。镜像不写入 Git 身份，也不包含 Dev Container 或 SSH 变体。入口以 root 拉起里层 `dockerd` 后 drop 到 `admin`，工作目录 `/home/admin`。标签为 `alinux3-devbox:<YYYYMMDD-HHMM>` 与 `alinux3-devbox:latest`。
 
 ```bash
 bash docker/alinux3/bake.sh
-docker run --rm -it alinux3-devbox:latest
+docker run --privileged --rm -it alinux3-devbox:latest
 ```
 
 没有 Buildx 时可使用：

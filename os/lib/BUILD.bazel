@@ -6,6 +6,8 @@ exports_files([
     "packages_list.sh",
     "dnf_mirrors.sh",
     "repos/epel-8-aliyun.repo",
+    "repos/docker-ce-8.repo",
+    "repos/docker-ce-8-aliyun.repo",
 ])
 
 filegroup(
@@ -13,6 +15,8 @@ filegroup(
     srcs = [
         "dnf_mirrors.sh",
         "repos/epel-8-aliyun.repo",
+        "repos/docker-ce-8.repo",
+        "repos/docker-ce-8-aliyun.repo",
     ],
 )
 

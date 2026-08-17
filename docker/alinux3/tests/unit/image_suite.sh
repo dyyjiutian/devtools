@@ -11,9 +11,12 @@ if [[ -z "${REPO_ROOT:-}" ]]; then
 fi
 
 BOOTSTRAP="${REPO_ROOT}/docker/alinux3/bootstrap.sh"
+ENTRYPOINT="${REPO_ROOT}/docker/alinux3/entrypoint.sh"
 DOCKERFILE="${REPO_ROOT}/docker/alinux3/Dockerfile"
 BAKE="${REPO_ROOT}/docker/alinux3/docker-bake.hcl"
 ROOT_README="${REPO_ROOT}/README.md"
+DOCKER_CE_REPO="${REPO_ROOT}/os/lib/repos/docker-ce-8.repo"
+DOCKER_CE_ALIYUN="${REPO_ROOT}/os/lib/repos/docker-ce-8-aliyun.repo"
 
 fail() {
   echo "FAIL: $*" >&2
@@ -35,21 +38,50 @@ assert_not_contains() {
 }
 
 assert_file "$BOOTSTRAP"
+assert_file "$ENTRYPOINT"
 assert_file "$DOCKERFILE"
 assert_file "$BAKE"
+assert_file "$DOCKER_CE_REPO"
+assert_file "$DOCKER_CE_ALIYUN"
 
 bash -n "$BOOTSTRAP" || fail "bootstrap.sh failed bash -n"
+
+bash -n "$ENTRYPOINT" || fail "entrypoint.sh failed bash -n"
+help_entry="$("$ENTRYPOINT" --help)"
+assert_contains "$help_entry" "privileged" "entrypoint --help mentions --privileged"
+assert_contains "$help_entry" "dockerd" "entrypoint --help mentions dockerd"
 
 help_out="$("$BOOTSTRAP" --help)"
 assert_contains "$help_out" "dry-run" "bootstrap --help mentions dry-run"
 assert_contains "$help_out" "lazygit" "bootstrap --help mentions lazygit"
 assert_contains "$help_out" "bat" "bootstrap --help mentions bat"
+assert_contains "$help_out" "bazel" "bootstrap --help mentions bazel"
+assert_contains "$help_out" "yazi" "bootstrap --help mentions yazi"
 bootstrap="$(cat "$BOOTSTRAP")"
 assert_contains "$bootstrap" "NVIM_SETUP_STRICT" "bootstrap enables strict nvim plugin install"
 assert_contains "$bootstrap" "install_bat" "bootstrap installs bat"
 assert_contains "$bootstrap" "install_rg" "bootstrap installs rg"
+assert_contains "$bootstrap" "install_yazi" "bootstrap prefers cached yazi"
 assert_contains "$bootstrap" 'editors/vim/setup.sh" --upgrade' \
   "bootstrap upgrades Vim so coc.nvim / gd / gr work on Alinux 3"
+assert_contains "$bootstrap" "tools/bazel/setup.sh" "bootstrap installs Bazel via tools/bazel"
+assert_contains "$bootstrap" "terminal/yazi/setup.sh" "bootstrap configures Yazi"
+assert_contains "$bootstrap" "languages/go/setup.sh" "bootstrap installs Go"
+assert_contains "$bootstrap" "languages/java/setup.sh" "bootstrap installs Java"
+java_setup="$(cat "${REPO_ROOT}/languages/java/setup.sh")"
+assert_contains "$java_setup" "source_sdkman_init" \
+  "java setup sources sdkman-init.sh under set +u so image bootstrap can use set -u"
+assert_contains "$java_setup" "run_sdk" \
+  "java setup wraps sdk install/list so optional SDKMAN args do not trip set -u"
+assert_contains "$bootstrap" "agents/claude/setup.sh" "bootstrap installs Claude Code"
+assert_contains "$bootstrap" "agents/codex/setup.sh" "bootstrap installs Codex CLI"
+assert_contains "$bootstrap" "agents/cursor-agent/setup.sh" "bootstrap installs Cursor Agent"
+assert_contains "$bootstrap" "cookbook/setup.sh" "bootstrap syncs cookbook skills"
+assert_contains "$bootstrap" "--copy" "cookbook skills are copied, not only linked"
+assert_contains "$bootstrap" "--target all" "cookbook syncs cursor, claude, and codex"
+assert_not_contains "$bootstrap" "setup.sh switch" "bootstrap does not run agent channel switch"
+assert_not_contains "$bootstrap" "setup.sh configure" "bootstrap does not run agent configure"
+assert_contains "$bootstrap" ".profile-keys" "bootstrap removes agent key files after install"
 nvim_setup="$(cat "${REPO_ROOT}/editors/nvim/setup.sh")"
 assert_contains "$nvim_setup" "_assert_mason_lsps_installed" \
   "nvim setup fails the image build if bashls was not installed"
@@ -64,7 +96,24 @@ assert_contains "$dockerfile" "COPY --chown=admin:admin editors/nvim" "Dockerfil
 assert_contains "$dockerfile" "COPY --chown=admin:admin tools/git" "Dockerfile copies tools/git"
 assert_contains "$dockerfile" "COPY --chown=admin:admin shell/bash" "Dockerfile copies shell/bash"
 assert_contains "$dockerfile" "COPY --chown=admin:admin terminal/tmux" "Dockerfile copies terminal/tmux"
-assert_contains "$dockerfile" "USER admin" "image defaults to admin"
+assert_contains "$dockerfile" "COPY --chown=admin:admin tools/bazel" "Dockerfile copies tools/bazel"
+assert_contains "$dockerfile" "COPY --chown=admin:admin terminal/yazi" "Dockerfile copies terminal/yazi"
+assert_contains "$dockerfile" "COPY --chown=admin:admin languages/go" "Dockerfile copies languages/go"
+assert_contains "$dockerfile" "COPY --chown=admin:admin languages/java" "Dockerfile copies languages/java"
+assert_contains "$dockerfile" "COPY --chown=admin:admin agents/claude" "Dockerfile copies agents/claude"
+assert_contains "$dockerfile" "COPY --chown=admin:admin agents/codex" "Dockerfile copies agents/codex"
+assert_contains "$dockerfile" "COPY --chown=admin:admin agents/cursor-agent" "Dockerfile copies agents/cursor-agent"
+assert_contains "$dockerfile" "COPY --chown=admin:admin agents/cookbook" "Dockerfile copies agents/cookbook"
+assert_contains "$dockerfile" "os/lib/repos/docker-ce-8.repo" "image adds official Docker CE el8"
+assert_contains "$dockerfile" "os/lib/repos/docker-ce-8-aliyun.repo" "image adds Aliyun Docker CE el8"
+assert_contains "$dockerfile" "docker-ce docker-ce-cli containerd.io" "installs Docker CE packages"
+assert_contains "$dockerfile" "usermod -aG docker admin" "admin is in the docker group"
+assert_contains "$dockerfile" "devtools-entrypoint" "Dockerfile installs the DinD entrypoint"
+assert_contains "$dockerfile" 'ENTRYPOINT ["/usr/local/bin/devtools-entrypoint"]' \
+  "root entrypoint starts dockerd then drops to admin"
+assert_contains "$dockerfile" "USER root" "image starts as root so the entrypoint can launch dockerd"
+assert_contains "$dockerfile" "/usr/local/go/bin" \
+  "image PATH includes Go so bash -lc can find go without relying on .zshrc"
 assert_contains "$dockerfile" "ENV USER=admin" "image exports USER for non-login bash"
 assert_contains "$dockerfile" "chown -R admin:admin /home/admin" "home is owned by admin"
 assert_contains "$dockerfile" "/home/admin/.cache" "creates writable cache before nvim bootstrap"
@@ -79,6 +128,8 @@ assert_contains "$dockerfile" "devtools-epel-8-aliyun.repo" "EPEL 8 is installed
 assert_contains "$dockerfile" "docker/alinux3/bootstrap.sh" "Dockerfile copies bootstrap from docker/alinux3"
 assert_contains "$dockerfile" "ARG HTTP_PROXY" "accepts HTTP_PROXY build arg"
 assert_contains "$dockerfile" "NVIM_SETUP_STRICT=1" "bootstrap fails if nvim plugins are missing"
+assert_contains "$dockerfile" "NVIM_SETUP_QUIET=1" \
+  "bootstrap quiets nvim progress so BuildKit does not hit the 1MiB step log limit"
 assert_contains "$dockerfile" 'HTTP_PROXY="${HTTP_PROXY:-}"' "forwards HTTP_PROXY through sudo to bootstrap"
 assert_not_contains "$dockerfile" "terminal/vim" "no obsolete terminal/vim path"
 assert_not_contains "$dockerfile" "vcs/git" "no obsolete vcs/git path"
@@ -104,6 +155,16 @@ dockerignore="$(cat "$DOCKERIGNORE")"
 assert_contains "$dockerignore" "docker/alinux3/tests" "dockerignore excludes docker tests"
 assert_contains "$dockerignore" "!os/lib/repos/epel-8-aliyun.repo" \
   "dockerignore keeps the Aliyun EPEL 8 repo in build context"
+assert_contains "$dockerignore" "!os/lib/repos/docker-ce-8.repo" \
+  "dockerignore keeps the official Docker CE el8 repo in build context"
+assert_contains "$dockerignore" "!os/lib/repos/docker-ce-8-aliyun.repo" \
+  "dockerignore keeps the Aliyun Docker CE el8 repo in build context"
+assert_contains "$dockerignore" "!agents/cookbook/**/*.md" \
+  "dockerignore keeps cookbook SKILL.md files"
+assert_not_contains "$dockerignore" $'\nagents\n' "dockerignore no longer excludes all of agents"
+assert_not_contains "$dockerignore" $'\nlanguages\n' "dockerignore no longer excludes all of languages"
+assert_not_contains "$dockerignore" "terminal/yazi\n" "dockerignore keeps terminal/yazi"
+assert_not_contains "$dockerignore" $'\ntools/bazel\n' "dockerignore keeps tools/bazel"
 assert_not_contains "$dockerignore" "containers/alinux3" \
   "dockerignore no longer refers to containers/"
 
@@ -137,9 +198,33 @@ for path in \
   "${REPO_ROOT}/tools/git/setup.sh" \
   "${REPO_ROOT}/shell/bash/setup.sh" \
   "${REPO_ROOT}/shell/starship/starship-tokyo-linux.toml" \
-  "${REPO_ROOT}/terminal/tmux/tmux.conf"
+  "${REPO_ROOT}/terminal/tmux/tmux.conf" \
+  "${REPO_ROOT}/tools/bazel/setup.sh" \
+  "${REPO_ROOT}/terminal/yazi/setup.sh" \
+  "${REPO_ROOT}/languages/go/setup.sh" \
+  "${REPO_ROOT}/languages/java/setup.sh" \
+  "${REPO_ROOT}/agents/claude/setup.sh" \
+  "${REPO_ROOT}/agents/codex/setup.sh" \
+  "${REPO_ROOT}/agents/cursor-agent/setup.sh" \
+  "${REPO_ROOT}/agents/cookbook/setup.sh"
 do
   assert_file "$path"
 done
+
+docker_ce_repo="$(cat "$DOCKER_CE_REPO")"
+docker_ce_aliyun="$(cat "$DOCKER_CE_ALIYUN")"
+assert_contains "$docker_ce_repo" "/centos/8/" "official Docker CE repo pins centos/8"
+assert_contains "$docker_ce_aliyun" "mirrors.aliyun.com/docker-ce/linux/centos/8/" \
+  "Aliyun Docker CE repo pins centos/8"
+assert_not_contains "$docker_ce_repo" '$releasever' "official Docker CE repo does not use \$releasever"
+assert_not_contains "$docker_ce_aliyun" '$releasever' "Aliyun Docker CE repo does not use \$releasever"
+
+entrypoint="$(cat "$ENTRYPOINT")"
+assert_contains "$entrypoint" "dockerd" "entrypoint can start dockerd"
+assert_contains "$entrypoint" "overlay2" "entrypoint prefers overlay2"
+assert_contains "$entrypoint" "vfs" "entrypoint falls back to vfs when overlay2 fails"
+assert_contains "$entrypoint" "runuser" "entrypoint drops privileges with runuser"
+assert_contains "$entrypoint" "admin" "entrypoint drops to admin"
+assert_not_contains "$entrypoint" "2375" "entrypoint does not expose unencrypted TCP 2375"
 
 echo "PASS: alinux3 image contract"

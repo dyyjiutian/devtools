@@ -112,28 +112,24 @@ install_go() {
 configure_go_env() {
   step "Go 环境变量配置"
 
-  local rc_file=""
-  if [[ -f "$HOME/.zshrc" ]]; then
-    rc_file="$HOME/.zshrc"
-  elif [[ -f "$HOME/.bashrc" ]]; then
-    rc_file="$HOME/.bashrc"
-  else
-    rc_file="$HOME/.bashrc"
-    touch "$rc_file"
-  fi
-
-  local marker='# Go env (added by devtools/languages/go/setup.sh)'
-  if grep -qF "$marker" "$rc_file" 2>/dev/null; then
-    info "Go 环境变量已在 $rc_file 中，跳过"
-    return 0
-  fi
+  local rc_file marker='# Go env (added by devtools/languages/go/setup.sh)'
 
   if [[ "$DRY_RUN" == true ]]; then
-    info "[dry-run] 将配置 Go 环境变量到 $rc_file"
+    info "[dry-run] 将配置 Go 环境变量到 ~/.bashrc 和 ~/.zshrc"
+    export PATH="/usr/local/go/bin:$PATH"
+    export GOPATH="$HOME/go"
+    export PATH="$GOPATH/bin:$PATH"
     return 0
   fi
 
-  cat >> "$rc_file" <<'RCBLOCK'
+  touch "$HOME/.bashrc"
+  for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [[ -f "$rc_file" ]] || continue
+    if grep -qF "$marker" "$rc_file" 2>/dev/null; then
+      info "Go 环境变量已在 $rc_file 中，跳过"
+      continue
+    fi
+    cat >> "$rc_file" <<'RCBLOCK'
 
 # Go env (added by devtools/languages/go/setup.sh)
 if [[ -d /usr/local/go/bin ]]; then
@@ -142,13 +138,13 @@ fi
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 RCBLOCK
+    success "Go 环境变量已写入 $rc_file"
+  done
 
   # 立即生效（当前 shell）
   export PATH="/usr/local/go/bin:$PATH"
   export GOPATH="$HOME/go"
   export PATH="$GOPATH/bin:$PATH"
-
-  success "Go 环境变量已写入 $rc_file"
 }
 
 install_go_tools() {

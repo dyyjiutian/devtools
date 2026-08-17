@@ -9,6 +9,7 @@ ARG NODE_MAJOR=20
 ARG LAZYGIT_VERSION=0.44.1
 ARG BAT_VERSION=0.25.0
 ARG RG_VERSION=14.1.1
+ARG YAZI_VERSION=0.3.3
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG NO_PROXY
@@ -25,6 +26,8 @@ ENV LANG=C.UTF-8 \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY os/lib/repos/epel-8-aliyun.repo /etc/yum.repos.d/devtools-epel-8-aliyun.repo
+COPY os/lib/repos/docker-ce-8.repo /etc/yum.repos.d/devtools-docker-ce-8.repo
+COPY os/lib/repos/docker-ce-8-aliyun.repo /etc/yum.repos.d/devtools-docker-ce-8-aliyun.repo
 
 RUN set -eux; \
     case "${TARGETARCH}" in \
@@ -52,7 +55,9 @@ RUN set -eux; \
       make gcc gcc-c++ bison autoconf automake pkgconfig \
       libevent-devel ncurses-devel \
       ca-certificates python3 \
-      jq tree; \
+      jq tree iptables \
+      docker-ce docker-ce-cli containerd.io \
+      docker-buildx-plugin docker-compose-plugin; \
     "$PM" install -y cloc ripgrep bat || true; \
     if ! "$PM" install -y nodejs npm; then \
       curl -fsSL "https://rpm.nodesource.com/setup_${NODE_MAJOR}.x" | bash -; \
@@ -65,6 +70,7 @@ RUN set -eux; \
     useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash admin; \
     echo 'admin ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/admin; \
     chmod 0440 /etc/sudoers.d/admin; \
+    usermod -aG docker admin; \
     mkdir -p /opt/devtools /workspace /etc/profile.d \
       /home/admin/.cache /home/admin/.local/bin /home/admin/.config; \
     printf '%s\n' 'export PATH="/home/admin/.local/bin:/usr/local/bin:${PATH}"' \
@@ -78,21 +84,34 @@ COPY --chown=admin:admin tools/git /opt/devtools/tools/git
 COPY --chown=admin:admin editors/vim /opt/devtools/editors/vim
 COPY --chown=admin:admin editors/nvim /opt/devtools/editors/nvim
 COPY --chown=admin:admin terminal/tmux /opt/devtools/terminal/tmux
+COPY --chown=admin:admin terminal/yazi /opt/devtools/terminal/yazi
+COPY --chown=admin:admin tools/bazel /opt/devtools/tools/bazel
+COPY --chown=admin:admin languages/go /opt/devtools/languages/go
+COPY --chown=admin:admin languages/java /opt/devtools/languages/java
+COPY --chown=admin:admin agents/claude /opt/devtools/agents/claude
+COPY --chown=admin:admin agents/codex /opt/devtools/agents/codex
+COPY --chown=admin:admin agents/cursor-agent /opt/devtools/agents/cursor-agent
+COPY --chown=admin:admin agents/cookbook /opt/devtools/agents/cookbook
 COPY docker/alinux3/bootstrap.sh /usr/local/bin/devtools-bootstrap
+COPY docker/alinux3/entrypoint.sh /usr/local/bin/devtools-entrypoint
 
 RUN chmod 0755 /usr/local/bin/devtools-bootstrap \
+      /usr/local/bin/devtools-entrypoint \
  && sudo -u admin -H \
       env HOME=/home/admin \
           USER=admin \
           LOGNAME=admin \
-          TERM=xterm-256color \
+          TERM=dumb \
           GIT_TERMINAL_PROMPT=0 \
           NVIM_SETUP_STRICT=1 \
+          NVIM_SETUP_QUIET=1 \
           DEVTOOLS_ROOT=/opt/devtools \
           DEVTOOLS_CACHE_DIR=/opt/devtools/cache \
           LAZYGIT_VERSION="${LAZYGIT_VERSION}" \
           BAT_VERSION="${BAT_VERSION}" \
           RG_VERSION="${RG_VERSION}" \
+          YAZI_VERSION="${YAZI_VERSION}" \
+          SDKMAN_AUTO_ANSWER=true \
           HTTP_PROXY="${HTTP_PROXY:-}" \
           HTTPS_PROXY="${HTTPS_PROXY:-}" \
           NO_PROXY="${NO_PROXY:-}" \
@@ -106,8 +125,10 @@ RUN mkdir -p /home/admin/.cache \
  && chown -R admin:admin /home/admin
 
 ENV USER=admin \
-    LOGNAME=admin
+    LOGNAME=admin \
+    PATH=/usr/local/go/bin:/home/admin/go/bin:/home/admin/.sdkman/candidates/java/current/bin:/home/admin/.sdkman/candidates/maven/current/bin:/home/admin/.sdkman/candidates/gradle/current/bin:/home/admin/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 WORKDIR /home/admin
-USER admin
+USER root
+ENTRYPOINT ["/usr/local/bin/devtools-entrypoint"]
 CMD ["bash"]

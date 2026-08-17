@@ -336,6 +336,7 @@ tracked as separate work.
 ./setup.sh --update     # Sync init.lua/lua/ config, then update plugins and LSP servers
 ./setup.sh --help       # Show help
 NVIM_SETUP_STRICT=1 ./setup.sh   # fail if plugin / treesitter sync is incomplete
+NVIM_SETUP_QUIET=1 ./setup.sh    # hide headless progress (Docker/BuildKit log limits)
 ```
 
 ### Neovim Commands
@@ -366,6 +367,14 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 2. Restart Neovim to re-install plugins
 
 ## Issues
+
+### 2026-08-17 — 镜像构建时 Lazy sync 进度把 BuildKit 日志打满
+
+**表象**：`bash docker/alinux3/bake.sh` 在 `Installing plugins` 阶段被掐掉，日志停在某个插件 `clone | remote: Counting objects`，没有 Docker `ERROR: failed to solve`。
+
+**根因**：lazy.nvim 对每个 git clone 刷百分比。BuildKit 默认步进日志约 1MiB，打满后客户端断开，整个 RUN 失败。
+
+**解法**：`NVIM_SETUP_QUIET=1` 时 `_nvim_headless` 把进度写到临时文件，失败才打印末尾。`alinux3` Dockerfile 构建期同时设置 `NVIM_SETUP_STRICT=1` 与 `NVIM_SETUP_QUIET=1`。
 
 ### 2026-08-16 — 构建期没装上 bashls，打开 setup.sh 时 gd/gr 没反应
 

@@ -69,6 +69,20 @@ fi
   exit 1
 }
 
+DOCKER_CE8_REPO="${REPO_ROOT}/os/lib/repos/docker-ce-8.repo"
+DOCKER_CE8_ALIYUN="${REPO_ROOT}/os/lib/repos/docker-ce-8-aliyun.repo"
+assert_file_exists "$DOCKER_CE8_REPO"
+assert_file_exists "$DOCKER_CE8_ALIYUN"
+docker_ce8="$(cat "$DOCKER_CE8_REPO")"
+docker_ce8_aliyun="$(cat "$DOCKER_CE8_ALIYUN")"
+assert_contains "$docker_ce8" "/centos/8/" "official Docker CE repo pins centos/8"
+assert_contains "$docker_ce8_aliyun" "mirrors.aliyun.com/docker-ce/linux/centos/8/" \
+  "Aliyun Docker CE repo pins centos/8"
+if grep -Fq '$releasever' <<<"$docker_ce8$docker_ce8_aliyun"; then
+  echo "FAIL: Docker CE el8 repos must pin centos/8, not \$releasever" >&2
+  exit 1
+fi
+
 dnf_mirrors_write_epel_el8 "$TMP_ROOT/epel.repo"
 epel="$(cat "$TMP_ROOT/epel.repo")"
 assert_file_exists "$EPEL8_REPO"

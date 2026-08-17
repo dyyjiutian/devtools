@@ -51,13 +51,31 @@ ${BOLD}示例:${NC}
 EOF
 }
 
+# SDKMAN scripts read optional positional params and env vars without
+# defaults. Under `set -u` (this script and the alinux3 image bootstrap)
+# that aborts (SDKMAN_CANDIDATES_API, $3 in sdkman-install.sh).
+source_sdkman_init() {
+  [[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]] || return 1
+  set +u
+  # shellcheck source=/dev/null
+  source "$SDKMAN_DIR/bin/sdkman-init.sh"
+  set -u
+}
+
+run_sdk() {
+  local rc=0
+  source_sdkman_init || return 1
+  set +u
+  sdk "$@" && rc=0 || rc=$?
+  set -u
+  return "$rc"
+}
+
 install_sdkman() {
   step "SDKMan 安装"
 
-  if [[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "$SDKMAN_DIR/bin/sdkman-init.sh"
-    success "SDKMan 已安装：$(sdk version 2>/dev/null | head -1 || echo 'unknown')"
+  if source_sdkman_init; then
+    success "SDKMan 已安装：$(run_sdk version 2>/dev/null | head -1 || echo 'unknown')"
     return 0
   fi
 
@@ -84,9 +102,7 @@ install_sdkman() {
   info "正在安装 SDKMan..."
   curl -s "https://get.sdkman.io" | bash
 
-  if [[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "$SDKMAN_DIR/bin/sdkman-init.sh"
+  if source_sdkman_init; then
     success "SDKMan 安装完成"
   else
     error "SDKMan 安装失败"
@@ -95,35 +111,28 @@ install_sdkman() {
 }
 
 configure_sdkman_shell() {
-  local rc_file=""
-  if [[ -f "$HOME/.zshrc" ]]; then
-    rc_file="$HOME/.zshrc"
-  elif [[ -f "$HOME/.bashrc" ]]; then
-    rc_file="$HOME/.bashrc"
-  else
-    rc_file="$HOME/.bashrc"
-    touch "$rc_file"
-  fi
-
-  local marker='# SDKMan init (added by devtools/languages/java/setup.sh)'
-  if grep -qF "$marker" "$rc_file" 2>/dev/null; then
-    info "SDKMan 初始化已在 $rc_file 中，跳过"
-    return 0
-  fi
+  local rc_file marker='# SDKMan init (added by devtools/languages/java/setup.sh)'
 
   if [[ "$DRY_RUN" == true ]]; then
-    info "[dry-run] 将配置 SDKMan 到 $rc_file"
+    info "[dry-run] 将配置 SDKMan 到 ~/.bashrc 和 ~/.zshrc"
     return 0
   fi
 
-  cat >> "$rc_file" <<'RCBLOCK'
+  touch "$HOME/.bashrc"
+  for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [[ -f "$rc_file" ]] || continue
+    if grep -qF "$marker" "$rc_file" 2>/dev/null; then
+      info "SDKMan 初始化已在 $rc_file 中，跳过"
+      continue
+    fi
+    cat >> "$rc_file" <<'RCBLOCK'
 
 # SDKMan init (added by devtools/languages/java/setup.sh)
 export SDKMAN_DIR="$HOME/.sdkman"
 [[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]] && source "$SDKMAN_DIR/bin/sdkman-init.sh"
 RCBLOCK
-
-  success "SDKMan 初始化已写入 $rc_file"
+    success "SDKMan 初始化已写入 $rc_file"
+  done
 }
 
 sdk_install_if_missing() {
@@ -131,18 +140,18 @@ sdk_install_if_missing() {
   local version="$2"
   local display="${3:-$candidate $version}"
 
-  # 加载 sdkman
-  if [[ -s "$SDKMAN_DIR/bin/sdkman-init.sh" ]]; then
-    # shellcheck source=/dev/null
-    source "$SDKMAN_DIR/bin/sdkman-init.sh" 2>/dev/null || true
-  fi
-
-  if ! is_installed sdk; then
+  if ! source_sdkman_init; then
     warn "sdk 命令未找到，跳过 $display 安装"
     return 0
   fi
 
-  if sdk list "$candidate" 2>/dev/null | grep -q "* $version\|> $version"; then
+  if [[ -d "$SDKMAN_DIR/candidates/${candidate}/current" ]]; then
+    success "$display 已安装"
+    return 0
+  fi
+
+  if [[ "$version" != "latest" && -n "$version" ]] && \
+     run_sdk list "$candidate" 2>/dev/null | grep -q "* $version\|> $version"; then
     success "$display 已安装"
     return 0
   fi
@@ -153,7 +162,12 @@ sdk_install_if_missing() {
   fi
 
   info "正在安装 $display..."
-  sdk install "$candidate" "$version" < /dev/null
+  # SDKMAN 5.x rejects the literal version "latest"; omit it for the default.
+  if [[ "$version" == "latest" || -z "$version" ]]; then
+    run_sdk install "$candidate" < /dev/null
+  else
+    run_sdk install "$candidate" "$version" < /dev/null
+  fi
   success "$display 安装完成"
 }
 
