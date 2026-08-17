@@ -1,0 +1,49 @@
+# VPN L3 pair: alinux3 exit + privileged systemd client.
+# Images and repo root are injected by run_compose_e2e.sh.
+# IPv6 is off: Docker Hub / some ISPs advertise AAAA that blackholes.
+networks:
+  default:
+    enable_ipv6: false
+
+services:
+  server:
+    image: ${SERVER_IMAGE}
+    pull_policy: never
+    platform: linux/amd64
+    hostname: vpn-exit
+    privileged: true
+    cgroup: host
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    volumes:
+      - ${DEVTOOLS_REPO_ROOT}:/workspace:ro
+    working_dir: /workspace
+    environment:
+      DEVTOOLS_CACHE_DIR: /workspace/cache
+    command: ["/sbin/init"]
+
+  client:
+    image: ${CLIENT_IMAGE}
+    pull_policy: never
+    platform: linux/amd64
+    hostname: vpn-client
+    privileged: true
+    cgroup: host
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    depends_on:
+      - server
+    tmpfs:
+      - /run
+      - /run/lock
+      - /tmp
+    volumes:
+      - ${DEVTOOLS_REPO_ROOT}:/workspace:ro
+    working_dir: /workspace
+    environment:
+      DEVTOOLS_CACHE_DIR: /workspace/cache
+    command: ["/sbin/init"]

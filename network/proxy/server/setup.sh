@@ -59,7 +59,10 @@ if [[ -f /etc/os-release ]]; then
     esac
 fi
 
-SERVER_IP=$(curl -sf --connect-timeout 5 https://api4.ipify.org || hostname -I | awk '{print $1}')
+SERVER_IP="$(curl -sf --connect-timeout 5 https://api4.ipify.org || true)"
+if [[ -z "$SERVER_IP" ]]; then
+    SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+fi
 info "服务器公网 IP: ${SERVER_IP}"
 info "操作系统: ${PRETTY_NAME:-unknown}"
 info "包管理器: ${PKG_MGR}"
@@ -95,7 +98,7 @@ if ! command -v nginx &>/dev/null; then
     esac
     success "Nginx 安装完成"
 else
-    NGINX_VER=$(nginx -v 2>&1 | grep -oP '[\d.]+')
+    NGINX_VER=$(nginx -v 2>&1 | sed -n 's/.*\([0-9][0-9.]*\).*/\1/p' | head -1)
     success "Nginx 已安装: v${NGINX_VER}"
 fi
 

@@ -41,6 +41,18 @@ vpn/
     └── pac.js               # PAC 智能分流规则（供 V2RayXS / V2rayU 等 GUI 客户端）
 ```
 
+## L3 Compose pair（可选）
+
+用两台特权 systemd 容器验证 **client ↔ exit**（不部署中继、TUN、WARP）。server 固定 ALinux 3，client 为 Ubuntu / ALinux 3 / ALinux 4。成功标准：client SOCKS5 能访问 `https://example.com`。
+
+```bash
+bazel test --config=l3 //network/vpn:vpn_pair_linux_ubuntu_e2e_test
+bazel test --config=l3 //network/vpn:vpn_pair_linux_alinux3_e2e_test
+bazel test --config=l3 //network/vpn:vpn_pair_linux_alinux4_e2e_test
+```
+
+需要本机 Docker 与 `docker compose`。容器以 `/sbin/init` 为 PID 1，并加 `privileged` + `cgroup: host`，否则 `systemctl` 会失败。出口安装使用 `--skip-warp`。默认 `bazel test //...` 不会跑这一层。拉 Docker Hub 基础镜像走 IPv4（失败则 DaoCloud mirror）；Compose 网络关闭 IPv6。在 Docker Desktop ARM 上，systemd 255 可能无法拉起 amd64 `xray`，pair client 会回退为直接 `xray run`。
+
 ## 部署顺序
 
 **必须按以下顺序操作：出口节点 → 中继节点 → 客户端**
@@ -522,6 +534,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 - **UUID 和私钥**：请妥善保管出口节点生成的配置，切勿公开
 
 ## Issues
+
+### 2026-08-17 — Compose E2E 里 exit/setup.sh 因 hostname 退出 127
+
+**表象**：特权 systemd 容器已起来，`pair_server.sh` 在「检测系统环境」以 127 退出。
+
+**根因**：`SERVER_IP=$(curl ... || hostname -I | awk ...)` 在 `set -o pipefail` 下，curl 失败后 `hostname` 不存在会使整段失败。
+
+**解法**：curl / hostname / `ip -4 addr` 分层回退，每步 `|| true`。Compose pair：`bazel test --config=l3 //network/vpn:vpn_pair_linux_alinux3_e2e_test`。
 
 ### 2026-08-17 — L1 VPN 测试在 macOS 上失败
 

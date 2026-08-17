@@ -171,13 +171,20 @@ if [[ ! -f "$DOCKER_DIR/$DOCKERFILE" ]]; then
   echo "run_e2e_in_docker.sh: missing $DOCKERFILE" >&2
   exit 1
 fi
+if [[ ! -f "$DOCKER_DIR/ipv4.sh" ]]; then
+  echo "run_e2e_in_docker.sh: missing $DOCKER_DIR/ipv4.sh" >&2
+  exit 1
+fi
+# shellcheck source=ipv4.sh
+source "$DOCKER_DIR/ipv4.sh"
 
 BUILD_CTX="$(mktemp -d "${TMPDIR:-/tmp}/devtools-e2e-build.XXXXXX")"
 trap 'rm -rf "$BUILD_CTX"' EXIT
 cp -L "$DOCKER_DIR/$DOCKERFILE" "$BUILD_CTX/Dockerfile"
 
-echo "==> building $IMAGE_TAG from $DOCKER_DIR/$DOCKERFILE (platform=linux/amd64)"
-docker build --platform linux/amd64 -f "$BUILD_CTX/Dockerfile" -t "$IMAGE_TAG" "$BUILD_CTX"
+echo "==> building $IMAGE_TAG from $DOCKER_DIR/$DOCKERFILE (platform=linux/amd64, IPv4)"
+docker_build_ipv4 "$BUILD_CTX/Dockerfile" \
+  -f "$BUILD_CTX/Dockerfile" -t "$IMAGE_TAG" "$BUILD_CTX"
 
 run_args=(
   bash /workspace/tests/common/lib/run_e2e_test.sh

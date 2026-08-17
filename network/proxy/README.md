@@ -36,6 +36,18 @@ proxy/
 └── README.md
 ```
 
+## L3 Compose pair（可选）
+
+用两台特权 systemd 容器验证 **SNI 服务端 ↔ 客户端 hosts**。server 固定 ALinux 3，client 为 Ubuntu / ALinux 3 / ALinux 4。成功标准：client 把 `github.com` 指到 server，并能经 443 SNI 访问本机 `e2e.devtools.test` 源站。
+
+```bash
+bazel test --config=l3 //network/proxy:proxy_pair_linux_ubuntu_e2e_test
+bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux3_e2e_test
+bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux4_e2e_test
+```
+
+需要本机 Docker 与 `docker compose`。容器以 `/sbin/init` 为 PID 1，并加 `privileged` + `cgroup: host`。默认 `bazel test //...` 不会跑这一层。
+
 ## 快速部署
 
 ### 第一步：服务端（新加坡 ECS）
@@ -169,3 +181,13 @@ du -sh /data/docker-mirror           # 查看缓存大小
 - SNI 代理通过**白名单**限制转发域名，未匹配域名直接断开连接，不会成为开放代理
 - 建议在 ECS 安全组限制 443 端口来源 IP（仅允许自己公司/家庭 IP 段）
 - Docker registry mirror 仅监听 `127.0.0.1`，通过 Nginx 反代对外暴露时建议配置认证
+
+## Issues
+
+2026-08-17 — 容器 / Ubuntu 24 上 configure.sh 刷新 DNS 失败
+
+**表象**：`systemd-resolve --flush-caches` 在 Ubuntu 24 或无 resolved 的容器里非 0 退出，`set -e` 中断配置。
+
+**根因**：命令已改名为 `resolvectl`，且 flush 失败不应阻断 hosts 写入。
+
+**解法**：`systemd-resolve` / `resolvectl` 失败后继续。Compose pair：`bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux3_e2e_test`。

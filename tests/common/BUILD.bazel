@@ -10,6 +10,9 @@ exports_files([
     "lib/run_e2e_test.sh",
     "docker/run_in_docker.sh",
     "docker/run_e2e_in_docker.sh",
+    "docker/run_compose_e2e.sh",
+    "docker/compose/vpn-pair.yml",
+    "docker/compose/proxy-pair.yml",
 ])
 
 filegroup(
@@ -59,6 +62,21 @@ devtools_unit_test(
     suite = ":tests/unit/e2e_runner_suite.sh",
     data = [
         ":docker_files",
+    ],
+    tags = [
+        "contract",
+        "smoke",
+    ],
+)
+
+devtools_unit_test(
+    name = "compose_runner_unit_test",
+    suite = ":tests/unit/compose_runner_suite.sh",
+    data = [
+        ":docker_files",
+        "//network/vpn:vpn_pair_files",
+        "//network/proxy:proxy_pair_files",
+        "//tests/common/rules:devtools_tests.bzl",
     ],
     tags = [
         "contract",

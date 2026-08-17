@@ -27,7 +27,7 @@ bazel test --config=l3 --test_tag_filters=l3,requires-macos //...
 | `tests/common/lib/` | 断言、OS profile、L1 / L3 host runner |
 | `tests/common/rules/devtools_tests.bzl` | 生成 L1 / L2 / L3 Bazel 目标 |
 | `tests/common/profiles/` | Ubuntu、ALinux 3/4、macOS profile 元数据 |
-| `tests/common/docker/` | L2 fake runner 与 L3 Linux E2E runner |
+| `tests/common/docker/` | L2 fake、L3 单容器 E2E、Compose pair |
 | `tests/common/ci/` | GitHub 层选择（commit 关键词 L1/L2/L3） |
 | `<module>/tests/unit/` | 模块单元测试 |
 | `<module>/tests/integration/` | 模块集成测试 |
@@ -49,6 +49,8 @@ L2 Docker 夹具（仍是 Integration，容器内使用 fake 命令）：`ubuntu
 - `//terminal/tmux:tmux_ops_linux_ubuntu_e2e_test`（L3 Linux）
 - `//terminal/tmux:tmux_ops_macos_e2e_test`（L3 macOS，GitHub `macos-26`）
 - `//languages/go:go_linux_ubuntu_test`（L1）
+- `//network/vpn:vpn_pair_linux_ubuntu_e2e_test`（L3 VPN Compose pair，特权 systemd）
+- `//network/proxy:proxy_pair_linux_alinux3_e2e_test`（L3 proxy SNI Compose pair）
 
 ## 常用目标
 
@@ -62,6 +64,8 @@ bazel test //os/macos:macos_setup_bats_test
 # L2 / L3
 bazel test --config=l2 //tools/git/... //terminal/tmux/...
 bazel test --config=l3 --test_tag_filters=l3,-requires-macos //languages/go/...
+bazel test --config=l3 //network/vpn:vpn_pair_linux_ubuntu_e2e_test
+bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux3_e2e_test
 
 bazel query 'tests(//...)'
 ```

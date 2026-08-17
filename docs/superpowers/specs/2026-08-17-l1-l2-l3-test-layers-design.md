@@ -49,5 +49,5 @@ CI：`.github/workflows/l1.yml`、`l2.yml`、`l3.yml`。`l3.yml` 含 Ubuntu Dock
 
 - 不在 GitHub 上从 IPSW 自建多版本 macOS VM。
 - 不把 `os/macos/setup.sh` 全量 cask / Docker Desktop 纳入 L3。
-- 不把 VPN / FRP / remote-desktop 纳入矩阵。
+- FRP / remote-desktop 不纳入矩阵。VPN client↔exit 与 proxy SNI client↔server 用 L3 Compose pair（特权 systemd），不进默认 L1。
 - 不把 Python pyenv 源码编译或 nvim `gd`/`gr` 纳入本轮 L3。

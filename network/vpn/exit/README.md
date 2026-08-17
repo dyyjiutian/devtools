@@ -4,6 +4,7 @@
 
 ~~~bash
 sudo bash network/vpn/exit/setup.sh --help
+sudo bash network/vpn/exit/setup.sh --skip-warp   # Compose E2E / 无需 WARP
 bash network/vpn/exit/manage.sh --help
 bash network/vpn/exit/setup_test.sh
 ~~~

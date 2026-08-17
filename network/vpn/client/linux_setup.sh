@@ -137,6 +137,7 @@ XRAY_BIN="/usr/local/bin/xray"
 XRAY_CONFIG_DIR="/usr/local/etc/xray"
 XRAY_DAT_DIR="/usr/local/share/xray"
 XRAY_SYSTEMD_DIR="${XRAY_SYSTEMD_DIR:-/etc/systemd/system}"
+XRAY_SERVICE_USER="${XRAY_SERVICE_USER:-nobody}"
 XRAY_TUN_HELPER_PATH="${XRAY_TUN_HELPER_PATH:-/usr/local/libexec/xray-client-tun-route}"
 XRAY_TUN_HELPER_SOURCE="${SCRIPT_DIR}/bin/xray-tun-route"
 
@@ -742,7 +743,7 @@ JSON_EOF
 
 write_systemd_service() {
     local tun_wants=""
-    local service_user="nobody"
+    local service_user="${XRAY_SERVICE_USER:-nobody}"
     local dynamic_user=""
     $TUN_MODE && tun_wants="Wants=xray-client-tun-routing.service"
     if $TUN_MODE; then
@@ -907,6 +908,7 @@ do_install() {
             success "xray-client 服务运行中"
         else
             error "xray-client 启动失败，查看日志: journalctl -u xray-client -n 50"
+            journalctl -u xray-client -n 50 --no-pager >&2 || true
             exit 1
         fi
         if $TUN_MODE && ! systemctl is-active --quiet xray-client-tun-routing.service; then

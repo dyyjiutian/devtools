@@ -1,0 +1,27 @@
+load("//tests/common/rules:devtools_tests.bzl", "devtools_compose_e2e_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "proxy_pair_files",
+    srcs = glob(["tests/e2e/**"]) + [
+        "server/setup.sh",
+        "server/nginx/sni_proxy.conf",
+        "client/configure.sh",
+        "client/hosts.txt",
+    ],
+)
+
+devtools_compose_e2e_tests(
+    name = "proxy_pair",
+    compose = "//tests/common:docker/compose/proxy-pair.yml",
+    server_profile = "linux_alinux3",
+    server_script = "tests/e2e/pair_server.sh",
+    client_script = "tests/e2e/pair_client.sh",
+    client_profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
+    module_data = [":proxy_pair_files"],
+)

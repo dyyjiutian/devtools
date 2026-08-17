@@ -23,7 +23,7 @@ L2 进了容器也不等于真装。macOS 没有 Linux Docker 等价物；macOS 
 | `languages/go` `python` `java` `rust` | L1 + L2；真装看 L3 | L1/L2 测 CLI/dry-run；L3 测运行时真的出现 |
 | `terminal/tmux`、`editors/vim`、`editors/nvim` | L3 才能证明操作 | L1/L2 测安装器契约；prefix / blame / telescope 必须真装 |
 | `os/macos` setup CLI | L1（bats） | 全量 cask 不进矩阵 |
-| VPN / FRP / remote-desktop | 不进矩阵 | 需要真实网络与可回滚目标 |
+| VPN / proxy / FRP / remote-desktop | VPN 与 proxy 有 L3 Compose pair；FRP / remote-desktop 仍不进矩阵 | VPN：alinux3 exit + 多发行版 client。proxy：alinux3 SNI + 多发行版 client。均特权 systemd |
 
 Python L3 使用 `--skip-pyenv --skip-ai-packages`，验证 `uv` 真装，不在 CI 里编译 CPython。
 
@@ -45,6 +45,8 @@ bazel test --config=docker //tools/git/...   # docker 是 l2 的别名
 # L3（真装，慢，会改容器或本机 brew 前缀）
 bazel test --config=l3 --test_tag_filters=l3,-requires-macos //...   # Linux Docker E2E
 bazel test --config=l3 --test_tag_filters=l3,requires-macos //...    # 仅 Darwin
+bazel test --config=l3 //network/vpn:vpn_pair_linux_ubuntu_e2e_test    # VPN Compose pair
+bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux3_e2e_test  # proxy SNI pair
 ```
 
 没有 `bazel` 时不要把“没跑”写成通过。不要为了验证语法而跑真实安装器。
@@ -80,7 +82,7 @@ tests/
     ├── lib/          # profile、断言、L1/L3 host runner
     ├── rules/        # Bazel 宏
     ├── profiles/
-    ├── docker/       # L2 fake runner 与 L3 Linux E2E runner
+    ├── docker/       # L2 fake、L3 单容器 E2E、Compose pair（vpn-pair.yml / proxy-pair.yml）
     └── ci/           # GitHub 层选择
 
 <module>/tests/
@@ -121,7 +123,7 @@ tests/
 ## 新增测试
 
 1. 先判断：纯解析放 unit（L1）；入口协作放 integration（L1，Linux 用户态敏感则加 `docker_profiles`）；真装才放 e2e（L3）。
-2. 复用 `devtools_unit_test` / `devtools_module_tests` / `devtools_e2e_tests` / `devtools_host_e2e_tests`。
+2. 复用 `devtools_unit_test` / `devtools_module_tests` / `devtools_e2e_tests` / `devtools_host_e2e_tests` / `devtools_compose_e2e_tests`。
 3. 禁止在 L1/L2 里 `sudo`、改真实 shell rc、或联网安装。
 
 更详细的设计见 `docs/superpowers/specs/2026-08-17-l1-l2-l3-test-layers-design.md`。

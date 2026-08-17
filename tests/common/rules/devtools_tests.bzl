@@ -220,3 +220,65 @@ def devtools_host_e2e_tests(
             "local",
         ],
     )
+
+def devtools_compose_e2e_tests(
+        name,
+        compose,
+        client_profiles,
+        server_profile = "linux_alinux3",
+        server_script = "",
+        client_script = "",
+        module_data = [],
+        tags = [],
+        size = "enormous"):
+    """Create privileged docker-compose pair E2E tests (L3).
+
+    Args:
+      name: Short name (e.g. \"vpn_pair\").
+      compose: Label of the compose YAML.
+      client_profiles: Linux client profiles (one Bazel target each).
+      server_profile: Linux server profile (default alinux3).
+      server_script: Optional label of the in-container server installer.
+      client_script: Optional label of the in-container client installer.
+      module_data: Extra labels needed at runtime.
+      tags: Extra tags added to every generated test.
+      size: Bazel test size (default enormous).
+    """
+    script_flags = []
+    extra_data = []
+    if server_script:
+        script_flags.extend(["--server-script", "$(rootpath %s)" % server_script])
+        extra_data.append(server_script)
+    if client_script:
+        script_flags.extend(["--client-script", "$(rootpath %s)" % client_script])
+        extra_data.append(client_script)
+
+    for client_profile in client_profiles:
+        sh_test(
+            name = "%s_%s_e2e_test" % (name, client_profile),
+            srcs = ["//tests/common:docker/run_compose_e2e.sh"],
+            args = [
+                "--compose",
+                "$(rootpath %s)" % compose,
+                "--server-profile",
+                server_profile,
+                "--client-profile",
+                client_profile,
+            ] + script_flags,
+            data = [
+                "//tests/common:lib_files",
+                "//tests/common:docker_files",
+                compose,
+            ] + extra_data + module_data,
+            size = size,
+            tags = tags + [
+                "l3",
+                "e2e",
+                "compatibility",
+                "profile-%s" % client_profile,
+                "requires-docker",
+                "no-sandbox",
+                "requires-network",
+                "local",
+            ],
+        )

@@ -22,6 +22,10 @@ RUN apt-get update \
         ripgrep \
         zip \
         unzip \
+        systemd \
+        systemd-sysv \
+        dbus \
+        iproute2 \
     && rm -rf /var/lib/apt/lists/* \
     && printf 'ALL ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/e2e \
     && chmod 0440 /etc/sudoers.d/e2e

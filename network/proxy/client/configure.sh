@@ -144,7 +144,9 @@ flush_dns() {
             ;;
         Linux)
             if systemctl is-active systemd-resolved &>/dev/null; then
-                systemd-resolve --flush-caches
+                systemd-resolve --flush-caches 2>/dev/null \
+                  || resolvectl flush-caches 2>/dev/null \
+                  || true
                 success "systemd-resolved DNS 缓存已刷新"
             elif command -v nscd &>/dev/null; then
                 nscd -i hosts 2>/dev/null || service nscd restart 2>/dev/null || true

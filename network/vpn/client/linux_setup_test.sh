@@ -386,6 +386,19 @@ route_unit="${tun_systemd_dir}/xray-client-tun-routing.service"
 assert_file_not_contains "$normal_unit" 'xray-client-tun-routing.service'
 assert_file_contains "$normal_unit" 'User=nobody'
 assert_file_not_contains "$normal_unit" 'DynamicUser=true'
+root_systemd_dir="${TMP_DIR}/systemd-root"
+mkdir -p "$root_systemd_dir"
+(
+    set --
+    export LINUX_SETUP_SOURCE_ONLY=true
+    export XRAY_SERVICE_USER=root
+    # shellcheck source=linux_setup.sh
+    source "$LINUX_SETUP"
+    XRAY_SYSTEMD_DIR="$root_systemd_dir"
+    TUN_MODE=false
+    write_systemd_service
+)
+assert_file_contains "${root_systemd_dir}/xray-client.service" 'User=root'
 assert_file_contains "$tun_unit" 'Wants=xray-client-tun-routing.service'
 assert_file_contains "$tun_unit" 'User=xray-tun'
 assert_file_contains "$tun_unit" 'DynamicUser=true'

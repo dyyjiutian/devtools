@@ -28,6 +28,7 @@ assert_contains "$runner" 'linux_alinux4) DOCKERFILE="Dockerfile.e2e.alinux4"; I
   "maps linux_alinux4 to the ALinux 4 E2E image"
 assert_contains "$runner" "run_e2e_test.sh" "container invokes the E2E host runner"
 assert_contains "$runner" "--platform linux/amd64" "E2E pins the x86_64 compatibility baseline"
+assert_contains "$runner" "docker_build_ipv4" "E2E builds with IPv4-first registry pull"
 assert_not_contains "$runner" "setup_os_profile" "E2E docker runner does not inject OS fakes"
 assert_not_contains "$runner" "run_module_test.sh" "E2E does not reuse the L2 fake runner"
 
@@ -39,6 +40,7 @@ assert_contains "$host" "DEVTOOLS_E2E_REQUIRE_DARWIN" "host runner can require D
 ubuntu="$(cat "$UBUNTU")"
 assert_contains "$ubuntu" "FROM ubuntu:24.04" "Ubuntu E2E uses Ubuntu 24.04"
 assert_contains "$ubuntu" "sudo" "Ubuntu E2E provides sudo for installers"
+assert_contains "$ubuntu" "systemd" "Ubuntu E2E installs systemd for Compose pair tests"
 
 alinux3="$(cat "$ALINUX3")"
 assert_contains "$alinux3" \

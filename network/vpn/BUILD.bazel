@@ -1,0 +1,27 @@
+load("//tests/common/rules:devtools_tests.bzl", "devtools_compose_e2e_tests")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "vpn_pair_files",
+    srcs = glob(["tests/e2e/**"]) + [
+        "//network/vpn/client:linux_setup.sh",
+        "//network/vpn/client:bin/xray-tun-route",
+        "//network/vpn/exit:setup.sh",
+        "//network/vpn/exit:manage.sh",
+    ],
+)
+
+devtools_compose_e2e_tests(
+    name = "vpn_pair",
+    compose = "//tests/common:docker/compose/vpn-pair.yml",
+    server_profile = "linux_alinux3",
+    server_script = "tests/e2e/pair_server.sh",
+    client_script = "tests/e2e/pair_client.sh",
+    client_profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+    ],
+    module_data = [":vpn_pair_files"],
+)

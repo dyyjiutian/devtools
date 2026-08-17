@@ -18,6 +18,7 @@ step()    { echo -e "\n${BOLD}==> $*${RESET}"; }
 
 # ── 参数解析 ──────────────────────────────────────────────────────────────────
 DRY_RUN=false
+SKIP_WARP=false
 LISTEN_PORT=443
 REALITY_DEST="www.icloud.com:443"
 REALITY_SNI="www.icloud.com"
@@ -26,6 +27,7 @@ USERS_ARG=""
 for arg in "$@"; do
     case $arg in
         --dry-run)   DRY_RUN=true ;;
+        --skip-warp) SKIP_WARP=true ;;
         --port=*)    LISTEN_PORT="${arg#*=}" ;;
         --users=*)   USERS_ARG="${arg#*=}" ;;
         --help|-h)
@@ -37,6 +39,7 @@ Options:
   --users=LIST         用户列表，逗号分隔（默认 user1）
                        数字：--users=3 → 创建 user1 user2 user3
                        名称：--users=alice,bob,carol
+  --skip-warp          跳过 Cloudflare WARP（Compose E2E / 无需 Claude 出站）
   --dry-run            预览操作，不实际执行
   --help               显示帮助
 
@@ -169,7 +172,14 @@ if [[ -f /etc/os-release ]]; then
     esac
 fi
 
-SERVER_IP=$(curl -sf --connect-timeout 5 https://api4.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
+SERVER_IP="$(curl -sf --connect-timeout 5 https://api4.ipify.org 2>/dev/null || true)"
+if [[ -z "$SERVER_IP" ]]; then
+    SERVER_IP="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+fi
+if [[ -z "$SERVER_IP" ]]; then
+    SERVER_IP="$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2; exit}' | cut -d/ -f1 || true)"
+fi
+[[ -n "$SERVER_IP" ]] || SERVER_IP="unknown"
 info "服务器公网 IP : ${SERVER_IP}"
 info "操作系统      : ${PRETTY_NAME:-unknown}"
 info "监听端口      : ${LISTEN_PORT}"
@@ -234,7 +244,9 @@ https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" \
     sleep 3
 }
 
-if $DRY_RUN; then
+if $SKIP_WARP; then
+    info "已跳过 Cloudflare WARP（--skip-warp）"
+elif $DRY_RUN; then
     info "[dry-run] 将安装 Cloudflare WARP 并设置 proxy 模式（SOCKS5 on 40000）"
 else
     if command -v warp-cli &>/dev/null && warp-cli --accept-tos status 2>/dev/null | grep -q "Connected"; then
@@ -298,7 +310,8 @@ net.ipv4.tcp_wmem = 4096 65536 67108864
 net.ipv4.tcp_mtu_probing = 1
 net.ipv4.ip_local_port_range = 1024 65535
 SYSCTL
-    sysctl -p "$SYSCTL_CONF" > /dev/null
+    sysctl -p "$SYSCTL_CONF" >/dev/null \
+        || warn "部分内核参数未能立即生效（容器内常见）"
 }
 
 if $DRY_RUN; then

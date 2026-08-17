@@ -86,7 +86,24 @@ printf '%s\n' \
 assert_file_contains "$repo_file" "baseurl=https://pkg.cloudflareclient.com/rpm/9"
 assert_file_not_contains "$repo_file" '$releasever'
 
-echo "[5/5] missing webkit2gtk3 falls back to rpm --nodeps CLI-only install"
+echo "[5/7] public IP detection does not fail when hostname is missing"
+grep -q 'hostname -I 2>/dev/null' "$EXIT_SETUP" \
+    || fail "SERVER_IP fallback should tolerate missing hostname"
+grep -q 'awk '\''{print $1}'\'' || true' "$EXIT_SETUP" \
+    || fail "hostname fallback must not fail under pipefail"
+grep -q 'ip -4 addr show' "$EXIT_SETUP" \
+    || fail "SERVER_IP should fall back to iproute when hostname is absent"
+
+echo "[6/7] --skip-warp is documented and gates WARP install"
+help_out="$("$EXIT_SETUP" --help)"
+echo "$help_out" | grep -q -- '--skip-warp' \
+    || fail "setup.sh --help should document --skip-warp"
+grep -q 'SKIP_WARP' "$EXIT_SETUP" \
+    || fail "setup.sh should define SKIP_WARP"
+grep -q '已跳过 Cloudflare WARP' "$EXIT_SETUP" \
+    || fail "setup.sh should skip WARP when --skip-warp is set"
+
+echo "[7/7] missing webkit2gtk3 falls back to rpm --nodeps CLI-only install"
 fake_bin="${TMP_DIR}/fake-bin"
 mkdir -p "$fake_bin"
 cat >"${fake_bin}/yum" <<'EOF'
