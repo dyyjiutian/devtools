@@ -491,8 +491,8 @@ _install_ripgrep_github_fallback() {
         return 1
     fi
 
-    rg_bin="$(find "$tmpdir" -type f -name rg | head -1)"
-    if [[ -z "$rg_bin" ]]; then
+    rg_bin="${tmpdir}/ripgrep-${RG_VERSION}-${target}/rg"
+    if [[ ! -x "$rg_bin" ]]; then
         rm -rf "$tmpdir"
         warn "ripgrep release archive missing rg binary"
         return 1
