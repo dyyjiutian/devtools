@@ -212,7 +212,7 @@ bazel test --config=l1 //languages/go/... //tools/git/...
 bazel test --config=l2 //tools/git/...
 ```
 
-Layer rules and CI keywords (`L1` / `L2` / `L3`) are in `tests/README.md`.
+Layer rules and CI selectors (`[test#L1]`, `[test#L1,L2]`, `[test#skip]`; aliases `ut`/`it`/`e2e`) are in `tests/README.md`.
 
 If `bazel` or `bats` is unavailable, report that it was not run; never treat
 missing tooling as a passing result. Do not run real installers during routine

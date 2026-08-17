@@ -8,13 +8,13 @@
 - **L2**：Linux Docker + 同一套 fake suite（可选，抓 GNU/BSD 与 Linux 用户态）
 - **L3**：真实安装。Linux 用官方镜像 Docker E2E；macOS 用 GitHub `macos-26` 托管 runner 跑 host E2E
 
-本地开发默认只跑 L1，需要时加 L2；L3 可选。GitHub 建三条流水线，commit / PR 文案里的 `L1` / `L2` / `L3` 可只跑对应层。
+本地开发默认只跑 L1，需要时加 L2；L3 可选。GitHub 建三条流水线，commit / PR 文案里的 `[test#L1]` / `[test#L1,L2]` / `[test#skip]`（别名 `ut`/`it`/`e2e`）可选择层。
 
 ## 决策摘要
 
 - Bazel tag：`l1` / `l2` / `l3`。默认 `bazel test //...` 排除 `l2`、`l3`、`requires-docker`、`requires-macos`。
 - `--config=l2`（兼容 `--config=docker`）只跑 L2；`--config=l3` 跑 L3。
-- Commit / PR 标题或正文出现 `\bL1\b` / `\bL2\b` / `\bL3\b` 时，只调度对应流水线；都没写则三条都跑。
+- Commit / PR 标题或正文出现 `[test#L1]` / `[test#L1,L2]` / `[test#skip]` 时按 tag 调度；别名 `ut`/`it`/`e2e` = L1/L2/L3；都没写则三条都跑。
 - macOS L3：`runs-on: macos-26`（GitHub 当前 macOS 26 镜像），复用 `run_e2e_test.sh`，不经 Docker。
 - 本轮补测：语言模块 L1（CLI / dry-run）+ L2（Linux fake）；L3 补 Go / Python / Java / Rust 真装，以及 tmux / vim / nvim 的 macOS host E2E。Python L3 跳过 pyenv 编译，验证 `uv` 真装。
 - `os/linux` 补 L2。ssh / agents 只保留 L1。
@@ -35,7 +35,7 @@
 - `devtools_e2e_tests` → `l3` + `requires-docker`
 - 新增 `devtools_host_e2e_tests` → `l3` + `requires-macos`
 
-CI：`.github/workflows/l1.yml`、`l2.yml`、`l3.yml`。`l3.yml` 含 Ubuntu Docker job 与 `macos-26` job。
+CI：`.github/workflows/ut.yml`、`it.yml`、`e2e.yml`。`e2e.yml` 含 Ubuntu Docker job 与 `macos-26` job。
 
 ## 测试要点
 

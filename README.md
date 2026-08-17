@@ -347,7 +347,7 @@ bazel test --config=l2 //...
 bazel test --config=l3 --test_tag_filters=l3,-requires-macos //...
 ```
 
-GitHub 有三条流水线 `L1` / `L2` / `L3`。在 commit 或 PR 标题里写整词 `L1`、`L2` 或 `L3` 时只跑对应层；都不写则三层都跑。
+GitHub 有三条流水线 `UT` / `IT` / `E2E`（`.github/workflows/{ut,it,e2e}.yml`）。在 commit 或 PR 标题/正文里写 `[test#L1]`、`[test#L1,L2]`、`[test#ut,e2e]` 或 `[test#skip]` 选择层（`ut`/`it`/`e2e` 是 L1/L2/L3 的别名）；不写则三层都跑。详见 `tests/README.md`。
 
 ## Quick Start on a New Machine
 

@@ -28,7 +28,7 @@ bazel test --config=l3 --test_tag_filters=l3,requires-macos //...
 | `tests/common/rules/devtools_tests.bzl` | 生成 L1 / L2 / L3 Bazel 目标 |
 | `tests/common/profiles/` | Ubuntu、ALinux 3/4、macOS profile 元数据 |
 | `tests/common/docker/` | L2 fake、L3 单容器 E2E、Compose pair |
-| `tests/common/ci/` | GitHub 层选择（commit 关键词 L1/L2/L3） |
+| `tests/common/ci/` | GitHub 层选择（`[test#L1]` / `[test#skip]`，别名 `ut`/`it`/`e2e`） |
 | `<module>/tests/unit/` | 模块单元测试 |
 | `<module>/tests/integration/` | 模块集成测试 |
 

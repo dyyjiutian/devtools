@@ -124,7 +124,7 @@ bazel test --config=l1 //languages/go/... //tools/git/...
 bazel test --config=l2 //tools/git/... //languages/go/...
 ```
 
-分层、模块该跑到哪一层、以及 commit 里写 `L1`/`L2`/`L3` 只跑对应 CI，见 `tests/README.md`。若环境没有 `bazel` 或 `bats`，明确记录未执行原因；不要把工具缺失误报为代码通过。对安装逻辑优先测试 `--help`、`--dry-run`、已有缓存路径、**重复执行（幂等）**和失败回滚路径。
+分层、模块该跑到哪一层、以及 commit / PR 里写 `[test#L1]` / `[test#L1,L2]` / `[test#skip]`（别名 `ut`/`it`/`e2e`）选择 CI，见 `tests/README.md`。若环境没有 `bazel` 或 `bats`，明确记录未执行原因；不要把工具缺失误报为代码通过。对安装逻辑优先测试 `--help`、`--dry-run`、已有缓存路径、**重复执行（幂等）**和失败回滚路径。
 
 ## Git 提交与 PR
 

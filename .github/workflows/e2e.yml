@@ -1,0 +1,46 @@
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      e2e: ${{ steps.select.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: select
+        env:
+          SELECT_LAYERS_MESSAGE: ${{ github.event.head_commit.message }} ${{ github.event.pull_request.title }} ${{ github.event.pull_request.body }}
+        run: bash tests/common/ci/select_layers.sh >> "$GITHUB_OUTPUT"
+
+  e2e-linux:
+    needs: select
+    if: needs.select.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - name: E2E Linux Docker real setup
+        # Comma-separated positive tags are OR. Use -requires-macos so Linux
+        # Docker E2E does not pick up Darwin host tests. --jobs=1 avoids
+        # privileged systemd containers starving each other.
+        run: bazel test --config=l3 --test_tag_filters=l3,-requires-macos --jobs=1 //...
+
+  e2e-macos:
+    needs: select
+    if: needs.select.outputs.e2e == 'true'
+    runs-on: macos-26
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: bazelbuild/setup-bazelisk@v3
+      - name: E2E macOS host real setup
+        # requires-macos only (not l3,requires-macos). Bazel ORs positive tags,
+        # so including l3 would also run Linux Docker E2E on Darwin.
+        run: bazel test --config=l3 --test_tag_filters=requires-macos //...

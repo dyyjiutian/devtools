@@ -6,9 +6,9 @@
 
 | 层 | 环境 | 包管理器 | 证明什么 | 本地 | CI |
 |---|---|---|---|---|---|
-| **L1** | 宿主机 OS profile | fake `uname` / `apt` / `dnf` / `brew` | 分支、CLI、dry-run、幂等写入 | **默认回归** | `.github/workflows/l1.yml` |
-| **L2** | Linux Docker（`Dockerfile.*`） | 仍是 fake | 同一套 suite 在 GNU/Linux 用户态 | 可选 | `.github/workflows/l2.yml` |
-| **L3** | Linux 官方镜像真装 + GitHub `macos-26` 真装 | 真 apt/dnf/brew | 装完后用户可观察结果 | 可选，勿当日常 | `.github/workflows/l3.yml` |
+| **L1** | 宿主机 OS profile | fake `uname` / `apt` / `dnf` / `brew` | 分支、CLI、dry-run、幂等写入 | **默认回归** | `.github/workflows/ut.yml` |
+| **L2** | Linux Docker（`Dockerfile.*`） | 仍是 fake | 同一套 suite 在 GNU/Linux 用户态 | 可选 | `.github/workflows/it.yml` |
+| **L3** | Linux 官方镜像真装 + GitHub `macos-26` 真装 | 真 apt/dnf/brew | 装完后用户可观察结果 | 可选，勿当日常 | `.github/workflows/e2e.yml` |
 
 L2 进了容器也不等于真装。macOS 没有 Linux Docker 等价物；macOS L3 只跑在 Darwin / GitHub `macos-26`。
 
@@ -53,13 +53,19 @@ bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux3_e2e_test  # prox
 
 ## GitHub CI 与 commit 关键词
 
-三条独立流水线：`L1`、`L2`、`L3`。`L3` 含 Ubuntu Docker job 与 `runs-on: macos-26` job。
+三条独立流水线：`UT`（`.github/workflows/ut.yml`）、`IT`（`it.yml`）、`E2E`（`e2e.yml`）。`E2E` 含 Ubuntu Docker job 与 `runs-on: macos-26` job。
 
-在 **HEAD commit message 或 PR 标题/正文** 里写整词 `L1` / `L2` / `L3`（例如 `fix: help text L1` 或 `[L2]`）：
+在 **HEAD commit message 或 PR 标题/正文** 里写 `[test#…]` 选择器（大小写不敏感）：
 
-- 只写其中一层：只跑对应流水线，另外两层 skip（便于快合）
-- 写多词（`L1 L3`）：只跑写出的层
-- 都不写：三层都跑
+| 写法 | 行为 |
+|---|---|
+| 不写 `[test#…]` | 三层都跑 |
+| `[test#L1]` 或 `[test#ut]` | 只跑 L1 |
+| `[test#L1,L2]` 或 `[test#ut,it]` | 只跑写出的层 |
+| `[test#L3]` 或 `[test#e2e]` | 只跑 L3 |
+| `[test#skip]` | 三层都不跑 |
+
+别名：`ut` = L1，`it` = L2，`e2e` = L3。多个 tag 取并集；任一处出现 `skip` 则全跳过。正文里的裸 `L1` / `L2` / `L3` 不再当作选择器。
 
 解析脚本：`tests/common/ci/select_layers.sh`。
 

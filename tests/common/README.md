@@ -13,7 +13,7 @@
 - `docker/ipv4.sh`：拉 Docker Hub 基础镜像时 IPv4 优先，避免 AAAA 黑洞。
 - `docker/compose/vpn-pair.yml`：VPN exit（alinux3）+ client。
 - `docker/compose/proxy-pair.yml`：proxy SNI（alinux3）+ client。
-- `ci/select_layers.sh`：按 commit / PR 文案选择 L1/L2/L3。
+- `ci/select_layers.sh`：按 commit / PR 文案里的 `[test#…]` 选择 L1/L2/L3（`ut`/`it`/`e2e` 为别名，`skip` 全跳过）。
 - `docker/Dockerfile.*`：L2 夹具。`linux_ubuntu` → `ubuntu:24.04`，`linux_centos` → `almalinux:9`，`linux_alinux3` / `linux_alinux4` → 杭州 ACR 官方 ALinux 镜像。macOS 无容器。
 - `docker/Dockerfile.e2e.*`：E2E 夹具，同一套官方基础镜像，额外提供 sudo / 编译依赖 / nodejs。
 
