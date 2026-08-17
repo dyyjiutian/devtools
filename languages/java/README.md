@@ -21,3 +21,11 @@ bash languages/java/setup.sh --dry-run
 bash -n languages/java/setup.sh
 bazel test //languages/java:java_unit_test
 ```
+
+### 2026-08-17 — Java E2E 在 `set -u` 下 source sdkman-init.sh 失败；macOS host E2E 不跑
+
+**表象**：Linux E2E 安装完 SDKMAN 后，`java_ops_suite.sh` 报 `SDKMAN_CANDIDATES_API: unbound variable`。GitHub `macos-26` 上 SDKMAN 安装器直接拒绝 Bash 3.2。
+
+**根因**：ops suite 在 `set -u` 下直接 `source sdkman-init.sh`。SDKMAN 官方要求 Bash 4+，Darwin 系统 Bash 是 3.2。
+
+**解法**：ops suite 与 `setup.sh` 一样在 source 前后 `set +u` / `set -u`。macOS 不再生成 `java_ops_macos_e2e_test`；Linux Docker E2E 仍覆盖真装。

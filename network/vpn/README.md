@@ -543,6 +543,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 **解法**：curl / hostname / `ip -4 addr` 分层回退，每步 `|| true`。Compose pair：`bazel test --config=l3 //network/vpn:vpn_pair_linux_alinux3_e2e_test`。
 
+### 2026-08-17 — GitHub E2E 上 alinux4 VPN pair 等不到 systemd
+
+**表象**：`vpn_pair_linux_alinux4_e2e_test` 报 `systemd not ready in server (state=starting)`。同 job 里其它 pair 能过。
+
+**根因**：CI 默认并行跑多个特权 systemd 容器，cgroup 争用时 `systemctl is-system-running` 会长时间停在 `starting`。90s 超时不够。
+
+**解法**：等待加到 180s；E2E Linux job 使用 `--jobs=1`。
+
 ### 2026-08-17 — L1 VPN 测试在 macOS 上失败
 
 **表象**：`linux_setup.sh --help` 直接报「仅支持 Linux」；`manage_test` 报 `grep: invalid option -- P`，流量断言错；`linux_setup_test` 在 geo 缓存步骤调用 curl 并报「geoip.dat 下载失败」。

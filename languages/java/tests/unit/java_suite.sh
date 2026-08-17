@@ -25,6 +25,9 @@ assert_contains "$setup" 'version" == "latest"' \
 assert_contains "$setup" '"$HOME/.bashrc" "$HOME/.zshrc"' \
   "java setup writes SDKMAN init to bashrc and zshrc"
 
+ops="$(cat "${REPO_ROOT}/languages/java/tests/e2e/java_ops_suite.sh")"
+assert_contains "$ops" "set +u" "java E2E sources sdkman-init.sh without nounset"
+
 # Fresh sdkman-init.sh reads SDKMAN_CANDIDATES_API without a default.
 SDKMAN_DIR="$HOME/.sdkman"
 mkdir -p "$SDKMAN_DIR/bin"

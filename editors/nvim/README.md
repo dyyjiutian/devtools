@@ -376,6 +376,14 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 **解法**：`NVIM_SETUP_QUIET=1` 时 `_nvim_headless` 把进度写到临时文件，失败才打印末尾。`alinux3` Dockerfile 构建期同时设置 `NVIM_SETUP_STRICT=1` 与 `NVIM_SETUP_QUIET=1`。
 
+### 2026-08-17 — ALinux 4 nvim E2E 失败且日志被截断
+
+**表象**：`nvim_ops_linux_alinux4_e2e_test` 在 GitHub 上 Exit 1，stdout 超过 1MiB 被 Bazel UI 丢掉。同 job 的 Ubuntu / ALinux 3 通过。
+
+**根因**：ALinux 4 E2E 镜像只有 `gcc`，没有 `gcc-c++`。treesitter / mason 编译 parser 时可能刷大量错误。
+
+**解法**：`Dockerfile.e2e.alinux3` / `Dockerfile.e2e.alinux4` 安装 `gcc-c++`。
+
 ### 2026-08-16 — 构建期没装上 bashls，打开 setup.sh 时 gd/gr 没反应
 
 **表象**：`alinux3-devbox` 里 `nvim setup.sh` 按 `gd` / `gr` 没有映射、没有结果。`:LspInfo` 无 client。

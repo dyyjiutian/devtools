@@ -159,7 +159,7 @@ compose_project_name() {
 wait_systemd() {
   local service="$1" i state
   i=0
-  while [[ $i -lt 90 ]]; do
+  while [[ $i -lt 180 ]]; do
     state="$(docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T "$service" \
       systemctl is-system-running 2>/dev/null || true)"
     case "$state" in

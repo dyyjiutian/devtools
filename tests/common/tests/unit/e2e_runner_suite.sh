@@ -36,6 +36,8 @@ host="$(cat "$HOST_RUNNER")"
 assert_contains "$host" "setup.sh" "E2E host runner runs module setup.sh"
 assert_not_contains "$host" "setup_os_profile" "E2E host runner does not inject OS fakes"
 assert_contains "$host" "DEVTOOLS_E2E_REQUIRE_DARWIN" "host runner can require Darwin for macOS L3"
+assert_contains "$host" "/opt/homebrew/bin" "host runner puts Apple Silicon Homebrew on PATH"
+assert_contains "$host" "cleanup_tmp_home" "host runner ignores overlayfs rm failures"
 
 ubuntu="$(cat "$UBUNTU")"
 assert_contains "$ubuntu" "FROM ubuntu:24.04" "Ubuntu E2E uses Ubuntu 24.04"
@@ -48,10 +50,13 @@ assert_contains "$alinux3" \
   "ALinux 3 E2E uses the official image"
 assert_contains "$alinux3" "mirrors.aliyun.com" "ALinux 3 E2E rewrites cloud-internal repos"
 
+assert_contains "$alinux3" "gcc-c++" "ALinux 3 E2E installs a C++ compiler for treesitter"
+
 alinux4="$(cat "$ALINUX4")"
 assert_contains "$alinux4" \
   "FROM alibaba-cloud-linux-4-registry.cn-hangzhou.cr.aliyuncs.com/alinux4/alinux4:latest" \
   "ALinux 4 E2E uses the official image"
 assert_contains "$alinux4" "mirrors.aliyun.com" "ALinux 4 E2E rewrites cloud-internal repos"
+assert_contains "$alinux4" "gcc-c++" "ALinux 4 E2E installs a C++ compiler for treesitter"
 
 echo "PASS: e2e runner contract"

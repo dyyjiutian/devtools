@@ -3,8 +3,10 @@
 set -euo pipefail
 
 if [[ -s "${HOME}/.sdkman/bin/sdkman-init.sh" ]]; then
+  set +u
   # shellcheck source=/dev/null
   source "${HOME}/.sdkman/bin/sdkman-init.sh"
+  set -u
 fi
 export PATH="${HOME}/.sdkman/candidates/java/current/bin:${PATH:-}"
 

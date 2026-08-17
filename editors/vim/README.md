@@ -231,3 +231,11 @@ vim-plug 会提示确认后删除未声明的插件目录。
 - 改为备份已有普通文件后 `cp` 覆盖到 `~/.vimrc`；若目标已是软链则先删除再复制。
 - 已有环境可重新执行：`bash editors/vim/setup.sh` 或 `bash editors/vim/setup.sh --restore`。
 
+### 2026-08-17 — Linux E2E 在 ops 通过后因 `rm -rf $HOME` 失败
+
+**表象**：`vim_ops_linux_*_e2e_test` 已打印 `PASS: vim E2E ops`，Bazel 仍 Exit 1：`rm: cannot remove '.../.npm/_cacache/...': Directory not empty`。
+
+**根因**：Docker overlayfs 上 npm cache 的 `rm -rf` 可能留下非空目录；`run_e2e_test.sh` 的 EXIT trap 因此把成功用例变成失败。
+
+**解法**：cleanup trap 忽略 `rm` 失败。
+

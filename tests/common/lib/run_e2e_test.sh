@@ -106,10 +106,15 @@ fi
 export MODULE_ROOT
 
 TMP_HOME="$(mktemp -d "${TMPDIR:-/tmp}/devtools-e2e-home.XXXXXX")"
-trap 'rm -rf "$TMP_HOME"' EXIT
+cleanup_tmp_home() {
+  # Overlayfs (Docker) can fail `rm -rf` on npm caches with "Directory not empty".
+  rm -rf "$TMP_HOME" 2>/dev/null || true
+}
+trap cleanup_tmp_home EXIT
 export HOME="$TMP_HOME"
 mkdir -p "$HOME/.local/bin"
-export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+# Apple Silicon / GitHub macos-26 Homebrew lives in /opt/homebrew, not /usr/local.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
 export DEVTOOLS_CACHE_DIR="${DEVTOOLS_CACHE_DIR:-$REPO_ROOT/cache}"
 export NVIM_SETUP_STRICT="${NVIM_SETUP_STRICT:-1}"
 

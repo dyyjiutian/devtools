@@ -14,7 +14,7 @@ RUN set -eux; \
     if command -v dnf >/dev/null 2>&1; then PM=dnf; else PM=yum; fi; \
     "$PM" install -y \
         git tar gzip curl sudo zip unzip \
-        gcc make libevent-devel ncurses-devel bison pkgconfig \
+        gcc gcc-c++ make libevent-devel ncurses-devel bison pkgconfig \
         nodejs npm systemd dbus iproute; \
     "$PM" install -y ripgrep || true; \
     "$PM" clean all; \
