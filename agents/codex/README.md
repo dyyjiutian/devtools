@@ -167,6 +167,12 @@ cd os/macos/agent-notify
 - **根因**：Codex 默认 `features.apps=true`。
 - **解法**：`./setup.sh sync`（及 `install`）调用 `codex features disable apps`，并在模板 `config.toml` 中写入 `[features] apps = false`。
 
+### 2026-08-23 — npm 更新失败（404 平台包）导致 `codex` 命令消失
+
+- **表象**：`npm install -g @openai/codex@latest` 报 `404 Not Found GET https://registry.npmjs.org/@openai%2fcodex-darwin-arm64`；事务中断后 `/opt/homebrew/bin/codex` 符号链接丢失，`codex` 命令消失；已下载的平台二进制不完整（139MB vs 完整 220MB）。
+- **根因**：`package.json` 的 `optionalDependencies` 用 `npm:@openai/codex@<ver>-darwin-arm64` 别名指向平台包，npm 11 先按 KEY 包名 `@openai/codex-darwin-arm64` 查 packument 而 404；平台 tarball 本身可下载，但失败事务解压不完整（缺 `package.json`、二进制截断）。
+- **解法**：直接从 registry 下载并解压平台包 `https://registry.npmjs.org/@openai/codex/-/codex-<ver>-darwin-arm64.tgz` 到 `<pkg>/node_modules/@openai/codex-darwin-arm64/`（保留 `package.json` 与 `vendor/`），再重建符号链接 `ln -s ../lib/node_modules/@openai/codex/bin/codex.js /opt/homebrew/bin/codex`。同时清理 npm 失败事务残留的 `@openai/.codex-*` 与 `/opt/homebrew/bin/.codex-*`。
+
 ---
 
 ## 相关链接

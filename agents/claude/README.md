@@ -141,6 +141,10 @@ cd os/macos/agent-notify
 
 表象：已安装全部插件后再次运行 `./setup.sh install-plugins`，偶尔仍会重复安装部分插件。根因是脚本在 `set -o pipefail` 下通过 `claude plugins list | grep -q` 判断插件是否存在；列表较长时 `grep -q` 提前退出，可能使前序命令收到 SIGPIPE，整个 pipeline 被误判为未匹配。现在会先完整读取插件列表再检查，并由长列表幂等回归测试覆盖。
 
+### 2026-08-23 — `claude update` 卡住 / `install_failed`
+
+表象：`claude update` 长时间无进展，`~/.local/share/claude/versions/` 出现 0 字节的新版本文件，`~/.claude/.last-update-result.json` 记录 `"status":"install_failed"`。根因是原生安装的更新需从 `downloads.claude.ai` 下载约 325MB 二进制（版本 feed `https://downloads.claude.ai/claude-code-releases/latest` → manifest `…/<ver>/manifest.json` → 二进制 `…/<ver>/darwin-arm64/claude`）；本机直连该域名被墙，而经代理的 HTTP/2 长连接会降速（实测下载 32MB：HTTP/1.1 ≈ 3.9MB/s 稳定 vs HTTP/2 ≈ 1.2MB/s），下载停在 0 字节后判定失败。解法：手动升级，用 `curl --http1.1` 下载二进制并 sha256 校验（对照 manifest 的 `checksum`），`cp` 到 `~/.local/share/claude/versions/<ver>` 并 `chmod +x`，再 `ln -sfn` 更新 `~/.local/bin/claude`。claude/codex 均无配置项可强制 HTTP/1.1 或 HTTP/2；claude 下载器尊重 `HTTPS_PROXY`/`HTTP_PROXY`（含 `CLAUDE_CODE_HTTPS_PROXY`），可借此让原生 update 走快代理。
+
 ---
 
 ## 相关链接
