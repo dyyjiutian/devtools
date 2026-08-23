@@ -288,8 +288,10 @@ establish_master() {
 mssh() { ssh -o ControlMaster=no -o ControlPath="$CTRL_SOCK" "$@"; }
 
 # Run tmux through a login shell so remote user startup files can add
-# ~/.local/bin (or another user-local directory) to PATH. Each argument is
-# quoted for the remote shell before being passed to `bash -lc`.
+# ~/.local/bin (or another user-local directory) to PATH. Also prepend
+# common prefixes that login bash often misses — Apple Silicon Homebrew
+# is typically added from ~/.zprofile, which bash -lc does not read.
+# $PATH and $HOME must expand on the remote host, not locally.
 remote_tmux() {
     local ssh_args=()
     if [[ "${1:-}" == "-t" ]]; then
@@ -301,12 +303,13 @@ remote_tmux() {
     shift
 
     local tmux_command="tmux"
-    local arg quoted_command
+    local arg quoted_command remote_script
     for arg in "$@"; do
         tmux_command+=" $(printf '%q' "$arg")"
     done
 
-    quoted_command=$(printf '%q' "$tmux_command")
+    remote_script="PATH=\"\$PATH:/opt/homebrew/bin:/usr/local/bin:\$HOME/.local/bin\"; ${tmux_command}"
+    quoted_command=$(printf '%q' "$remote_script")
     # Bash 3.2 (the macOS system Bash) raises "unbound variable" for an empty
     # "${array[@]}" under set -u. The + expansion emits no argument when empty.
     mssh ${ssh_args[@]+"${ssh_args[@]}"} "$host" "bash -lc $quoted_command"

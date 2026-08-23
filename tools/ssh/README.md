@@ -29,6 +29,14 @@ fssh prod -t ma       # session 子串唯一 → 直连；多个 → fzf；零�
 
 ## Issues
 
+### 2026-08-23 — fssh 连 Mac 时找不到 Homebrew tmux
+
+**表象**：远端 Mac 已安装 `/opt/homebrew/bin/tmux`，fssh 仍报 `tmux not available` / `command not found`。
+
+**根因**：远端通过 `bash -lc` 跑 tmux。macOS 默认登录壳是 zsh，Homebrew 的 PATH 写在 `~/.zprofile`，`bash -lc` 不会读它。
+
+**解法**：在远程执行 tmux 前把 `/opt/homebrew/bin`、`/usr/local/bin`、`$HOME/.local/bin` 追加到 PATH；`$PATH` / `$HOME` 在远端展开，不写入本机路径。
+
 ### 2026-08-17 — `fssh --help` 在 `set -e` 下以 1 退出
 
 **表象**：L1 `//tools/ssh:ssh_*_test` 在 `setup --help` 之后立刻失败，`fssh --help` 无输出错误。

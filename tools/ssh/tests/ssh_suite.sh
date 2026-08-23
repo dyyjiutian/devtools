@@ -352,6 +352,35 @@ test_list_remote_sessions_ignores_stderr_noise() {
   pass "fssh list_remote_sessions ignores stderr noise ($DEVTOOLS_TEST_PROFILE)"
 }
 
+# bash -lc misses ~/.zprofile, so Apple Silicon Homebrew tmux is invisible
+# unless common prefixes are added on the remote before invoking tmux.
+test_remote_tmux_prepends_common_bin_paths() {
+  local out
+  out="$(
+    FSSH_NO_MAIN=1 /bin/bash -c '
+      set -euo pipefail
+      # shellcheck disable=SC1090
+      source "$1"
+      mssh() {
+        local a
+        for a in "$@"; do
+          printf "[%s]\n" "$a"
+        done
+      }
+      remote_tmux -t mac-host new-session -As main
+    ' _ "$FSSH_SH"
+  )"
+  assert_contains "$out" $'[-t]\n[mac-host]' "forwards -t then host"
+  assert_contains "$out" "/opt/homebrew/bin" "includes Apple Silicon Homebrew bin"
+  assert_contains "$out" "/usr/local/bin" "includes Intel Homebrew / usr local bin"
+  assert_contains "$out" ".local/bin" "includes ~/.local/bin"
+  assert_contains "$out" "bash -lc" "still uses a login bash"
+  assert_contains "$out" "new-session" "forwards tmux subcommand"
+  assert_contains "$out" "main" "forwards session name"
+  assert_not_contains "$out" "${HOME}/.local/bin" "does not bake local HOME into remote PATH"
+  pass "fssh remote_tmux prepends common bin paths ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_list_remote_sessions_failure_warns_from_stderr() {
   local out err
   err="$(mktemp "${TMPDIR:-/tmp}/fssh-sess-err.XXXXXX")"
@@ -449,6 +478,7 @@ test_fssh_tmux_conflicts_with_no_tmux
 test_session_menu_order_with_sessions
 test_session_menu_order_without_sessions
 test_list_remote_sessions_ignores_stderr_noise
+test_remote_tmux_prepends_common_bin_paths
 test_list_remote_sessions_failure_warns_from_stderr
 test_list_hosts_perf_budget_50_hosts
 
