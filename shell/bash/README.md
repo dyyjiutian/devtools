@@ -20,6 +20,28 @@ Linux 安装优先使用 cache/ 中的二进制缓存。
 
 ## 常见问题 (Issues)
 
+### 2026-11-16 ls 不着色（Ghostty 等 TERM 与 /etc/DIR_COLORS.* 不匹配）
+
+**现象**：在 Ghostty（`TERM=xterm-ghostty`）等终端中，`ls`、`ll` 输出目录、可执行文件时
+没有颜色，且 `alias ls` 查不到别名。
+
+**原因**：`/etc/profile.d/colorls.sh` 会按 `TERM` 选择 `/etc/DIR_COLORS.$TERM`、
+`/etc/DIR_COLORS.256color` 或 `/etc/DIR_COLORS`。`/etc/DIR_COLORS.256color` 带有
+`TERM *256color*` 行，`dircolors` 在 `TERM=xterm-ghostty` 下匹配失败，输出空的
+`LS_COLORS`；colorls.sh 随后命中 `[ -z "$LS_COLORS" ] && return`，跳过了文件末尾的
+`alias ls='ls --color=auto'`。没有该别名时 GNU ls 默认按 `--color=never` 输出。
+
+**本脚本的处理**：Linux 上托管的 `~/.bashrc` 配置块兜底：`LS_COLORS` 为空时用
+`dircolors -b` 补默认配色，并定义 `ls`、`ll`、`la`、`l.` 四个带 `--color=auto` 的别名。
+已装过的环境重跑 `bash shell/bash/setup.sh install`，再 `source ~/.bashrc` 或开新终端。
+
+**验证**：
+
+~~~bash
+alias ls          # 应输出 alias ls='ls --color=auto'
+ls -d /tmp        # 目录名应带颜色
+~~~
+
 ### 2026-08-06 命令执行后出现 [ble: elapsed ...] / [ble: exit ...] 摘要
 
 **现象**：启用 ble.sh 后，每条命令后可能出现耗时、CPU 占用或非零退出码提示，例如

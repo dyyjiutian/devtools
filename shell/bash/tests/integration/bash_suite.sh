@@ -169,6 +169,27 @@ PATH="$single_bin:$FAKE_BIN" HOME="$single_home" DEVTOOLS_CACHE_DIR="$TMP_DIR/ca
 assert_file "$TMP_DIR/bash-single-fzf-install"
 [[ ! -e "$TMP_DIR/bash-single-curl" ]] || fail "install fzf must not curl-install zoxide/starship"
 assert_contains "$single_home/.bashrc" "Lightweight Bash Plugins"
+# ls color fallback (see README Issues 2026-11-16): Ghostty's TERM does not
+# match /etc/DIR_COLORS.* TERM lines, so the system colorls.sh skips its aliases.
+assert_contains "$single_home/.bashrc" "alias ls='ls --color=auto'"
+assert_contains "$single_home/.bashrc" "alias ll='ls -l --color=auto'"
+assert_contains "$single_home/.bashrc" "alias la='ls -A --color=auto'"
+assert_contains "$single_home/.bashrc" "alias l.='ls -d .* --color=auto'"
+
+managed_block="$TMP_DIR/bash-managed-block.sh"
+awk '/^# === Lightweight Bash Plugins \(devtools\) ===$/{in_block=1} in_block{print} /^# === End Lightweight Bash Plugins \(devtools\) ===$/{in_block=0}' \
+  "$single_home/.bashrc" > "$managed_block"
+ls_color_home="$TMP_DIR/bash-ls-color-home"
+mkdir -p "$ls_color_home"
+HOME="$ls_color_home" TERM=xterm-ghostty LS_COLORS= \
+  bash --noprofile --norc -c '
+    source "$1"
+    alias ls
+    if [[ -n "${LS_COLORS:-}" ]]; then echo "LS_COLORS_SET"; fi
+  ' _ "$managed_block" > "$TMP_DIR/bash-ls-color.log" 2>&1 ||
+  fail "sourcing managed block under TERM=xterm-ghostty failed: $(cat "$TMP_DIR/bash-ls-color.log")"
+assert_contains "$TMP_DIR/bash-ls-color.log" "alias ls='ls --color=auto'"
+assert_contains "$TMP_DIR/bash-ls-color.log" "LS_COLORS_SET"
 assert_file "$single_home/.blerc"
 assert_contains "$single_home/.blerc" "bleopt exec_elapsed_mark="
 assert_contains "$single_home/.blerc" "bleopt exec_errexit_mark="
