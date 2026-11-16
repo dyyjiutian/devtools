@@ -4,29 +4,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This repository contains automated setup scripts for developer tools across different operating systems and environments. It provides initialization scripts for macOS and Linux (CentOS/RHEL), terminal configurations (iTerm2, Oh My Zsh, Vim), editor configurations (Cursor), and Git utilities.
+This repository is a script-orchestration + configuration-asset library for
+bootstrapping development environments on macOS and Linux (Ubuntu/Debian,
+CentOS/RHEL, Alibaba Cloud Linux 3/4). It provides OS initialization, language
+runtimes (Python / Go / Java / Rust), interactive shell / terminal / editor
+configuration, network infrastructure (FRP / proxy / VPN), AI agent CLI setup
+(Claude / Codex / Cursor Agent), Git utilities, and an Alinux 3 devbox Docker
+image. Installer behavior is verified by a three-layer Bazel test system
+(L1 host fakes / L2 Docker fakes / L3 real install), not by running real
+installers during development.
 
 ## Directory Structure
 
 ```
+setup.sh                    # Root orchestrator: interactive / --all / --modules
 os/
+├── lib/                    # Shared OS-init logic: packages.list parsing, DNF mirrors
 ├── macos/                  # macOS initialization, power, notifications, remote desktop
-└── linux/                  # Ubuntu/Debian/CentOS/RHEL initialization
+└── linux/                  # Ubuntu/Debian/CentOS/RHEL/Alinux initialization
 
 languages/                  # Python / Go / Java / Rust runtimes; bash/ = Bash language notes
 shell/                      # Interactive Bash / Zsh / Oh My Zsh / Starship (not script-language docs)
 terminal/                   # Ghostty / iTerm2 / tmux / Yazi
 editors/                    # Neovim / Vim / Cursor / VS Code
 network/                    # FRP / proxy / VPN infrastructure
-tools/                      # Bazel / Git / SSH standalone tools
+tools/                      # Bazel / Git / SSH (fssh) standalone tools
 agents/                     # Claude / Codex / Cursor Agent / cookbook recipes
+docker/                     # Alinux 3 devbox image (docker/alinux3/)
 cache/                      # Offline installation assets
-tests/                      # Shell regression tests
+docs/                       # Design specs and implementation plans (docs/superpowers/)
+tests/                      # Shell regression tests + shared Bazel test infrastructure
 ```
+
+## Root Entry Point
+
+The root `setup.sh` only parses arguments, selects modules, and orchestrates
+module `setup.sh` scripts; it contains no tool-specific install logic.
+
+```bash
+bash setup.sh                          # Interactive menu (multi-select)
+bash setup.sh --all                    # Non-interactive full install
+bash setup.sh --modules python,go,claude
+bash setup.sh --modules python --dry-run
+```
+
+Module names: `os`, `python`, `go`, `java`, `rust`, `nodejs`, `claude`,
+`codex`, `cursor-agent`, `vscode`, `terminal`, `git`. Note `--all` covers
+OS + languages + agent CLIs + VS Code; `nodejs`, `terminal`, and `git` are
+only reachable via the menu or `--modules`. When adding a module, update the
+help text, menu, module dispatch, and dry-run behavior together.
+
+Directories such as `network/`, `tools/`, `agents/cookbook/`, and
+`os/macos/remote-desktop/` have their own entry points and are NOT installed
+by `./setup.sh --all`; run their `setup.sh` directly or read their README.
 
 ## OS Initialization Scripts
 
-Both scripts follow the same architecture: bash 3.2+ compatible, color-coded output functions (`info()`, `success()`, `warn()`, `error()`, `step()`), system info detection, confirmation prompts, skip flags, and post-install notes. Bash script-language baseline, pitfalls, patterns, and testing notes live under `languages/bash/` (interactive shell config remains in `shell/`).
+The three OS scripts (`os/macos/setup.sh`, `os/linux/setup_ubuntu.sh`,
+`os/linux/setup_centos.sh`) follow the same architecture: bash 3.2+
+compatible, color-coded output functions (`info()`, `success()`, `warn()`,
+`error()`, `step()`), system info detection, confirmation prompts, skip
+flags, and post-install notes. Shared logic lives in `os/lib/`:
+`packages_list.sh` parses `packages*.list` lines (`name version source kind
+tags`, filterable by kind cli/tui/gui and tags) for all three scripts;
+`dnf_mirrors.sh` adds Aliyun companion mirrors while keeping official DNF
+repos. Bash script-language baseline, pitfalls, patterns, and testing notes
+live under `languages/bash/` (interactive shell config remains in `shell/`).
 
 **macOS** (`os/macos/setup.sh` + `packages.list`):
 ```bash
@@ -39,14 +82,49 @@ Both scripts follow the same architecture: bash 3.2+ compatible, color-coded out
 ```
 Part 1: Homebrew. Part 2: CLI/GUI/Node/Oh My Zsh from `packages.list`.
 
-**Ubuntu/Debian** (`os/linux/setup_ubuntu.sh` + `packages.ubuntu.list`) and **CentOS/RHEL** (`os/linux/setup_centos.sh` + `packages.centos.list`):
+**Ubuntu/Debian** (`os/linux/setup_ubuntu.sh` + `packages.ubuntu.list`):
+```bash
+./setup_ubuntu.sh          # Full installation
+./setup_ubuntu.sh --dry-run
+./setup_ubuntu.sh --skip-docker   # Skip Docker CE
+```
+
+**CentOS/RHEL/Alinux** (`os/linux/setup_centos.sh` + `packages.centos.list`):
 ```bash
 ./setup_centos.sh          # Full installation
 ./setup_centos.sh --info-only
 ./setup_centos.sh --dry-run
 ./setup_centos.sh --skip-docker   # Skip Docker CE
 ```
-Part 1: base deps. Part 2: Docker CE, Git, Node.js LTS, terminal tools from the packages list.
+Part 1: base deps. Part 2: Docker CE, Git, Node.js LTS, terminal tools from the packages list. `os/linux/aliyun_ecs_init.sh` is a separate Aliyun ECS first-boot initializer.
+
+## Module Installers
+
+Each module directory owns a self-contained `setup.sh` with `--help` and
+(when it has side effects) `--dry-run` or an equivalent preview mode; the
+root orchestrator and OS scripts delegate to them. Read the module README
+before changing its installer. Notable entry points beyond the root menu:
+
+- `languages/{python,go,java,rust}/setup.sh` — runtime installers (e.g. Python: pyenv + uv + AI packages; Go: runtime + gopls/dlv/air).
+- `agents/{claude,codex,cursor-agent}/setup.sh install` — agent CLI install and managed config sync; sync must preserve user content that is not repo-managed.
+- `agents/cookbook/setup.sh sync [--dry-run] [--target all|codex|...]` — links cookbook skills and Cursor rules into local agent consumption paths (e.g. `~/.cursor/skills`).
+- `tools/ssh/setup.sh` — SSH client optimization and the `fssh` remote-session selector; back up SSH config before changes and state remote impact.
+- `network/{frp,proxy,vpn}/` — independent entry points, not covered by the root `--all` (safety rules: see Repository Conventions).
+
+## Docker Devbox
+
+`docker/alinux3/` builds an x86_64 Alibaba Cloud Linux 3 `devbox` image
+(Git + subcommands, Vim/Neovim + LSP, tmux, Bash tooling, Docker CE DinD,
+Bazel, Go, Java, agent CLIs without API keys). The entrypoint starts an
+inner `dockerd` as root, then drops to `admin`.
+
+```bash
+bash docker/alinux3/bake.sh                      # Build (Buildx bake)
+docker run --privileged --rm -it alinux3-devbox:latest
+```
+
+See `docker/alinux3/README.md` for the plain `docker build` fallback and
+details.
 
 ## Terminal Configuration
 
@@ -130,12 +208,8 @@ Follow this order when instructions conflict:
 3. More specific `AGENTS.md`, `CLAUDE.md`, or README files in the target directory
 4. `README.md`, `BAZEL.md`, and each script's `--help` output
 
-Keep module boundaries clear. The root `setup.sh` should only parse arguments,
-select modules, orchestrate workflows, and implement dry-run behavior. Put
-tool- or platform-specific logic in the relevant subdirectory. Directories
-such as `network/`, `tools/`, `agents/`, and `os/macos/remote-desktop/` may
-have their own entry points and are not necessarily included by
-`./setup.sh --all`.
+Keep module boundaries clear: put tool- or platform-specific logic in the
+relevant subdirectory, never in the root orchestrator (see Root Entry Point).
 
 For new or changed shell functionality:
 
@@ -208,11 +282,25 @@ bash -n setup.sh
 # L1 default (no Docker, no real install) — run after script changes
 bazel test //...
 bazel test --config=l1 //languages/go/... //tools/git/...
-# Optional L2 (Docker + fakes)
+# Single test target (naming: <module>_<profile>_test)
+bazel test //os/linux:linux_setup_linux_alinux4_test
+bazel test //tests:repository_structure_check
+# Optional L2 (Docker + fakes; --config=docker is an alias)
 bazel test --config=l2 //tools/git/...
+# Optional L3 (REAL install in disposable containers / macOS host — slow)
+bazel test --config=l3 --test_tag_filters=l3,-requires-macos //languages/go/...
 ```
 
-Layer rules and CI selectors (`[test#L1]`, `[test#L1,L2]`, `[test#skip]`; aliases `ut`/`it`/`e2e`) are in `tests/README.md`.
+Test infrastructure lives in `tests/common/`: `rules/devtools_tests.bzl`
+(`devtools_module_tests`) generates the OS-profile × module targets from
+`tests/common/profiles/` metadata; L1/L2 use fake `uname`/`apt`/`dnf`/`brew`,
+L2 Docker targets are named `*_docker_test`, L3 real-install targets
+`*_e2e_test`. Default to L1; add L2 when GNU/BSD or Linux userspace behavior
+matters; consider L3 only when real-install paths or operational assertions
+change (e.g. tmux prefix, vim/neovim behavior). Layer rules, per-module
+minimum layers, and CI selectors (`[test#L1]`, `[test#L1,L2]`, `[test#skip]`;
+aliases `ut`/`it`/`e2e`) are in `tests/README.md`; target examples and Bazel
+setup are in `BAZEL.md`.
 
 If `bazel` or `bats` is unavailable, report that it was not run; never treat
 missing tooling as a passing result. Do not run real installers during routine
