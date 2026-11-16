@@ -28,15 +28,25 @@ bash languages/rust/setup.sh --dry-run
 也不设置 default toolchain；2026-08-17 的「复用宿主 CARGO_HOME 并软链」此时无目录可复用。
 `~/.cargo/env` 同样不存在，写进 rc 的 `source "$HOME/.cargo/env"` 是空操作。
 
-**解法**：`setup.sh` 在已安装分支补 `ensure_cargo_proxies`（代理或 active toolchain 缺失时跑
-`rustup default stable`）与 `ensure_cargo_env_file`（env 缺失时写等价 PATH 片段），并把 cargo bin 加入 PATH；
+**进一步根因（第一次修复后 CI 仍红）**：rustup 只在安装/切换工具链时写代理。runner 上 stable 已经是
+default，`rustup default stable` 是 **no-op：退出码 0 但不写任何代理**，因此全新的 `CARGO_HOME/bin`
+依旧不存在（CI 日志里先打印「代理已就绪」，随后 `ls` 仍报 No such file or directory）。
+
+**解法**：`setup.sh` 在已安装分支补 `ensure_cargo_proxies` 与 `ensure_cargo_env_file`，并把 cargo bin 加入 PATH：
+
+1. 代理或 active toolchain 缺失时先跑 `rustup default stable`；
+2. 跑完仍没有 `rustc`/`cargo` 代理时，用 `rustup which <tool>` 定位当前工具链的真实二进制并建链
+   （指向 stable 通道目录，原地更新，不锁版本），覆盖 rustc/cargo/rustdoc/rustfmt/clippy-driver；
+3. `env` 缺失时写等价 POSIX sh PATH 片段，已有 `env` 不覆盖。
+
 `run_e2e_test.sh` 对「有 `~/.rustup` 但无 `~/.cargo`」的宿主把 `CARGO_HOME` 指向隔离 HOME，
-让代理落在 ops suite 查找的位置。健康的预装环境不会被重复 `rustup default`，已有 env 文件不被覆盖。
+让代理落在 ops suite 查找的位置。健康的预装环境不会被重复 `rustup default`。
 
 **验证**：
 
 ~~~bash
 bazel test --config=l1 //languages/rust:rust_linux_ubuntu_test //languages/rust:rust_macos_test
+# L1 用 fake rustup 覆盖三种预装形态：default 会写代理 / default 是 no-op（runner 实况）/ 已健康
 # 真实预装 rustup 的环境由 CI 的 rust_ops_macos_e2e_test 覆盖
 ~~~
 

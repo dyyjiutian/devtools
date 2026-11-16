@@ -73,6 +73,59 @@ _write_fake_proxy() {
   chmod +x "$path"
 }
 
+# Models the macos-26 runner: stable is already the default toolchain, so
+# `rustup default stable` exits 0 WITHOUT writing proxies into a fresh
+# CARGO_HOME. Only `rustup which <tool>` can locate the real binaries.
+_write_fake_rustup_noop_default() {
+  local bin="$1"
+  mkdir -p "$bin"
+  cat > "$bin/rustup" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  --version) echo "rustup 1.29.2 (fake)" ;;
+  show) exit 0 ;;
+  default) exit 0 ;;
+  which)
+    tool="${2:-}"
+    [[ -x "${FAKE_TOOLCHAIN_BIN:?}/$tool" ]] || exit 1
+    echo "${FAKE_TOOLCHAIN_BIN}/$tool"
+    ;;
+  *) exit 0 ;;
+esac
+FAKE
+  chmod +x "$bin/rustup"
+}
+
+test_preinstalled_rustup_noop_default() {
+  local home out toolchain
+  home="$(mktemp -d "${TMPDIR:-/tmp}/rust-noop.XXXXXX")"
+  _write_fake_rustup_noop_default "$home/bin"
+  toolchain="$home/.rustup/toolchains/stable-aarch64-apple-darwin/bin"
+  mkdir -p "$toolchain"
+  _write_fake_proxy "$toolchain/rustc" rustc
+  _write_fake_proxy "$toolchain/cargo" cargo
+
+  out="$home/setup.log"
+  if ! FAKE_TOOLCHAIN_BIN="$toolchain" PATH="$home/bin:$PATH" HOME="$home" \
+      bash "$SETUP_SH" --skip-cargo-tools >"$out" 2>&1; then
+    echo "FAIL: setup with no-op rustup default failed: $(cat "$out")" >&2
+    rm -rf "$home"
+    return 1
+  fi
+
+  assert_file_exists "$home/.cargo/bin/rustc" \
+    "rustc must be linked when rustup default writes no proxies"
+  assert_contains "$(cat "$out")" "已补建工具链链接" \
+    "setup must report the proxy fallback"
+  assert_contains "$("$home/.cargo/bin/rustc" --version 2>&1)" "rustc" \
+    "the linked rustc must actually run"
+  assert_contains "$(readlink "$home/.cargo/bin/rustc")" "$toolchain/rustc" \
+    "rustc must point at the toolchain binary"
+  rm -rf "$home"
+  pass "rust no-op rustup default gets toolchain links ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_preinstalled_rustup_missing_proxies() {
   local home out
   home="$(mktemp -d "${TMPDIR:-/tmp}/rust-preinstalled.XXXXXX")"
@@ -130,5 +183,6 @@ test_unknown_flag
 test_dry_run
 test_cargo_env_nounset
 test_preinstalled_rustup_missing_proxies
+test_preinstalled_rustup_noop_default
 test_preinstalled_rustup_healthy
 echo "PASS: rust suite complete ($DEVTOOLS_TEST_PROFILE)"
