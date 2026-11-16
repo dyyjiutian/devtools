@@ -39,8 +39,96 @@ test_cargo_env_nounset() {
   pass "rust cargo env nounset guards ($DEVTOOLS_TEST_PROFILE)"
 }
 
+# Fake rustup for a machine where rustup is preinstalled (runner image / brew)
+# but the cargo proxies do not exist yet. `default stable` creates them, which
+# is what setup.sh must trigger; `show active-toolchain` only succeeds after a
+# default toolchain has been set.
+_write_fake_rustup() {
+  local bin="$1"
+  mkdir -p "$bin"
+  cat > "$bin/rustup" <<'FAKE'
+#!/usr/bin/env bash
+set -euo pipefail
+cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+case "${1:-}" in
+  --version) echo "rustup 1.29.2 (fake)" ;;
+  show) [[ -f "$cargo_home/.default-set" ]] || exit 1 ;;
+  default)
+    mkdir -p "$cargo_home/bin"
+    printf '#!/usr/bin/env bash\necho "rustc 1.100.0 (fake)"\n' > "$cargo_home/bin/rustc"
+    printf '#!/usr/bin/env bash\necho "cargo 1.100.0 (fake)"\n' > "$cargo_home/bin/cargo"
+    chmod +x "$cargo_home/bin/rustc" "$cargo_home/bin/cargo"
+    : > "$cargo_home/.default-set"
+    : > "${RUSTUP_DEFAULT_MARKER:?}"
+    ;;
+  *) exit 0 ;;
+esac
+FAKE
+  chmod +x "$bin/rustup"
+}
+
+_write_fake_proxy() {
+  local path="$1" name="$2"
+  printf '#!/usr/bin/env bash\necho "%s 1.100.0 (fake)"\n' "$name" > "$path"
+  chmod +x "$path"
+}
+
+test_preinstalled_rustup_missing_proxies() {
+  local home out
+  home="$(mktemp -d "${TMPDIR:-/tmp}/rust-preinstalled.XXXXXX")"
+  _write_fake_rustup "$home/bin"
+  mkdir -p "$home/.rustup"
+
+  out="$home/setup.log"
+  if ! RUSTUP_DEFAULT_MARKER="$home/default-called" PATH="$home/bin:$PATH" HOME="$home" \
+      bash "$SETUP_SH" --skip-cargo-tools >"$out" 2>&1; then
+    echo "FAIL: setup with preinstalled rustup failed: $(cat "$out")" >&2
+    rm -rf "$home"
+    return 1
+  fi
+
+  assert_file_exists "$home/default-called" \
+    "rustup default stable must run when cargo proxies are missing"
+  assert_file_exists "$home/.cargo/bin/rustc" "rustc proxy must exist after setup"
+  assert_file_exists "$home/.cargo/env" "cargo env file must exist after setup"
+  assert_contains "$(cat "$home/.bashrc")" "Rust/Cargo env" "rc block must be written"
+  rm -rf "$home"
+  pass "rust preinstalled rustup gets proxies ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_preinstalled_rustup_healthy() {
+  local home out
+  home="$(mktemp -d "${TMPDIR:-/tmp}/rust-healthy.XXXXXX")"
+  _write_fake_rustup "$home/bin"
+  mkdir -p "$home/.rustup" "$home/.cargo/bin"
+  _write_fake_proxy "$home/.cargo/bin/rustc" rustc
+  _write_fake_proxy "$home/.cargo/bin/cargo" cargo
+  : > "$home/.cargo/.default-set"
+  printf '# existing env\n' > "$home/.cargo/env"
+
+  out="$home/setup.log"
+  if ! RUSTUP_DEFAULT_MARKER="$home/default-called" PATH="$home/bin:$PATH" HOME="$home" \
+      bash "$SETUP_SH" --skip-cargo-tools >"$out" 2>&1; then
+    echo "FAIL: setup with healthy rustup failed: $(cat "$out")" >&2
+    rm -rf "$home"
+    return 1
+  fi
+
+  if [[ -e "$home/default-called" ]]; then
+    echo "FAIL: a healthy install must not re-run rustup default" >&2
+    rm -rf "$home"
+    return 1
+  fi
+  assert_contains "$(cat "$home/.cargo/env")" "# existing env" \
+    "an existing cargo env file must be preserved"
+  rm -rf "$home"
+  pass "rust healthy preinstalled rustup left alone ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help
 test_unknown_flag
 test_dry_run
 test_cargo_env_nounset
+test_preinstalled_rustup_missing_proxies
+test_preinstalled_rustup_healthy
 echo "PASS: rust suite complete ($DEVTOOLS_TEST_PROFILE)"
