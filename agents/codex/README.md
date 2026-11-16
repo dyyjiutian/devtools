@@ -173,6 +173,12 @@ cd os/macos/agent-notify
 - **根因**：`package.json` 的 `optionalDependencies` 用 `npm:@openai/codex@<ver>-darwin-arm64` 别名指向平台包，npm 11 先按 KEY 包名 `@openai/codex-darwin-arm64` 查 packument 而 404；平台 tarball 本身可下载，但失败事务解压不完整（缺 `package.json`、二进制截断）。
 - **解法**：直接从 registry 下载并解压平台包 `https://registry.npmjs.org/@openai/codex/-/codex-<ver>-darwin-arm64.tgz` 到 `<pkg>/node_modules/@openai/codex-darwin-arm64/`（保留 `package.json` 与 `vendor/`），再重建符号链接 `ln -s ../lib/node_modules/@openai/codex/bin/codex.js /opt/homebrew/bin/codex`。同时清理 npm 失败事务残留的 `@openai/.codex-*` 与 `/opt/homebrew/bin/.codex-*`。
 
+### 2026-11-16 — npm install 报 ENOTEMPTY（回收目录残留）
+
+- **表象**：`./setup.sh install` 报 `ENOTEMPTY: directory not empty, rename '…/@openai/codex' -> '…/@openai/.codex-XXXX'`；此前中断的安装还可能弄丢 `codex` 命令的 bin 符号链接。
+- **根因**：npm 升级时把旧包目录 rename 成按路径**确定性生成**的隐藏回收目录 `.<pkg>-<hash>`；上次安装中断留下同名回收目录后，再次 install 的 rename 目标是非空目录，直接 ENOTEMPTY。
+- **解法**：`install` 现在会在 `npm install -g` 前自动清理 npm 全局 lib/bin 下的 `.codex-*` 回收残留（`_npm_clean_retired`）。手工修复：`rm -rf "$(npm root -g)/@openai/.codex-"* "$(npm prefix -g)/bin/.codex-"*` 后重装。
+
 ---
 
 ## 相关链接

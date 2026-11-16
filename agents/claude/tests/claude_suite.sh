@@ -55,12 +55,67 @@ EOF
   chmod +x "$FAKE_BIN/claude"
 }
 
+install_fake_npm() {
+  cat >"$FAKE_BIN/npm" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+PREFIX="${FAKE_NPM_PREFIX:?FAKE_NPM_PREFIX not set}"
+SCOPE="${FAKE_NPM_SCOPE:?FAKE_NPM_SCOPE not set}"
+PKG="${FAKE_NPM_PKG:?FAKE_NPM_PKG not set}"
+LOG="$HOME/.fake-npm.log"
+cmd="${1:-}"
+case "$cmd" in
+  root)   echo "$PREFIX/lib/node_modules"; exit 0 ;;
+  prefix) echo "$PREFIX"; exit 0 ;;
+  install)
+    shift
+    echo "install $*" >>"$LOG"
+    # Record retired leftovers still present at install time (ordering check)
+    for d in "$PREFIX/lib/node_modules/$SCOPE/.$PKG-"* "$PREFIX/bin/.$PKG-"*; do
+      if [[ -e "$d" || -L "$d" ]]; then
+        echo "leftover-at-install $d" >>"$LOG"
+      fi
+    done
+    exit 0
+    ;;
+esac
+echo "fake npm: unhandled: $*" >&2
+exit 1
+EOF
+  chmod +x "$FAKE_BIN/npm"
+}
+
 test_help() {
   local out
   out="$(bash "$SETUP_SH" --help 2>&1)"
   assert_contains "$out" "install-plugins" "help mentions install-plugins"
   assert_contains "$out" "--list" "help mentions --list"
   pass "claude setup --help ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_install_cleans_npm_retired_leftovers() {
+  install_fake_claude
+  install_fake_npm
+  local prefix="$HOME/.npm-global"
+  export FAKE_NPM_PREFIX="$prefix" FAKE_NPM_SCOPE="@anthropic-ai" FAKE_NPM_PKG="claude-code"
+  local scope_dir="$prefix/lib/node_modules/@anthropic-ai"
+  mkdir -p "$scope_dir/.claude-code-RET123" "$scope_dir/claude-code" "$prefix/bin"
+  echo stale >"$scope_dir/.claude-code-RET123/package.json"
+  echo '{"name":"@anthropic-ai/claude-code"}' >"$scope_dir/claude-code/package.json"
+  ln -s ../lib/node_modules/@anthropic-ai/claude-code/cli.js "$prefix/bin/.claude-code-BIN123"
+  printf 'y\n' | bash "$SETUP_SH" install >/dev/null 2>&1
+  assert_contains "$(cat "$HOME/.fake-npm.log")" "install -g @anthropic-ai/claude-code" "npm install -g invoked"
+  assert_not_contains "$(cat "$HOME/.fake-npm.log")" "leftover-at-install" \
+    "retired leftovers cleaned before npm install"
+  if [[ -e "$scope_dir/.claude-code-RET123" || -L "$prefix/bin/.claude-code-BIN123" ]]; then
+    echo "FAIL: retired leftovers still present after install" >&2
+    return 1
+  fi
+  assert_file_exists "$scope_dir/claude-code/package.json"
+  # Rerun without leftovers must stay clean (idempotent)
+  printf 'y\n' | bash "$SETUP_SH" install >/dev/null 2>&1
+  assert_eq "$(grep -c '^install ' "$HOME/.fake-npm.log")" "2" "second install still runs npm"
+  pass "claude install cleans npm retired leftovers ($DEVTOOLS_TEST_PROFILE)"
 }
 
 test_install_plugins_list() {
@@ -154,6 +209,7 @@ EOF
 }
 
 test_help
+test_install_cleans_npm_retired_leftovers
 test_install_plugins_list
 test_install_plugins_single
 test_install_plugins_all_idempotent

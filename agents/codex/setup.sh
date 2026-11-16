@@ -766,6 +766,35 @@ cmd_configure() {
 }
 
 # ─── 安装 / 卸载 ─────────────────────────────────────────────────────────────
+# 清理上次中断的 npm 安装留下的回收残留。
+# npm 升级时会把旧包目录 rename 成按路径确定性生成的隐藏回收目录
+# ".<pkg>-<hash>"；上次事务中断留下残留时，下次 install 会因 rename
+# 目标非空而报 ENOTEMPTY。安装前清掉 lib 与 bin 下的匹配残留。
+_npm_clean_retired() {
+    local scope="$1" pkg="$2"
+    local root prefix dir d
+    root="$(npm root -g 2>/dev/null)" || root=""
+    prefix="$(npm prefix -g 2>/dev/null)" || prefix=""
+    if [[ -z "$root" ]]; then
+        warn "无法获取 npm 全局目录，跳过残留清理"
+        return 0
+    fi
+    local dirs=("$root/$scope")
+    if [[ -n "$prefix" ]]; then
+        dirs+=("$prefix/bin")
+    fi
+    for dir in "${dirs[@]}"; do
+        for d in "$dir/.$pkg-"*; do
+            [[ -e "$d" || -L "$d" ]] || continue
+            if rm -rf "$d"; then
+                info "已清理 npm 安装残留: $d"
+            else
+                warn "清理 npm 安装残留失败: $d"
+            fi
+        done
+    done
+}
+
 cmd_install() {
     step "安装 Codex CLI"
 
@@ -788,6 +817,7 @@ cmd_install() {
     fi
     info "Node.js 版本: $(node --version)"
     info "正在安装 @openai/codex..."
+    _npm_clean_retired "@openai" "codex"
     npm install -g @openai/codex
 
     if command -v codex &>/dev/null; then
