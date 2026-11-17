@@ -11,6 +11,19 @@ if empty(glob(data_dir . '/autoload/plug.vim'))
   autocmd VimEnter * PlugInstall --sync | source $MYVIMRC
 endif
 
+" --- coc.nvim prerequisites ---
+" coc release 需要 Node >= 22.15.0。旧 Node 下 coc 启动即崩（Current Node.js
+" version ... < 22.15.0），并且会卡住 Vim 退出，所以这里先判定再决定是否加载。
+let s:node_ok = 0
+if executable('node')
+  let s:node_ver = matchlist(system('node -v'), 'v\(\d\+\)\.\(\d\+\)')
+  if !empty(s:node_ver) && (str2nr(s:node_ver[1]) > 22 ||
+        \ (str2nr(s:node_ver[1]) == 22 && str2nr(s:node_ver[2]) >= 15))
+    let s:node_ok = 1
+  endif
+endif
+let g:coc_enabled = (has('nvim') || has('patch-8.1.1719')) && s:node_ok
+
 " --- Plugins ---
 call plug#begin('~/.vim/plugged')
 
@@ -22,11 +35,11 @@ Plug 'ryanoasis/vim-devicons'
 Plug 'tpope/vim-fugitive'
 Plug 'airblade/vim-gitgutter'
 
-" Auto-completion (requires Vim 8.1.1719+ or Neovim 0.4.0+)
-if has('nvim') || has('patch-8.1.1719')
+" Auto-completion (requires Vim 8.1.1719+ / Neovim 0.4.0+ AND Node >= 22.15)
+if g:coc_enabled
   Plug 'neoclide/coc.nvim', {'branch': 'release'}
 else
-  " Fallback: use simpler completion for older Vim
+  " Fallback: simpler completion for older Vim or too-old Node
   Plug 'vim-scripts/AutoComplPop'
 endif
 
@@ -234,10 +247,14 @@ let g:NERDTreeWinSize = 30
 " Auto close vim if NERDTree is the only window
 autocmd BufEnter * if winnr('$') == 1 && exists('b:NERDTree') && b:NERDTree.isTabTree() | quit | endif
 
+" Accept next word of Copilot suggestion (partial accept).
+" Pure Copilot: keep it even when coc is disabled (old Vim or old Node).
+imap <C-]> <Plug>(copilot-accept-word)
+
 " ============================================================
 " coc.nvim Settings (Auto-completion & LSP)
 " ============================================================
-if has('nvim') || has('patch-8.1.1719')
+if g:coc_enabled
 " Tab: Copilot suggestion → coc popup → normal Tab
 " Copilot manages its own Tab map when g:copilot_no_tab_map = v:true
 let g:copilot_no_tab_map = v:true
@@ -247,9 +264,6 @@ inoremap <silent><expr> <TAB>
       \ CheckBackspace() ? "\<Tab>" :
       \ coc#refresh()
 inoremap <expr><S-TAB> coc#pum#visible() ? coc#pum#prev(1) : "\<C-h>"
-
-" Accept next word of Copilot suggestion (partial accept)
-imap <C-]> <Plug>(copilot-accept-word)
 
 " Enter to confirm completion
 inoremap <silent><expr> <CR> coc#pum#visible() ? coc#pum#confirm()

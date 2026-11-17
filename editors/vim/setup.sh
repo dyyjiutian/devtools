@@ -15,6 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Pinned upgrade target (override via env). Tags on github.com/vim/vim.
 VIM_9_TARGET="${VIM_9_TARGET:-9.2.0782}"
+# coc.nvim's release build refuses to start below this Node version.
+COC_NODE_MIN="${COC_NODE_MIN:-22.15.0}"
 VIM_PREFIX="${VIM_PREFIX:-$HOME/.local}"
 CACHE_DIR="${DEVTOOLS_CACHE_DIR:-${SCRIPT_DIR}/../../cache}"
 
@@ -397,6 +399,18 @@ _install_ripgrep_linux() {
     return 1
 }
 
+# True when a dep's command already exists. Skipping it matters for Node:
+# apt/dnf would otherwise replace a working NodeSource/nvm Node with the distro
+# build, and coc.nvim needs Node >= ${COC_NODE_MIN} (noble ships 18.19.1).
+_dep_already_present() {
+    case "$1" in
+        nodejs)           command -v node &>/dev/null ;;
+        npm)              command -v npm &>/dev/null ;;
+        vim|vim-enhanced) command -v vim &>/dev/null ;;
+        *)                return 1 ;;
+    esac
+}
+
 install_deps_linux() {
     info "Installing dependencies via package manager..."
 
@@ -410,6 +424,10 @@ install_deps_linux() {
     local pkg
     if command -v apt-get &>/dev/null; then
         for pkg in vim nodejs npm universal-ctags curl git; do
+            if _dep_already_present "$pkg"; then
+                success "$pkg already present"
+                continue
+            fi
             if _linux_pkg_install "$pkg" 2>/dev/null; then
                 success "$pkg installed/present"
             else
@@ -417,14 +435,10 @@ install_deps_linux() {
             fi
         done
     else
+        # vim-enhanced provides /usr/bin/vim on RHEL-family; plain "vim" may be absent.
         for pkg in vim-enhanced vim nodejs npm ctags curl git; do
-            # vim-enhanced provides /usr/bin/vim on RHEL-family; plain "vim" may be absent.
-            if [[ "$pkg" == "vim" ]] && command -v vim &>/dev/null; then
-                success "vim already installed"
-                continue
-            fi
-            if [[ "$pkg" == "vim-enhanced" ]] && command -v vim &>/dev/null; then
-                success "vim already installed"
+            if _dep_already_present "$pkg"; then
+                success "$pkg already present"
                 continue
             fi
             if _linux_pkg_install "$pkg" 2>/dev/null; then
@@ -533,6 +547,28 @@ check_vim_version() {
         else
             echo "old"
         fi
+    else
+        echo "old"
+    fi
+}
+
+# --- Check Node version for coc.nvim ---
+# echo ok / old / missing. coc release crashes on older Node and can hang Vim's
+# exit, so an unusable Node must skip coc rather than install it.
+check_node_version() {
+    local ver
+    if ! command -v node &>/dev/null; then
+        echo "missing"
+        return 0
+    fi
+    ver="$(node -v 2>/dev/null)"
+    ver="${ver#v}"
+    if [[ ! "$ver" =~ ^[0-9]+\.[0-9]+ ]]; then
+        echo "missing"
+        return 0
+    fi
+    if [[ "$(version_ge "$ver" "$COC_NODE_MIN")" == "ge" ]]; then
+        echo "ok"
     else
         echo "old"
     fi
@@ -845,8 +881,8 @@ install_plugins_and_coc() {
     install_nerd_font
 
     if [ "$skip_coc" = "1" ]; then
-        warn "Skipping coc.nvim installation due to Vim version"
-        warn "To use coc.nvim, upgrade Vim with: ./setup.sh --upgrade"
+        warn "Skipping coc.nvim installation (Vim < 8.1.1719 or Node < ${COC_NODE_MIN})"
+        warn "To use coc.nvim: ./setup.sh --upgrade for Vim, and install Node >= ${COC_NODE_MIN}"
     else
         info "Installing coc.nvim language servers..."
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -937,11 +973,20 @@ main() {
         fi
     fi
 
+    # coc release needs a recent enough Node too; vimrc gates on the same floor.
+    local node_status
+    node_status=$(check_node_version)
+    if [[ "$node_status" != "ok" ]]; then
+        warn "coc.nvim requires Node >= ${COC_NODE_MIN} (node: ${node_status})"
+        warn "coc.nvim will be skipped; vimrc falls back to AutoComplPop"
+        skip_coc=1
+    fi
+
     if [[ "$DRY_RUN" == "true" ]]; then
         info "[试运行] 将安装 vimrc、vim-plug 插件与 Nerd Font"
         if [[ "$skip_coc" == "1" ]]; then
-            warn "Skipping coc.nvim installation due to Vim version"
-            warn "To use coc.nvim, upgrade Vim with: ./setup.sh --upgrade"
+            warn "Skipping coc.nvim installation (Vim < 8.1.1719 or Node < ${COC_NODE_MIN})"
+            warn "To use coc.nvim: ./setup.sh --upgrade for Vim, and install Node >= ${COC_NODE_MIN}"
         else
             info "[试运行] 将安装 coc.nvim 语言服务器"
         fi

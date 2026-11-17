@@ -29,6 +29,114 @@ source_setup() {
   SETUP_NO_MAIN=1 source "$SETUP_SH"
 }
 
+# Fake node reporting a given version (empty string = node not installed).
+install_fake_node() {
+  local version="$1"
+  mkdir -p "$FAKE_BIN"
+  # The harness links host node into FAKE_BIN; drop the symlink first so we
+  # never write through it into the host toolchain.
+  rm -f "$FAKE_BIN/node"
+  if [[ -z "$version" ]]; then
+    return 0
+  fi
+  cat >"$FAKE_BIN/node" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "-v" || "\${1:-}" == "--version" ]]; then
+  echo "${version}"
+  exit 0
+fi
+exit 0
+EOF
+  chmod +x "$FAKE_BIN/node"
+  export PATH="$FAKE_BIN:$PATH"
+}
+
+test_check_node_version() {
+  local status
+  source_setup
+
+  install_fake_node "v18.19.1"
+  status="$(check_node_version)"
+  assert_eq "$status" "old" "node 18 is too old for coc release"
+
+  install_fake_node "v22.14.9"
+  status="$(check_node_version)"
+  assert_eq "$status" "old" "node 22.14 is below the 22.15 floor"
+
+  install_fake_node "v22.15.0"
+  status="$(check_node_version)"
+  assert_eq "$status" "ok" "node 22.15.0 meets the coc floor"
+
+  install_fake_node "v24.1.0"
+  status="$(check_node_version)"
+  assert_eq "$status" "ok" "node 24 meets the coc floor"
+
+  install_fake_node ""
+  status="$(check_node_version)"
+  assert_eq "$status" "missing" "absent node is reported as missing"
+
+  pass "vim check_node_version ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_skip_coc_old_node() {
+  local out
+  install_fake_vim "9.2" "1719"
+  install_fake_node "v18.19.1"
+
+  out="$(bash "$SETUP_SH" --dry-run 2>&1)" || {
+    echo "FAIL: dry-run with old node failed: $out" >&2
+    return 1
+  }
+
+  assert_contains "$out" "Skipping coc.nvim" "coc must be skipped when node is too old"
+  assert_contains "$out" "22.15" "warn must state the required node version"
+  pass "vim skips coc on old node ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_deps_keep_existing_node() {
+  if [[ "$DEVTOOLS_TEST_PROFILE" == "macos" ]]; then
+    pass "vim deps keep existing node (macos uses brew, skipped)"
+    return 0
+  fi
+  local out
+  source_setup
+  DRY_RUN=true
+
+  install_fake_node "v22.15.0"
+  out="$(install_deps_linux 2>&1)"
+  assert_contains "$out" "nodejs already present" "existing node must be kept"
+  assert_not_contains "$out" "install -y nodejs" "package manager must not replace an existing node"
+
+  install_fake_node ""
+  out="$(install_deps_linux 2>&1)"
+  if ! echo "$out" | grep -qE '(apt-get|dnf|yum) install -y nodejs'; then
+    echo "FAIL: nodejs should be installed when node is absent: $out" >&2
+    DRY_RUN=false
+    return 1
+  fi
+
+  DRY_RUN=false
+  pass "vim deps keep existing node ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_vimrc_coc_node_gate() {
+  local vimrc
+  vimrc="$(cat "$MODULE_ROOT/vimrc")"
+  assert_contains "$vimrc" "g:coc_enabled" "vimrc computes a coc enable flag"
+  assert_contains "$vimrc" "node -v" "vimrc inspects the node version"
+  assert_contains "$vimrc" "if g:coc_enabled" "coc settings are gated on the flag"
+  assert_contains "$vimrc" "AutoComplPop" "fallback completion remains available"
+  pass "vimrc gates coc on node version ($DEVTOOLS_TEST_PROFILE)"
+}
+
+test_vim_ops_bounded() {
+  local ops
+  ops="$(cat "$MODULE_ROOT/tests/e2e/vim_ops_suite.sh")"
+  assert_contains "$ops" "timeout" "vim e2e invocations must be time-bounded"
+  assert_contains "$ops" "run_vim" "vim e2e uses a bounded vim wrapper"
+  pass "vim e2e invocations are bounded ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_help() {
   local out
   out="$(bash "$SETUP_SH" --help 2>&1)"
@@ -167,10 +275,15 @@ test_version_ge_leading_zeros() {
 test_help
 test_vimrc_oscyank_linux_only
 test_vimrc_git_perf_large_repo
+test_vimrc_coc_node_gate
+test_vim_ops_bounded
 test_unknown_flag
 test_resolve_targets
 test_version_ge_leading_zeros
+test_check_node_version
 test_dry_run_upgrade_old_vim
 test_skip_coc_without_upgrade
+test_skip_coc_old_node
+test_deps_keep_existing_node
 
 echo "PASS: vim suite complete ($DEVTOOLS_TEST_PROFILE)"

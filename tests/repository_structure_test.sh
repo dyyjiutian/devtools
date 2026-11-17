@@ -54,6 +54,18 @@ if [[ -n "$obsolete_refs" ]]; then
   failures=$((failures + 1))
 fi
 
+# Editor e2e must fail fast. The enormous default allows a 3600s timeout, and a
+# hung vim once burned a whole CI hour (editors/vim/README.md Issues 2026-11-17).
+# Slow real-install suites (rust/vpn/proxy) legitimately need enormous, so only
+# the editor targets are constrained here.
+for editor_build in editors/vim/BUILD.bazel editors/nvim/BUILD.bazel; do
+  bounded=$(grep -c 'size = "large"' "${ROOT}/${editor_build}" || true)
+  if [[ "$bounded" -lt 2 ]]; then
+    echo "MISSING BOUNDED E2E TIMEOUT: ${editor_build} must set size = \"large\" (900s) on both e2e targets (found ${bounded})" >&2
+    failures=$((failures + 1))
+  fi
+done
+
 if [[ "$failures" -ne 0 ]]; then
   echo "FAIL: ${failures} repository structure checks failed" >&2
   exit 1

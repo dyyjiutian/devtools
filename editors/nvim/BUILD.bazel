@@ -45,6 +45,8 @@ devtools_e2e_tests(
         "linux_alinux3",
         "linux_alinux4",
     ],
+    # 900s instead of the enormous default (3600s); normal runs take 40-180s.
+    size = "large",
 )
 
 devtools_host_e2e_tests(
@@ -52,4 +54,5 @@ devtools_host_e2e_tests(
     suite = ":tests/e2e/nvim_ops_suite.sh",
     module_root = ":setup.sh",
     module_data = [":nvim_srcs"],
+    size = "large",
 )

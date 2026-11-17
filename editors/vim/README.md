@@ -169,6 +169,47 @@ vim-plug 会提示确认后删除未声明的插件目录。
 
 ## Issues
 
+### 2026-11-17 — coc 要求 Node ≥ 22.15，旧 Node 下 Vim 卡死并烧掉 CI 一小时
+
+**问题表象**
+
+- `vim_ops_linux_ubuntu_e2e_test` TIMEOUT 3600s，整条 e2e-linux 流水线跑了 82 分钟。
+- coc 启动即崩：`Current Node.js version v18.19.1 < 22.15.0` / `Please upgrade your Node.js`；
+  ops suite 只打印 `PASS: vim opens a real file`，第二个 vim 调用（`Git blame`）再也不退出。
+
+**根因**
+
+- `vimrc` 的 `Plug 'neoclide/coc.nvim', {'branch': 'release'}` 浮动到最新 release，而该 build 硬性要求
+  Node ≥ 22.15.0；Ubuntu 24.04 发行版 nodejs 只有 18.19.1。coc 崩溃后 vim 退出被卡住。
+- e2e 默认 `size = "enormous"` → 单测试超时 3600s，于是「一个挂起 = 白烧一小时」。
+- `setup.sh` 原先只检查 Vim 版本（8.1.1719+），没有 Node 版本门禁。
+
+**解法**
+
+- `vimrc` 先算 `g:coc_enabled = (Vim 版本够) && (Node ≥ 22.15)`；不满足就不加载 coc，走 AutoComplPop 回退，
+  coc 的映射与设置同样受该开关保护。
+- `setup.sh` 新增 `check_node_version`（ok / old / missing，复用 `version_ge`），不满足就 warn 并跳过 coc 扩展。
+- `Dockerfile.e2e.ubuntu` 改用 NodeSource Node 22（与 `os/linux/setup_ubuntu.sh` 同一套做法），构建期断言 ≥ 22.15。
+- `install_deps_linux` 新增 `_dep_already_present`：`node`/`npm`/`vim` 已存在就跳过包管理器安装，
+  否则 `apt-get install nodejs npm` 会把镜像里（或用户 nvm/NodeSource 装好的）Node 22 换回发行版 18，门禁就白加了。
+- ops suite 每次 vim 调用套 `timeout -k 10 120`（macOS 回退 `gtimeout`），挂起 2 分钟内失败而不是拖满超时。
+- vim/nvim 的 e2e（docker + host）改 `size = "large"` → 900s；rust/vpn/proxy 等真装慢测试仍保持 enormous
+  （rust alinux3 实测 1176s、vpn ubuntu 1039s，降下去会被误杀）。`tests/repository_structure_test.sh` 守住这条约束。
+
+**影响与后续**
+
+- `os/linux/packages.*.list` 仍钉 Node 20（nodesource），低于 coc 门槛：按仓库初始化的机器会走 AutoComplPop
+  回退而拿不到 coc。需要 coc 就自行升级到 Node ≥ 22.15（本次未改 packages 列表）。
+
+**验证**
+
+```bash
+bazel test --config=l1 //editors/vim:vim_linux_ubuntu_test //editors/vim:vim_macos_test
+bazel test --config=l1 //tests:repository_structure_check
+# 真实 Ubuntu 容器（需 Docker 与外网）：
+bazel test --config=l3 //editors/vim:vim_ops_linux_ubuntu_e2e_test
+```
+
 ### 2026-08-08 — 大 Git 仓库里 Airline / GitGutter 拖慢打开与 Git 相关操作
 
 **问题表象**

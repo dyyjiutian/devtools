@@ -17,8 +17,7 @@ RUN apt-get update \
         libncurses-dev \
         bison \
         pkg-config \
-        nodejs \
-        npm \
+        gnupg \
         ripgrep \
         zip \
         unzip \
@@ -29,6 +28,19 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && printf 'ALL ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/e2e \
     && chmod 0440 /etc/sudoers.d/e2e
+
+# noble's distro nodejs is 18.19.1, but coc.nvim's release build requires
+# Node >= 22.15.0 and crashes (then hangs vim) below it. Use NodeSource, the
+# same provisioning os/linux/setup_ubuntu.sh uses. NodeSource's nodejs ships npm.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/* \
+    && node --version \
+    && node -e 'const [M,m] = process.versions.node.split(".").map(Number); \
+        if (M < 22 || (M === 22 && m < 15)) { \
+          console.error("coc.nvim needs Node >= 22.15, got " + process.versions.node); \
+          process.exit(1); \
+        }'
 
 WORKDIR /workspace
 CMD ["bash"]
