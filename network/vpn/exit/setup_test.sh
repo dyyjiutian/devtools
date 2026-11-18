@@ -239,8 +239,29 @@ echo "[11/11] config cache round-trip preserves REALITY_SNIS and ALLOW_IPS"
     assert_eq "$REALITY_SNI" "www.icloud.com" "REALITY_SNI stays primary for manage.sh"
 )
 
+echo "[11b/11] allow-ip-off clears cached ALLOW_IPS so later reruns stay off"
+off_cache="${TMP_DIR}/off-cache"
+cat >"$off_cache" <<'EOF'
+REALITY_SNIS="www.icloud.com,www.apple.com"
+ALLOW_IPS="198.51.100.10,1.2.3.4"
+USERS="user1"
+EOF
+(
+    export EXIT_SETUP_SOURCE_ONLY=true
+    export VPN_EXIT_CONFIG="$off_cache"
+    # shellcheck source=setup.sh
+    source "$EXIT_SETUP"
+    clear_allow_ips_cache
+    assert_file_contains "$off_cache" 'ALLOW_IPS=""'
+    assert_file_contains "$off_cache" 'REALITY_SNIS="www.icloud.com,www.apple.com"'
+    assert_file_contains "$off_cache" 'USERS="user1"'
+    clear_allow_ips_cache
+    assert_eq "$(grep -c '^ALLOW_IPS=' "$off_cache")" "1" "no duplicate ALLOW_IPS lines"
+    clear_allow_ips_cache "${TMP_DIR}/no-such-cache"
+)
+
+
 echo "[12/12] install_xray prefers the cached offline installer"
 assert_file_contains "$EXIT_SETUP" "cache/scripts/install-release.sh"
 assert_file_contains "$EXIT_SETUP" 'install --local "$zip" --without-geodata'
-
 echo "PASS: exit/setup WARP repo + multi-SNI + whitelist regression checks"

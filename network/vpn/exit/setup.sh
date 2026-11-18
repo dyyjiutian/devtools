@@ -188,6 +188,15 @@ write_config() {
     chmod 600 "$CONFIG_CACHE"
 }
 
+# --allow-ip-off 必须同时清空缓存里的 ALLOW_IPS：主流程会复用缓存，
+# 否则下次普通重跑（改 SNI / 加用户）会把白名单从缓存里复活
+clear_allow_ips_cache() {
+    local cache="${1:-$CONFIG_CACHE}"
+    [[ -f "$cache" ]] || return 0
+    cp -a "$cache" "${cache}.bak"
+    sed -i 's/^ALLOW_IPS=.*/ALLOW_IPS=""/' "$cache"
+}
+
 # 测试可 source 本脚本以复用上述 helper，避免 root / 安装副作用。
 if [[ "${EXIT_SETUP_SOURCE_ONLY:-false}" == "true" ]]; then
     return 0 2>/dev/null || exit 0
@@ -312,6 +321,7 @@ if $ALLOW_IP_OFF; then
     else
         remove_allow_ip "$OFF_OLD_IPS"
         persist_exit_rules
+        clear_allow_ips_cache
     fi
     exit 0
 fi
