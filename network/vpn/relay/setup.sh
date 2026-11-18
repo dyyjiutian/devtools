@@ -101,8 +101,12 @@ net.core.rmem_max = 67108864
 net.core.wmem_max = 67108864
 net.core.rmem_default = 65536
 net.core.wmem_default = 65536
-net.core.netdev_max_backlog = 4096
+net.core.netdev_max_backlog = 16384
 net.core.somaxconn = 4096
+
+# 软中断预算：高 pps 下减少 time_squeeze（每轮 NAPI 处理更多包）
+net.core.netdev_budget = 600
+net.core.netdev_budget_usecs = 4000
 
 # conntrack：DNAT 中继是 conntrack 密集型；默认 established 超时 5 天过长，
 # 收紧超时避免死连接占满表项（nf_conntrack_max 默认 65536 偏小）
@@ -116,6 +120,8 @@ net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
 net.netfilter.nf_conntrack_udp_timeout = 60
 net.netfilter.nf_conntrack_icmp_timeout = 15
 net.netfilter.nf_conntrack_generic_timeout = 60
+# 跨境链路丢包/重排常见：放宽窗口检查，减少重传包被误判 INVALID 而丢 NAT 状态
+net.netfilter.nf_conntrack_tcp_be_liberal = 1
 
 # TCP 优化（见 https://help.aliyun.com/knowledge_detail/41334.html）
 # 注：中继节点做 iptables DNAT 纯转发，OS 层 keepalive 对转发流量无效，
@@ -135,6 +141,14 @@ net.ipv4.tcp_wmem = 4096 65536 67108864
 net.ipv4.tcp_mtu_probing = 1
 net.ipv4.ip_local_port_range = 1024 65535
 SYSCTL
+}
+
+# RPS CPU 掩码：n 核 → 低 n 位置 1 的十六进制（2 核→3，4 核→f）
+rps_mask() {
+    local n="${1:-1}"
+    [[ "$n" =~ ^[0-9]+$ ]] || return 1
+    (( n >= 1 && n <= 64 )) || return 1
+    printf '%x' $(( (1 << n) - 1 ))
 }
 
 # 测试可 source 本脚本复用 helper，避免 root / 系统副作用。
@@ -205,13 +219,79 @@ sweep_relay_rules() {
     iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
 }
 
+# ── NIC 调优：fq qdisc + 单队列 RPS（高并发 pps 关键）─────────────────────────
+tune_nic() {
+    local iface ncpu rxq_count mask
+    iface=$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')
+    [[ -n "$iface" ]] || { warn "未找到默认路由网卡，跳过 NIC 调优"; return 0; }
+
+    # fq qdisc：BBR pacing 的最佳搭档（内核 >=4.13 BBR 自带 pacing，缺 tc 不阻塞）
+    if ! command -v tc >/dev/null 2>&1; then
+        if [[ -f /etc/os-release ]]; then
+            # shellcheck source=/dev/null
+            source /etc/os-release
+            case "$ID" in
+                centos|rhel|almalinux|rocky|alinux|anolis) yum install -y iproute-tc >/dev/null 2>&1 || true ;;
+                ubuntu|debian) apt-get install -y iproute2 >/dev/null 2>&1 || true ;;
+            esac
+        fi
+    fi
+    if command -v tc >/dev/null 2>&1; then
+        if tc qdisc replace dev "$iface" root fq 2>/dev/null; then
+            success "qdisc: ${iface} → fq（BBR pacing）"
+        else
+            warn "qdisc 替换失败（容器内常见），跳过"
+        fi
+    else
+        warn "tc 不可用，跳过 qdisc 设置（BBR 内核自带 pacing 仍生效）"
+    fi
+
+    # RPS：单队列网卡把软中断分散到所有核（多队列网卡无需，跳过）
+    ncpu=$(nproc 2>/dev/null || echo 1)
+    rxq_count=$(ls "/sys/class/net/${iface}/queues/" 2>/dev/null | grep -c '^rx-' || true)
+    if [[ "$rxq_count" == "1" && "$ncpu" -gt 1 ]]; then
+        mask=$(rps_mask "$ncpu")
+        if echo "$mask" > "/sys/class/net/${iface}/queues/rx-0/rps_cpus" 2>/dev/null; then
+            success "RPS: ${iface} 单队列软中断分散到 ${ncpu} 核（mask=${mask}）"
+            # 持久化：重启后网卡队列重建会丢 rps_cpus
+            cat > /etc/systemd/system/vpn-relay-rps.service <<EOF
+[Unit]
+Description=VPN relay RPS - spread single-queue NIC softirqs across cores
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo ${mask} > /sys/class/net/${iface}/queues/rx-0/rps_cpus'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            systemctl daemon-reload
+            systemctl enable vpn-relay-rps.service >/dev/null 2>&1
+        else
+            warn "RPS 设置失败（容器/权限限制），跳过"
+        fi
+    else
+        info "NIC ${iface}: ${rxq_count} 个 RX 队列 / ${ncpu} 核，无需 RPS"
+    fi
+}
+
 # ── 清除规则模式 ──────────────────────────────────────────────────────────────
 if [[ "$ACTION" == "clean" ]]; then
     step "清除 iptables 转发规则（含历史残留与 hairpin）"
     if $DRY_RUN; then
         info "[dry-run] 清扫 PREROUTING/OUTPUT/POSTROUTING/FORWARD 中本脚本管理的规则"
+        info "[dry-run] 停用并移除 vpn-relay-rps.service，恢复 rps_cpus=0"
     else
         sweep_relay_rules
+        systemctl disable --now vpn-relay-rps.service 2>/dev/null || true
+        rm -f /etc/systemd/system/vpn-relay-rps.service
+        systemctl daemon-reload
+        CLEAN_IFACE=$(ip -4 route show default 2>/dev/null | awk '{print $5; exit}')
+        if [[ -n "$CLEAN_IFACE" ]]; then
+            echo 0 > "/sys/class/net/${CLEAN_IFACE}/queues/rx-0/rps_cpus" 2>/dev/null || true
+        fi
     fi
     success "iptables 转发规则已清除"
 fi
@@ -221,7 +301,8 @@ if [[ "$ACTION" != "clean" ]]; then
     step "开启内核 IP 转发 + 网络优化（BBR / conntrack / route_localnet）"
     if $DRY_RUN; then
         info "[dry-run] echo 1 > /proc/sys/net/ipv4/ip_forward"
-        info "[dry-run] 写入 /etc/sysctl.d/99-vpn-relay.conf（IP 转发 + BBR + conntrack + route_localnet）"
+        info "[dry-run] 写入 /etc/sysctl.d/99-vpn-relay.conf（IP 转发 + BBR + conntrack + route_localnet + 软中断预算）"
+        info "[dry-run] NIC 调优：默认网卡 qdisc→fq；单队列多核时启用 RPS 并持久化（vpn-relay-rps.service）"
     else
         echo 1 > /proc/sys/net/ipv4/ip_forward
         modprobe nf_conntrack 2>/dev/null || true
@@ -234,6 +315,7 @@ if [[ "$ACTION" != "clean" ]]; then
         fi
         mkdir -p /etc/modprobe.d
         printf 'options nf_conntrack hashsize=65536\n' > /etc/modprobe.d/vpn-relay-conntrack.conf
+        tune_nic
         CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
         if [[ "$CC" == "bbr" ]]; then
             success "BBR 拥塞控制已启用"

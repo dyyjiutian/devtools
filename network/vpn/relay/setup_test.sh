@@ -32,6 +32,13 @@ echo "[1/6] source relay/setup.sh helpers without root/system side effects"
     declare -F is_public_ip >/dev/null || fail "is_public_ip should be defined"
     declare -F legacy_dnat_targets >/dev/null || fail "legacy_dnat_targets should be defined"
     declare -F write_relay_sysctl >/dev/null || fail "write_relay_sysctl should be defined"
+    declare -F rps_mask >/dev/null || fail "rps_mask should be defined"
+    assert_eq "$(rps_mask 1)" "1" "1-core mask"
+    assert_eq "$(rps_mask 2)" "3" "2-core mask"
+    assert_eq "$(rps_mask 4)" "f" "4-core mask"
+    assert_eq "$(rps_mask 8)" "ff" "8-core mask"
+    if rps_mask 0 >/dev/null 2>&1; then fail "rps_mask 0 must be rejected"; fi
+    if rps_mask abc >/dev/null 2>&1; then fail "rps_mask non-numeric must be rejected"; fi
 )
 
 echo "[2/6] sysctl conf covers forwarding, BBR, conntrack and route_localnet"
@@ -48,6 +55,10 @@ assert_file_contains "$conf" "net.core.default_qdisc = fq"
 assert_file_contains "$conf" "net.ipv4.conf.all.route_localnet = 1"
 assert_file_contains "$conf" "net.netfilter.nf_conntrack_max = 262144"
 assert_file_contains "$conf" "net.netfilter.nf_conntrack_tcp_timeout_established = 3600"
+assert_file_contains "$conf" "net.netfilter.nf_conntrack_tcp_be_liberal = 1"
+assert_file_contains "$conf" "net.core.netdev_max_backlog = 16384"
+assert_file_contains "$conf" "net.core.netdev_budget = 600"
+assert_file_contains "$conf" "net.core.netdev_budget_usecs = 4000"
 # 重跑幂等：覆盖写入不追加
 (
     export RELAY_SETUP_SOURCE_ONLY=true
