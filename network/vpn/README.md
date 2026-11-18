@@ -6,7 +6,7 @@
 
 ```
 国内机器                   杭州中继 ECS               东京出口 ECS                目标站点
-  │                      198.51.100.10              198.51.100.21                │
+  │                      198.51.100.10              198.51.100.20                │
   │                            │                          │                      │
   │  Xray VLESS+Reality        │    iptables DNAT 转发    │  Xray VLESS+Reality  │
   ├──────────────────────────►│──────────────────────────►│─────────────────────►│
@@ -20,7 +20,7 @@
 | 节点 | IP | 作用 | 技术方案 |
 |------|----|------|----------|
 | 中继节点 | 198.51.100.10 | 流量中转，规避国内审查对境外 IP 的封锁 | iptables DNAT（主路纯转发）+ WARP 自动兜底 |
-| 出口节点 | 198.51.100.21 | 实际出境，访问 claude.ai | Xray VLESS + Reality（多 SNI）+ 443 来源白名单 |
+| 出口节点 | 198.51.100.20 | 实际出境，访问 claude.ai | Xray VLESS + Reality（多 SNI）+ 443 来源白名单 |
 
 ## 为什么需要中继节点？
 
@@ -73,11 +73,11 @@ bazel test --config=l3 //network/vpn:vpn_pair_linux_alinux4_e2e_test
 
 ---
 
-### 第一步：部署出口节点（东京 ECS 198.51.100.21）
+### 第一步：部署出口节点（东京 ECS 198.51.100.20）
 
 ```bash
 # 登录东京 ECS
-ssh root@198.51.100.21
+ssh root@198.51.100.20
 
 # 单用户（默认，创建 user1）+ 多 SNI + 443 白名单（仅放行杭州中继）
 sudo ./exit/setup.sh --allow-ip=198.51.100.10
@@ -167,7 +167,7 @@ sudo ./exit/manage.sh reset-stats alice
 # 登录杭州 ECS
 ssh root@198.51.100.10
 
-# 执行部署脚本（默认出口 198.51.100.21）
+# 执行部署脚本（默认出口 198.51.100.20）
 sudo ./relay/setup.sh
 ```
 
@@ -175,7 +175,7 @@ sudo ./relay/setup.sh
 
 ```bash
 sudo ./relay/setup.sh \
-  --exit-ip=198.51.100.21 \
+  --exit-ip=198.51.100.20 \
   --exit-port=443 \
   --listen-port=443
 ```
@@ -184,7 +184,7 @@ sudo ./relay/setup.sh \
 - 开启内核 `net.ipv4.ip_forward` + **BBR + conntrack 优化 + route_localnet**（持久化到
   `/etc/sysctl.d/99-vpn-relay.conf`；conntrack 收紧 established 超时、扩容表项，兜底所需）
 - **清扫同端口历史 DNAT/MASQUERADE/FORWARD 残留**（保留 Docker 链），再设置
-  iptables DNAT 规则（TCP 443 → 198.51.100.21:443，标记 `vpn-relay`）
+  iptables DNAT 规则（TCP 443 → 198.51.100.20:443，标记 `vpn-relay`）
 - 设置 **OUTPUT hairpin**：本机客户端访问自身公网 IP:443 也走同一条 DNAT，与外部终端
   共用兜底切换路径（仅公网 IP 生效）
 - 持久化 iptables 规则（重启后自动恢复）
@@ -196,8 +196,8 @@ sudo ./relay/setup.sh \
 ```bash
 # 需要到出口的 SSH（读取 Reality 凭据，全程不回显）；sudo 密码走 stdin 文件
 sudo ./relay/fallback.sh install \
-  --exit-ip=198.51.100.21 \
-  --exit-ssh=dev.user@198.51.100.21 \
+  --exit-ip=198.51.100.20 \
+  --exit-ssh=dev.user@198.51.100.20 \
   --sudo-pass-file=/path/to/pass
 
 sudo ./relay/fallback.sh status            # 模式 / 计数 / WARP / 服务 / 当前 DNAT
@@ -644,6 +644,43 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 **根因**：延续 2026-08-17 的已知问题——alinux3 较老的 systemd 在 `--jobs=2` 并行 docker build/dnf 负载下启动慢，180 次循环（实际 ~237s）窗口仍不够。pair 测试本身是 `size=enormous`（3600s），等待窗口却远小于预算。且 systemd 日志进 journal 不进 console，失败时 dump console 日志拿不到任何诊断。
 
 **解法**：`wait_systemd` 改为基于 `SECONDS` 的 600s 预算（仍远小于 3600s），轮询间隔 2s；失败时改 dump `systemctl list-jobs` / `systemctl --failed`（定位阻塞 unit），console 日志仅作补充。`compose_runner_suite.sh` 同步契约断言。
+
+### 2026-11-18 — 再换 EIP（198.51.100.20）跨境限速未解除：限速跟着出口目标 IP 走
+
+**表象**：出口 EIP 从 `198.51.100.21` 再换成 `198.51.100.20`（同一台东京 ECS）后，
+隧道吞吐仍 ~259KB/s（换前 239KB/s），YouTube 仍只能 480p。
+
+**排查证据**（均为当日实测）：
+- 中继→新出口 22 端口 SSH 拉 10MB：122KB/s（旧出口同测法 35KB/s）——与 443 隧道无关，按目标 IP 限；
+- **中继本机直连 Cloudflare 10MB：2.8MB/s（3.6s 完成）**——中继自身跨境 bulk 不被限；
+- 出口机直连 CF：30MB/s——出口自身带宽正常；
+- 重传近零、速率平滑贴顶——整形（policer）特征，非拥塞。
+
+**结论（阶段性）**：限速画像挂在「中继→出口目标 IP」上，两个出口 IP 均属阿里云
+国际数据中心段（8.209.x / 8.216.x），换同段 EIP 不解除。ping 110ms 正常是因为
+ICMP 小包不在整形范围。端侧优化（BBR/MSS/窗口）无法突破策略性限速。
+
+**后续选项**：换非同段/非阿里云的出口（如 HK 或其他厂商 Tokyo）验证；或 GA 持牌通道
+结构性解决。24h 探针（`vpn-path-probe.timer`，日志 `/var/log/vpn-path-probe.log`）
+继续观察限速是否分时段波动。
+
+**切换操作记录**：换 EIP 窗口期出口失联，兜底健康检查 16:46 自动切 WARP（设计生效）；
+新 IP 绑定后更新中继 DNAT/兜底 conf/探针目标并 `switch main`，16:58 恢复主路，
+客户端零改动（hz-dev 经隧道 ipify 显示新出口 IP）。
+
+### 2026-11-18 — 兜底模式下换出口 IP，旧出口 MASQUERADE/FORWARD 规则残留
+
+**表象**：兜底激活期间（DNAT 指向 127.0.0.1:8443）执行 `relay/setup.sh --exit-ip=<新IP>`，
+旧出口的 `POSTROUTING MASQUERADE` 与 `FORWARD ACCEPT` 规则未被清扫，与新规则并存。
+
+**根因**：MASQUERADE/FORWARD 规则不带 `vpn-relay` 标记，清扫只依赖「当前 PREROUTING
+DNAT 目标」反查连带规则；兜底模式下 DNAT 已指向 127.0.0.1，旧出口目标无从反查。
+
+**解法**：MASQUERADE/FORWARD 新规则一律加 `--comment vpn-relay` 标记；`sweep_relay_rules`
+统一清扫 nat POSTROUTING / filter FORWARD / nat OUTPUT / mangle FORWARD 四表的标记规则，
+并保留「单目标 /32 + tcp + MASQUERADE」无标记历史残留的清理（Docker 按源地址段匹配，
+不会误伤）。回归：`relay/setup_test.sh [6b/6]`（假 iptables 夹具：兜底 DNAT + 新旧出口
+规则 + Docker 规则，断言旧规则被清、Docker 不被碰）。
 
 ### 2026-11-18 — 运营商/GFW 方向性封禁境外出口 IP（198.51.100.22）
 

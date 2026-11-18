@@ -3,7 +3,7 @@
 # VPN 中继节点部署脚本 - 杭州 ECS (198.51.100.10)
 # 方案：iptables DNAT 透明转发，主链路无需任何代理软件
 #       内核优化（BBR + conntrack + route_localnet）；可选 WARP 兜底见 fallback.sh
-# 用法：sudo ./relay/setup.sh --exit-ip=198.51.100.21 [--exit-port=443] [--listen-port=443] [--dry-run]
+# 用法：sudo ./relay/setup.sh --exit-ip=198.51.100.20 [--exit-port=443] [--listen-port=443] [--dry-run]
 # =============================================================================
 
 set -euo pipefail
@@ -37,7 +37,7 @@ for arg in "$@"; do
             echo "Usage: sudo $0 --exit-ip=<EXIT_IP> [OPTIONS]"
             echo ""
             echo "必需参数:"
-            echo "  --exit-ip=IP      出口节点 IP（例：198.51.100.21，东京）"
+            echo "  --exit-ip=IP      出口节点 IP（例：198.51.100.20，东京）"
             echo ""
             echo "可选参数:"
             echo "  --exit-port=PORT     出口节点端口（默认 443）"
@@ -151,6 +151,56 @@ rps_mask() {
     printf '%x' $(( (1 << n) - 1 ))
 }
 
+# ── 清扫转发规则（历史残留 + 标记规则；保留 Docker 链）────────────────────────
+# 1) 枚举 PREROUTING 中本端口全部 DNAT 规则（不限目标），连带清理对应目标的
+#    MASQUERADE / FORWARD（旧版无标记规则的清理路径之一）
+# 2) 清扫 nat POSTROUTING / filter FORWARD / nat OUTPUT / mangle FORWARD 中
+#    带 vpn-relay 标记的规则——换出口 IP 时旧目标可能已不在 DNAT 中（如兜底
+#    模式 DNAT 指向 127.0.0.1），只靠 1) 会残留旧出口的 MASQUERADE/FORWARD
+# 3) 历史无标记残留：POSTROUTING「单目标 /32 + tcp + MASQUERADE」及其 FORWARD
+#    放行对（Docker 的 MASQUERADE 按源地址段匹配，不会命中此模式）
+sweep_relay_rules() {
+    local targets target line tip tport tbl chain tbl_chain
+    targets="$(iptables -t nat -S PREROUTING 2>/dev/null | legacy_dnat_targets "$LISTEN_PORT" || true)"
+    for target in $targets; do
+        tip="${target%%:*}"
+        tport="${target##*:}"
+        [[ "$tport" == "$tip" ]] && tport="$EXIT_PORT"
+        iptables -t nat -D POSTROUTING -d "${tip}/32" -p tcp -j MASQUERADE 2>/dev/null || true
+        iptables -D FORWARD -d "${tip}/32" -p tcp --dport "${tport}" -j ACCEPT 2>/dev/null || true
+        iptables -D FORWARD -s "${tip}/32" -p tcp --sport "${tport}" -j ACCEPT 2>/dev/null || true
+    done
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # shellcheck disable=SC2086
+        iptables -t nat -D PREROUTING ${line#-A PREROUTING } 2>/dev/null || true
+    done < <(iptables -t nat -S PREROUTING 2>/dev/null \
+        | grep -E "^-A PREROUTING .*--dport ${LISTEN_PORT} .*-j DNAT" || true)
+    for tbl_chain in "nat POSTROUTING" "filter FORWARD" "nat OUTPUT" "mangle FORWARD"; do
+        tbl="${tbl_chain%% *}"
+        chain="${tbl_chain##* }"
+        while IFS= read -r line; do
+            [[ -n "$line" ]] || continue
+            # shellcheck disable=SC2086
+            iptables -t "$tbl" -D "$chain" ${line#-A "$chain" } 2>/dev/null || true
+        done < <(iptables -t "$tbl" -S "$chain" 2>/dev/null | grep -- '--comment vpn-relay' || true)
+    done
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        tip="$(printf '%s\n' "$line" \
+            | sed -n 's/^-A POSTROUTING -d \([0-9.]*\)\/32 -p tcp -j MASQUERADE$/\1/p')"
+        [[ -n "$tip" ]] || continue
+        # shellcheck disable=SC2086
+        iptables -t nat -D POSTROUTING ${line#-A POSTROUTING } 2>/dev/null || true
+        iptables -D FORWARD -d "${tip}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+        iptables -D FORWARD -s "${tip}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+    done < <(iptables -t nat -S POSTROUTING 2>/dev/null \
+        | grep -E '^-A POSTROUTING -d [0-9.]+/32 -p tcp -j MASQUERADE$' || true)
+    # 当前出口方向的 FORWARD 放行规则（可能由旧版本脚本写入，无标记）
+    iptables -D FORWARD -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+}
+
 # 测试可 source 本脚本复用 helper，避免 root / 系统副作用。
 if [[ "${RELAY_SETUP_SOURCE_ONLY:-false}" == "true" ]]; then
     return 0 2>/dev/null || exit 0
@@ -172,7 +222,7 @@ run() {
 
 # 如果未传 --exit-ip，使用默认出口 IP
 if [[ -z "$EXIT_IP" ]]; then
-    EXIT_IP="198.51.100.21"
+    EXIT_IP="198.51.100.20"
     warn "未指定 --exit-ip，使用默认出口 IP: ${EXIT_IP}"
 fi
 
@@ -188,42 +238,6 @@ info "出口节点    : ${EXIT_IP}:${EXIT_PORT}"
 info "监听端口    : ${LISTEN_PORT}"
 
 $DRY_RUN && warn "[dry-run] 仅预览，不执行实际操作"
-
-# ── 清扫转发规则（历史残留 + 标记规则；保留 Docker 链）────────────────────────
-# 枚举 PREROUTING 中本端口全部 DNAT 规则（不限目标），连带清理对应目标的
-# MASQUERADE / FORWARD；再清 OUTPUT 上带 vpn-relay 标记的 hairpin 旧规则。
-sweep_relay_rules() {
-    local targets target line tip tport
-    targets="$(iptables -t nat -S PREROUTING 2>/dev/null | legacy_dnat_targets "$LISTEN_PORT" || true)"
-    for target in $targets; do
-        tip="${target%%:*}"
-        tport="${target##*:}"
-        [[ "$tport" == "$tip" ]] && tport="$EXIT_PORT"
-        iptables -t nat -D POSTROUTING -d "${tip}/32" -p tcp -j MASQUERADE 2>/dev/null || true
-        iptables -D FORWARD -d "${tip}/32" -p tcp --dport "${tport}" -j ACCEPT 2>/dev/null || true
-        iptables -D FORWARD -s "${tip}/32" -p tcp --sport "${tport}" -j ACCEPT 2>/dev/null || true
-    done
-    while IFS= read -r line; do
-        [[ -n "$line" ]] || continue
-        # shellcheck disable=SC2086
-        iptables -t nat -D PREROUTING ${line#-A PREROUTING } 2>/dev/null || true
-    done < <(iptables -t nat -S PREROUTING 2>/dev/null \
-        | grep -E "^-A PREROUTING .*--dport ${LISTEN_PORT} .*-j DNAT" || true)
-    while IFS= read -r line; do
-        [[ -n "$line" ]] || continue
-        # shellcheck disable=SC2086
-        iptables -t nat -D OUTPUT ${line#-A OUTPUT } 2>/dev/null || true
-    done < <(iptables -t nat -S OUTPUT 2>/dev/null | grep -- '--comment vpn-relay' || true)
-    # 当前出口方向的 FORWARD 放行规则（可能由旧版本脚本写入，无标记）
-    iptables -D FORWARD -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
-    iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
-    # mangle 表 TCPMSS 钳制规则（带标记）
-    while IFS= read -r line; do
-        [[ -n "$line" ]] || continue
-        # shellcheck disable=SC2086
-        iptables -t mangle -D FORWARD ${line#-A FORWARD } 2>/dev/null || true
-    done < <(iptables -t mangle -S FORWARD 2>/dev/null | grep -- '--comment vpn-relay' || true)
-}
 
 # ── NIC 调优：fq qdisc + 单队列 RPS（高并发 pps 关键）─────────────────────────
 tune_nic() {
@@ -338,9 +352,9 @@ if [[ "$ACTION" != "clean" ]]; then
     if $DRY_RUN; then
         info "[dry-run] 清扫同端口历史 DNAT/MASQUERADE/FORWARD 规则（保留 Docker 链）"
         info "[dry-run] iptables -t nat -A PREROUTING -p tcp --dport ${LISTEN_PORT} -m comment --comment vpn-relay -j DNAT --to-destination ${EXIT_IP}:${EXIT_PORT}"
-        info "[dry-run] iptables -t nat -A POSTROUTING -d ${EXIT_IP}/32 -p tcp -j MASQUERADE"
-        info "[dry-run] iptables -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --dport/--sport ${EXIT_PORT} -j ACCEPT"
-        info "[dry-run] iptables -t mangle -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1380（跨境 PMTUD 黑洞防护）"
+        info "[dry-run] iptables -t nat -A POSTROUTING -d ${EXIT_IP}/32 -p tcp -m comment --comment vpn-relay -j MASQUERADE"
+        info "[dry-run] iptables -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --dport/--sport ${EXIT_PORT} -m comment --comment vpn-relay -j ACCEPT"
+        info "[dry-run] iptables -t mangle -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --tcp-flags SYN,RST SYN -m comment --comment vpn-relay -j TCPMSS --set-mss 1380（跨境 PMTUD 黑洞防护）"
         if is_public_ip "$RELAY_IP"; then
             info "[dry-run] iptables -t nat -A OUTPUT -d ${RELAY_IP}/32 -p tcp --dport ${LISTEN_PORT} -m comment --comment vpn-relay -j DNAT --to-destination ${EXIT_IP}:${EXIT_PORT}（本机 hairpin）"
         fi
@@ -355,17 +369,19 @@ if [[ "$ACTION" != "clean" ]]; then
             -j DNAT --to-destination "${EXIT_IP}:${EXIT_PORT}"
 
         # POSTROUTING: 对转发至出口节点的流量做 MASQUERADE（使出口节点看到中继 IP）
+        # 带标记：换出口 IP / 兜底切换后清扫不依赖 DNAT 目标仍指向旧出口
         iptables -t nat -A POSTROUTING \
             -d "${EXIT_IP}/32" -p tcp \
+            -m comment --comment vpn-relay \
             -j MASQUERADE
 
-        # FORWARD: 允许转发链路两个方向的流量
+        # FORWARD: 允许转发链路两个方向的流量（同样带标记）
         iptables -A FORWARD \
             -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" \
-            -j ACCEPT
+            -m comment --comment vpn-relay -j ACCEPT
         iptables -A FORWARD \
             -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" \
-            -j ACCEPT
+            -m comment --comment vpn-relay -j ACCEPT
 
         # TCPMSS 钳制：跨境段常见 PMTUD 黑洞（路径 MTU < 1500 且 ICMP frag-needed
         # 被丢），1460 的大包静默丢弃导致吞吐崩塌（小请求正常、下载极慢）。

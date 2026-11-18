@@ -1,13 +1,13 @@
 # VPN 中继节点
 
-杭州中继（198.51.100.10）连接客户端与东京出口（198.51.100.21）。
+杭州中继（198.51.100.10）连接客户端与东京出口（198.51.100.20）。
 主链路为纯 iptables DNAT 转发，不运行代理软件；可选 WARP 自动兜底应对出口被墙。
 
 ## 主链路部署
 
 ~~~bash
 sudo bash network/vpn/relay/setup.sh --help
-sudo bash network/vpn/relay/setup.sh --exit-ip=198.51.100.21
+sudo bash network/vpn/relay/setup.sh --exit-ip=198.51.100.20
 ~~~
 
 内容：内核优化（ip_forward + BBR + conntrack + route_localnet）、清扫同端口历史
@@ -21,7 +21,7 @@ DNAT 残留（保留 Docker 链）、PREROUTING DNAT + POSTROUTING MASQUERADE + 
 ~~~bash
 sudo bash network/vpn/relay/fallback.sh --help
 sudo bash network/vpn/relay/fallback.sh install \
-  --exit-ip=198.51.100.21 --exit-ssh=dev.user@198.51.100.21 --sudo-pass-file=<pass>
+  --exit-ip=198.51.100.20 --exit-ssh=dev.user@198.51.100.20 --sudo-pass-file=<pass>
 sudo bash network/vpn/relay/fallback.sh status
 sudo bash network/vpn/relay/fallback.sh switch fallback   # 演练
 sudo bash network/vpn/relay/fallback.sh switch main
