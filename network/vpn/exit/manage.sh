@@ -237,20 +237,25 @@ bytes_to_human() {
 }
 
 # Raw Stats API counters for the current Xray process (lost on restart).
+# A missing counter is normal: Xray returns NotFound (exit 1) until that user
+# has traffic. Treat it as zero so list/stats/quota checks do not abort.
 get_user_session_traffic() {
     local user="$1"
     local email="${user}@vpn"
-    local up=0 down=0 val
+    local dir raw value up=0 down=0
 
-    val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
-        -name "user>>>${email}>>>traffic>>>uplink" 2>/dev/null \
-        | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
-    up="${val:-0}"
-
-    val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
-        -name "user>>>${email}>>>traffic>>>downlink" 2>/dev/null \
-        | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
-    down="${val:-0}"
+    for dir in uplink downlink; do
+        raw=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
+            -name "user>>>${email}>>>traffic>>>${dir}" 2>/dev/null || true)
+        value=$(printf '%s\n' "$raw" \
+            | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
+        value="${value:-0}"
+        if [[ "$dir" == "uplink" ]]; then
+            up="$value"
+        else
+            down="$value"
+        fi
+    done
 
     echo "${up} ${down}"
 }

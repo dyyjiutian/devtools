@@ -39,6 +39,10 @@ if [[ "$cmd" == "api" && "$sub" == "statsquery" ]]; then
     exit 0
 fi
 if [[ "$cmd" == "api" && "$sub" == "stats" ]]; then
+    if [[ "${XRAY_STATS_MISSING:-0}" == "1" ]]; then
+        echo "failed to get stats: rpc error: code = NotFound desc = counter not found." >&2
+        exit 1
+    fi
     name=""
     reset=false
     shift 2
@@ -207,7 +211,7 @@ SESSION_DOWN_BOB=${bob_down}
 EOF
 }
 
-echo "[1/4] get_user_traffic sums persisted store + live session"
+echo "[1/5] get_user_traffic sums persisted store + live session"
 setup_env
 (
     load_manage
@@ -218,7 +222,7 @@ setup_env
     assert_eq "$down" "6000" "alice downlink store+session"
 )
 
-echo "[2/4] reload_xray_clients commits live traffic before restart"
+echo "[2/5] reload_xray_clients commits live traffic before restart"
 setup_env
 (
     load_manage
@@ -241,7 +245,7 @@ setup_env
     assert_eq "$down" "7060" "alice downlink accumulates across reloads"
 )
 
-echo "[3/4] reset-stats clears persisted + session counters"
+echo "[3/5] reset-stats clears persisted + session counters"
 setup_env
 (
     load_manage
@@ -266,7 +270,7 @@ setup_env
     assert_eq "$down" "0" "bob downlink after reset-stats all"
 )
 
-echo "[4/4] cmd_add reload preserves existing users' billed traffic"
+echo "[4/5] cmd_add reload preserves existing users' billed traffic"
 setup_env
 (
     load_manage
@@ -288,6 +292,24 @@ setup_env
     read -r up down < <(get_user_traffic carol)
     assert_eq "$up" "0" "new user starts at zero uplink"
     assert_eq "$down" "0" "new user starts at zero downlink"
+)
+
+echo "[5/5] list keeps users when per-user stats are NotFound"
+setup_env
+(
+    load_manage
+    export XRAY_STATS_MISSING=1
+    traffic_store_set alice 100 200
+    read -r up down < <(get_user_session_traffic alice)
+    assert_eq "$up" "0" "missing session uplink is zero"
+    assert_eq "$down" "0" "missing session downlink is zero"
+    read -r up down < <(get_user_traffic alice)
+    assert_eq "$up" "100" "persisted uplink kept when session counter is missing"
+    assert_eq "$down" "200" "persisted downlink kept when session counter is missing"
+
+    out=$(cmd_list) || fail "list aborted when per-user stats are NotFound"
+    printf '%s\n' "$out" | grep -q 'alice' || fail "list omitted alice when stats are missing"
+    printf '%s\n' "$out" | grep -q 'bob' || fail "list omitted bob when stats are missing"
 )
 
 echo "OK: manage traffic persistence tests passed"

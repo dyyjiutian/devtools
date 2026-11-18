@@ -13,6 +13,14 @@ bash network/vpn/exit/setup_test.sh
 
 ## Issues
 
+### 2026-10-28 — list 不显示已存在的用户
+
+**表象：** `sudo ./exit/manage.sh add devuser` 提示用户已存在，但 `sudo ./exit/manage.sh list` 只打出表头并以退出码 1 结束，`devuser` 和其他用户都不出现。
+
+**根因：** 用户还没有流量时，`xray api stats` 查询 `user>>>name@vpn>>>traffic>>>uplink` 返回 NotFound（退出码 1）。`get_user_session_traffic` 把该命令放在 `set -o pipefail` 的管道里，失败后 `set -e` 在打印第一行之前中止 `list`。`statsquery` 仍然成功，所以脚本认为 Stats API 可用并走进这条路径。
+
+**解法：** 单用户计数不存在时按 0 字节计算，再继续列出其余用户。回归：`bash network/vpn/exit/manage_test.sh`。
+
 ### 2026-08-08 — 新增用户后全员流量被重新计费
 
 **表象：** `manage.sh add`（以及 `remove` / `sync` / 超限踢人）后，已有用户的用量从 0 重新累计，配额等于重新开始。
