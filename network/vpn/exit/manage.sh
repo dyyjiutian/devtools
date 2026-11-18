@@ -389,8 +389,12 @@ cmd_quota() {
 # ── 命令：vless ────────────────────────────────────────────────────────────────
 cmd_vless() {
     local name="${1:-}"
-    local relay_ip="${2:-${RELAY_IP:-198.51.100.11}}"
+    local relay_ip="${2:-${RELAY_IP:-}}"
     [[ -n "$name" ]] || { error "用法: sudo $0 vless <用户名> [中继IP]"; exit 1; }
+    if [[ -z "$relay_ip" ]]; then
+        relay_ip="198.51.100.10"
+        warn "未指定中继 IP，使用默认 ${relay_ip}（可用第二个参数或 RELAY_IP 环境变量覆盖）"
+    fi
 
     load_config
     [[ " ${USERS} " == *" ${name} "* ]] || { error "用户 '${name}' 不存在"; exit 1; }
