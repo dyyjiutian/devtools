@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
 # VPN 中继节点部署脚本 - 杭州 ECS (198.51.100.10)
-# 方案：iptables DNAT 透明转发，无需安装任何代理软件
-# 用法：sudo ./relay/setup.sh --exit-ip=198.51.100.30 [--exit-port=443] [--listen-port=443] [--dry-run]
+# 方案：iptables DNAT 透明转发，主链路无需任何代理软件
+#       内核优化（BBR + conntrack + route_localnet）；可选 WARP 兜底见 fallback.sh
+# 用法：sudo ./relay/setup.sh --exit-ip=198.51.100.21 [--exit-port=443] [--listen-port=443] [--dry-run]
 # =============================================================================
 
 set -euo pipefail
@@ -21,92 +22,53 @@ DRY_RUN=false
 EXIT_IP=""
 EXIT_PORT=443
 LISTEN_PORT=443
+RELAY_IP=""
+ACTION="setup"
 
 for arg in "$@"; do
     case $arg in
         --exit-ip=*)     EXIT_IP="${arg#*=}" ;;
         --exit-port=*)   EXIT_PORT="${arg#*=}" ;;
         --listen-port=*) LISTEN_PORT="${arg#*=}" ;;
+        --relay-ip=*)    RELAY_IP="${arg#*=}" ;;
         --dry-run)       DRY_RUN=true ;;
         --clean)         ACTION="clean" ;;
         --help|-h)
             echo "Usage: sudo $0 --exit-ip=<EXIT_IP> [OPTIONS]"
             echo ""
             echo "必需参数:"
-            echo "  --exit-ip=IP      新加坡出口节点 IP（例：198.51.100.30）"
+            echo "  --exit-ip=IP      出口节点 IP（例：198.51.100.21，东京）"
             echo ""
             echo "可选参数:"
             echo "  --exit-port=PORT     出口节点端口（默认 443）"
             echo "  --listen-port=PORT   中继节点监听端口（默认 443）"
+            echo "  --relay-ip=IP        中继公网 IP（默认自动探测；hairpin 规则用）"
             echo "  --dry-run            预览操作，不实际执行"
-            echo "  --clean              清除 iptables 转发规则"
+            echo "  --clean              清除 iptables 转发规则（含历史残留与 hairpin）"
             echo "  --help               显示帮助"
+            echo ""
+            echo "部署内容:"
+            echo "  - 内核优化：ip_forward + BBR + conntrack + route_localnet（兜底必需）"
+            echo "  - PREROUTING DNAT：<listen-port> → <exit-ip>:<exit-port>（先清扫同端口旧规则）"
+            echo "  - OUTPUT hairpin：本机客户端访问自身公网 IP 也走同一条转发/兜底路径"
+            echo "  - 规则持久化（重启自动恢复）；WARP 自动兜底另见 relay/fallback.sh"
             exit 0
             ;;
         *) warn "未知参数: $arg" ;;
     esac
 done
 
-ACTION="${ACTION:-setup}"
+# ── 共享库：网络判定 helper（与 fallback.sh 共用）─────────────────────────────
+RELAY_SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/net.sh
+source "${RELAY_SETUP_DIR}/../lib/net.sh"
 
-# 如果未传 --exit-ip，使用默认出口 IP
-if [[ -z "$EXIT_IP" ]]; then
-    EXIT_IP="198.51.100.30"
-    warn "未指定 --exit-ip，使用默认出口 IP: ${EXIT_IP}"
-fi
-
-# ── 前置检查 ──────────────────────────────────────────────────────────────────
-if [[ $EUID -ne 0 ]]; then
-    error "请以 root 权限运行: sudo $0"
-    exit 1
-fi
-
-run() {
-    if $DRY_RUN; then
-        info "[dry-run] $*"
-    else
-        "$@"
-    fi
-}
-
-RELAY_IP=$(curl -sf --connect-timeout 5 https://api4.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
-info "中继节点 IP : ${RELAY_IP}"
-info "出口节点    : ${EXIT_IP}:${EXIT_PORT}"
-info "监听端口    : ${LISTEN_PORT}"
-
-$DRY_RUN && warn "[dry-run] 仅预览，不执行实际操作"
-
-# ── 清除规则模式 ──────────────────────────────────────────────────────────────
-if [[ "$ACTION" == "clean" ]]; then
-    step "清除 iptables 转发规则"
-    run iptables -t nat -D PREROUTING -p tcp --dport "${LISTEN_PORT}" -j DNAT \
-        --to-destination "${EXIT_IP}:${EXIT_PORT}" 2>/dev/null || true
-    run iptables -t nat -D POSTROUTING -d "${EXIT_IP}/32" -p tcp -j MASQUERADE 2>/dev/null || true
-    run iptables -D FORWARD -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
-    run iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
-    success "iptables 转发规则已清除"
-    # 保存
-    if command -v iptables-save &>/dev/null; then
-        if [[ -d /etc/iptables ]]; then
-            run sh -c "iptables-save > /etc/iptables/rules.v4"
-        elif command -v service &>/dev/null && service iptables status &>/dev/null 2>&1; then
-            run service iptables save
-        fi
-    fi
-    exit 0
-fi
-
-# ── 启用 IP 转发 ──────────────────────────────────────────────────────────────
-step "开启内核 IP 转发"
-
-enable_ip_forward() {
-    # 立即生效
-    echo 1 > /proc/sys/net/ipv4/ip_forward
-
-    # 持久化（重启后生效）
-    SYSCTL_CONF="/etc/sysctl.d/99-vpn-relay.conf"
-    cat > "$SYSCTL_CONF" <<'SYSCTL'
-# VPN 中继节点 - IP 转发 + 网络性能优化
+# ── 可 source 测试的 helper ───────────────────────────────────────────────────
+# 中继内核参数（DNAT 转发 + BBR + conntrack + 兜底所需 route_localnet）
+write_relay_sysctl() {
+    local conf="${1:-/etc/sysctl.d/99-vpn-relay.conf}"
+    cat > "$conf" <<'SYSCTL'
+# VPN 中继节点 - IP 转发 + 网络性能优化（relay/setup.sh 管理，重跑幂等覆盖）
 
 vm.swappiness = 0
 kernel.sysrq = 1
@@ -117,6 +79,10 @@ net.ipv4.ip_forward = 1
 # 关闭 ICMP 重定向（避免路由泄漏）
 net.ipv4.conf.all.send_redirects = 0
 net.ipv4.conf.default.send_redirects = 0
+
+# 兜底子系统：DNAT 到 127.0.0.1 的备用 xray 需要 route_localnet
+net.ipv4.conf.all.route_localnet = 1
+net.ipv4.conf.default.route_localnet = 1
 
 # 邻居表 / ARP（云主机多网卡场景，见 https://help.aliyun.com/knowledge_detail/39428.html）
 net.ipv4.neigh.default.gc_stale_time = 120
@@ -138,6 +104,19 @@ net.core.wmem_default = 65536
 net.core.netdev_max_backlog = 4096
 net.core.somaxconn = 4096
 
+# conntrack：DNAT 中继是 conntrack 密集型；默认 established 超时 5 天过长，
+# 收紧超时避免死连接占满表项（nf_conntrack_max 默认 65536 偏小）
+net.netfilter.nf_conntrack_max = 262144
+net.netfilter.nf_conntrack_tcp_timeout_established = 3600
+net.netfilter.nf_conntrack_tcp_timeout_time_wait = 30
+net.netfilter.nf_conntrack_tcp_timeout_close_wait = 30
+net.netfilter.nf_conntrack_tcp_timeout_fin_wait = 30
+net.netfilter.nf_conntrack_tcp_timeout_syn_sent = 30
+net.netfilter.nf_conntrack_tcp_timeout_syn_recv = 30
+net.netfilter.nf_conntrack_udp_timeout = 60
+net.netfilter.nf_conntrack_icmp_timeout = 15
+net.netfilter.nf_conntrack_generic_timeout = 60
+
 # TCP 优化（见 https://help.aliyun.com/knowledge_detail/41334.html）
 # 注：中继节点做 iptables DNAT 纯转发，OS 层 keepalive 对转发流量无效，
 #     实际连接保活依赖出口节点/客户端；此处设置仅对中继本机直连生效
@@ -156,62 +135,168 @@ net.ipv4.tcp_wmem = 4096 65536 67108864
 net.ipv4.tcp_mtu_probing = 1
 net.ipv4.ip_local_port_range = 1024 65535
 SYSCTL
-    sysctl -p "$SYSCTL_CONF" > /dev/null
+}
 
-    CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
-    if [[ "$CC" == "bbr" ]]; then
-        success "BBR 拥塞控制已启用"
+# 测试可 source 本脚本复用 helper，避免 root / 系统副作用。
+if [[ "${RELAY_SETUP_SOURCE_ONLY:-false}" == "true" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+
+# ── 前置检查 ──────────────────────────────────────────────────────────────────
+if [[ $EUID -ne 0 ]]; then
+    error "请以 root 权限运行: sudo $0"
+    exit 1
+fi
+
+run() {
+    if $DRY_RUN; then
+        info "[dry-run] $*"
     else
-        warn "BBR 未生效（当前: ${CC}），可能需要升级内核至 4.9+"
+        "$@"
     fi
 }
 
-if $DRY_RUN; then
-    info "[dry-run] echo 1 > /proc/sys/net/ipv4/ip_forward"
-    info "[dry-run] 写入 /etc/sysctl.d/99-vpn-relay.conf（IP 转发 + BBR + TCP 优化）"
-else
-    enable_ip_forward
-    success "IP 转发及网络优化参数已应用（配置: /etc/sysctl.d/99-vpn-relay.conf）"
+# 如果未传 --exit-ip，使用默认出口 IP
+if [[ -z "$EXIT_IP" ]]; then
+    EXIT_IP="198.51.100.21"
+    warn "未指定 --exit-ip，使用默认出口 IP: ${EXIT_IP}"
+fi
+
+if [[ -z "$RELAY_IP" ]]; then
+    RELAY_IP=$(detect_public_ip)
+fi
+if [[ -z "$RELAY_IP" ]]; then
+    RELAY_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+    warn "未能探测公网 IP，回退 ${RELAY_IP}（hairpin 将跳过；可用 --relay-ip 指定）"
+fi
+info "中继节点 IP : ${RELAY_IP}"
+info "出口节点    : ${EXIT_IP}:${EXIT_PORT}"
+info "监听端口    : ${LISTEN_PORT}"
+
+$DRY_RUN && warn "[dry-run] 仅预览，不执行实际操作"
+
+# ── 清扫转发规则（历史残留 + 标记规则；保留 Docker 链）────────────────────────
+# 枚举 PREROUTING 中本端口全部 DNAT 规则（不限目标），连带清理对应目标的
+# MASQUERADE / FORWARD；再清 OUTPUT 上带 vpn-relay 标记的 hairpin 旧规则。
+sweep_relay_rules() {
+    local targets target line tip tport
+    targets="$(iptables -t nat -S PREROUTING 2>/dev/null | legacy_dnat_targets "$LISTEN_PORT" || true)"
+    for target in $targets; do
+        tip="${target%%:*}"
+        tport="${target##*:}"
+        [[ "$tport" == "$tip" ]] && tport="$EXIT_PORT"
+        iptables -t nat -D POSTROUTING -d "${tip}/32" -p tcp -j MASQUERADE 2>/dev/null || true
+        iptables -D FORWARD -d "${tip}/32" -p tcp --dport "${tport}" -j ACCEPT 2>/dev/null || true
+        iptables -D FORWARD -s "${tip}/32" -p tcp --sport "${tport}" -j ACCEPT 2>/dev/null || true
+    done
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # shellcheck disable=SC2086
+        iptables -t nat -D PREROUTING ${line#-A PREROUTING } 2>/dev/null || true
+    done < <(iptables -t nat -S PREROUTING 2>/dev/null \
+        | grep -E "^-A PREROUTING .*--dport ${LISTEN_PORT} .*-j DNAT" || true)
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # shellcheck disable=SC2086
+        iptables -t nat -D OUTPUT ${line#-A OUTPUT } 2>/dev/null || true
+    done < <(iptables -t nat -S OUTPUT 2>/dev/null | grep -- '--comment vpn-relay' || true)
+    # 当前出口方向的 FORWARD 放行规则（可能由旧版本脚本写入，无标记）
+    iptables -D FORWARD -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+}
+
+# ── 清除规则模式 ──────────────────────────────────────────────────────────────
+if [[ "$ACTION" == "clean" ]]; then
+    step "清除 iptables 转发规则（含历史残留与 hairpin）"
+    if $DRY_RUN; then
+        info "[dry-run] 清扫 PREROUTING/OUTPUT/POSTROUTING/FORWARD 中本脚本管理的规则"
+    else
+        sweep_relay_rules
+    fi
+    success "iptables 转发规则已清除"
+fi
+
+# ── 启用 IP 转发 + 内核优化 ───────────────────────────────────────────────────
+if [[ "$ACTION" != "clean" ]]; then
+    step "开启内核 IP 转发 + 网络优化（BBR / conntrack / route_localnet）"
+    if $DRY_RUN; then
+        info "[dry-run] echo 1 > /proc/sys/net/ipv4/ip_forward"
+        info "[dry-run] 写入 /etc/sysctl.d/99-vpn-relay.conf（IP 转发 + BBR + conntrack + route_localnet）"
+    else
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+        modprobe nf_conntrack 2>/dev/null || true
+        write_relay_sysctl /etc/sysctl.d/99-vpn-relay.conf
+        sysctl -p /etc/sysctl.d/99-vpn-relay.conf > /dev/null \
+            || warn "部分内核参数未能立即生效（容器内常见）"
+        # conntrack 哈希表（运行时 + 持久化），与 nf_conntrack_max 匹配（max/4）
+        if [[ -w /sys/module/nf_conntrack/parameters/hashsize ]]; then
+            echo 65536 > /sys/module/nf_conntrack/parameters/hashsize 2>/dev/null || true
+        fi
+        mkdir -p /etc/modprobe.d
+        printf 'options nf_conntrack hashsize=65536\n' > /etc/modprobe.d/vpn-relay-conntrack.conf
+        CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
+        if [[ "$CC" == "bbr" ]]; then
+            success "BBR 拥塞控制已启用"
+        else
+            warn "BBR 未生效（当前: ${CC}），可能需要升级内核至 4.9+"
+        fi
+        success "IP 转发及网络优化参数已应用（配置: /etc/sysctl.d/99-vpn-relay.conf）"
+    fi
 fi
 
 # ── 配置 iptables 转发规则 ────────────────────────────────────────────────────
-step "配置 iptables DNAT 转发规则"
+if [[ "$ACTION" != "clean" ]]; then
+    step "配置 iptables DNAT 转发规则"
+    if $DRY_RUN; then
+        info "[dry-run] 清扫同端口历史 DNAT/MASQUERADE/FORWARD 规则（保留 Docker 链）"
+        info "[dry-run] iptables -t nat -A PREROUTING -p tcp --dport ${LISTEN_PORT} -m comment --comment vpn-relay -j DNAT --to-destination ${EXIT_IP}:${EXIT_PORT}"
+        info "[dry-run] iptables -t nat -A POSTROUTING -d ${EXIT_IP}/32 -p tcp -j MASQUERADE"
+        info "[dry-run] iptables -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --dport/--sport ${EXIT_PORT} -j ACCEPT"
+        if is_public_ip "$RELAY_IP"; then
+            info "[dry-run] iptables -t nat -A OUTPUT -d ${RELAY_IP}/32 -p tcp --dport ${LISTEN_PORT} -m comment --comment vpn-relay -j DNAT --to-destination ${EXIT_IP}:${EXIT_PORT}（本机 hairpin）"
+        fi
+    else
+        # 先清扫历史残留与旧规则（幂等；避免新旧 DNAT 并存时旧规则优先命中）
+        sweep_relay_rules
 
-# 先清除可能已存在的旧规则（幂等）
-iptables -t nat -D PREROUTING -p tcp --dport "${LISTEN_PORT}" -j DNAT \
-    --to-destination "${EXIT_IP}:${EXIT_PORT}" 2>/dev/null || true
-iptables -t nat -D POSTROUTING -d "${EXIT_IP}/32" -p tcp -j MASQUERADE 2>/dev/null || true
-iptables -D FORWARD -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
-iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+        # PREROUTING: 将到达中继 listen_port 的 TCP 流量 DNAT 至出口节点
+        iptables -t nat -A PREROUTING \
+            -p tcp --dport "${LISTEN_PORT}" \
+            -m comment --comment vpn-relay \
+            -j DNAT --to-destination "${EXIT_IP}:${EXIT_PORT}"
 
-# PREROUTING: 将到达中继 listen_port 的 TCP 流量 DNAT 至出口节点
-run iptables -t nat -A PREROUTING \
-    -p tcp --dport "${LISTEN_PORT}" \
-    -j DNAT --to-destination "${EXIT_IP}:${EXIT_PORT}"
+        # POSTROUTING: 对转发至出口节点的流量做 MASQUERADE（使出口节点看到中继 IP）
+        iptables -t nat -A POSTROUTING \
+            -d "${EXIT_IP}/32" -p tcp \
+            -j MASQUERADE
 
-# POSTROUTING: 对转发至出口节点的流量做 MASQUERADE（使出口节点看到中继 IP）
-run iptables -t nat -A POSTROUTING \
-    -d "${EXIT_IP}/32" -p tcp \
-    -j MASQUERADE
+        # FORWARD: 允许转发链路两个方向的流量
+        iptables -A FORWARD \
+            -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" \
+            -j ACCEPT
+        iptables -A FORWARD \
+            -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" \
+            -j ACCEPT
 
-# FORWARD: 允许转发链路两个方向的流量
-run iptables -A FORWARD \
-    -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" \
-    -j ACCEPT
+        # OUTPUT hairpin: 本机客户端访问自身公网 IP:listen_port 也走同一条 DNAT，
+        # 与外部终端共用兜底切换路径（仅公网 IP 有意义；私网/容器环境跳过）
+        if is_public_ip "$RELAY_IP"; then
+            iptables -t nat -A OUTPUT \
+                -d "${RELAY_IP}/32" -p tcp --dport "${LISTEN_PORT}" \
+                -m comment --comment vpn-relay \
+                -j DNAT --to-destination "${EXIT_IP}:${EXIT_PORT}"
+            success "本机 hairpin 规则已设置（${RELAY_IP}:${LISTEN_PORT} → 出口）"
+        else
+            warn "RELAY_IP=${RELAY_IP} 非公网 IP，跳过本机 hairpin 规则"
+        fi
+        success "iptables 转发规则已设置"
 
-run iptables -A FORWARD \
-    -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" \
-    -j ACCEPT
-
-success "iptables 转发规则已设置"
-
-# 显示生效规则
-if ! $DRY_RUN; then
-    echo ""
-    info "当前 NAT 表规则（PREROUTING）:"
-    iptables -t nat -L PREROUTING -n -v --line-numbers | grep -E "DNAT|Chain" || true
-    info "当前 NAT 表规则（POSTROUTING）:"
-    iptables -t nat -L POSTROUTING -n -v --line-numbers | grep -E "MASQ|Chain" || true
+        echo ""
+        info "当前 NAT 表规则（PREROUTING）:"
+        iptables -t nat -L PREROUTING -n -v --line-numbers | grep -E "DNAT|Chain" || true
+        info "当前 NAT 表规则（POSTROUTING）:"
+        iptables -t nat -L POSTROUTING -n -v --line-numbers | grep -E "MASQ|Chain" || true
+    fi
 fi
 
 # ── 持久化 iptables 规则 ──────────────────────────────────────────────────────
@@ -283,27 +368,28 @@ else
 fi
 
 # ── 配置防火墙放行入站端口 ────────────────────────────────────────────────────
-step "开放入站端口 ${LISTEN_PORT}/tcp"
+if [[ "$ACTION" != "clean" ]]; then
+    step "开放入站端口 ${LISTEN_PORT}/tcp"
 
-open_firewall() {
-    if command -v firewall-cmd &>/dev/null && systemctl is-active --quiet firewalld; then
-        run firewall-cmd --permanent --add-port="${LISTEN_PORT}/tcp"
-        run firewall-cmd --reload
-        success "firewalld: 已开放 ${LISTEN_PORT}/tcp"
-    elif command -v ufw &>/dev/null; then
-        run ufw allow "${LISTEN_PORT}/tcp"
-        success "ufw: 已开放 ${LISTEN_PORT}/tcp"
-    else
-        warn "请在阿里云控制台「安全组」手动放行 ${LISTEN_PORT}/tcp 入方向"
-    fi
-}
+    open_firewall() {
+        if command -v firewall-cmd &>/dev/null && systemctl is-active --quiet firewalld; then
+            run firewall-cmd --permanent --add-port="${LISTEN_PORT}/tcp"
+            run firewall-cmd --reload
+            success "firewalld: 已开放 ${LISTEN_PORT}/tcp"
+        elif command -v ufw &>/dev/null; then
+            run ufw allow "${LISTEN_PORT}/tcp"
+            success "ufw: 已开放 ${LISTEN_PORT}/tcp"
+        else
+            warn "请在阿里云控制台「安全组」手动放行 ${LISTEN_PORT}/tcp 入方向"
+        fi
+    }
 
-open_firewall
+    open_firewall
+fi
 
 # ── 验证转发是否生效 ──────────────────────────────────────────────────────────
-step "验证 IP 转发状态"
-
-if ! $DRY_RUN; then
+if [[ "$ACTION" != "clean" ]] && ! $DRY_RUN; then
+    step "验证 IP 转发状态"
     IP_FWD=$(cat /proc/sys/net/ipv4/ip_forward)
     if [[ "$IP_FWD" == "1" ]]; then
         success "IP 转发已开启 (/proc/sys/net/ipv4/ip_forward = 1)"
@@ -314,6 +400,11 @@ if ! $DRY_RUN; then
 fi
 
 # ── 打印部署摘要 ──────────────────────────────────────────────────────────────
+if [[ "$ACTION" == "clean" ]]; then
+    echo -e "${GREEN}${BOLD}中继转发规则已清除！${RESET}"
+    exit 0
+fi
+
 step "部署完成！"
 
 cat <<EOF
@@ -325,6 +416,7 @@ ${BOLD}━━━ 中继节点信息 ━━━${RESET}
 
 ${BOLD}━━━ 转发路径 ━━━${RESET}
   客户端 → ${RELAY_IP}:${LISTEN_PORT} → ${EXIT_IP}:${EXIT_PORT} → 目标站点
+  本机客户端 → ${RELAY_IP}:${LISTEN_PORT}（OUTPUT hairpin）→ 同上
 
 ${BOLD}━━━ 阿里云控制台安全组配置 ━━━${RESET}
   入方向规则：TCP ${LISTEN_PORT} 来源 0.0.0.0/0（或限制为客户端 IP）
@@ -335,6 +427,7 @@ ${BOLD}━━━ 常用管理命令 ━━━${RESET}
   查看转发规则   : iptables -L FORWARD -n -v
   清除转发规则   : sudo $0 --exit-ip=${EXIT_IP} --listen-port=${LISTEN_PORT} --clean
   检查 IP 转发   : cat /proc/sys/net/ipv4/ip_forward
+  WARP 自动兜底  : sudo ./fallback.sh --help（健康检查 + 被封自动切换）
 
 EOF
 
