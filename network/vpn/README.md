@@ -660,8 +660,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 国际数据中心段（8.209.x / 8.216.x），换同段 EIP 不解除。ping 110ms 正常是因为
 ICMP 小包不在整形范围。端侧优化（BBR/MSS/窗口）无法突破策略性限速。
 
-**后续选项**：换非同段/非阿里云的出口（如 HK 或其他厂商 Tokyo）验证；或 GA 持牌通道
-结构性解决。24h 探针（`vpn-path-probe.timer`，日志 `/var/log/vpn-path-probe.log`）
+**补充实测（同日 17:1x，WARP 对照）**：经 WARP 兜底下载同一 CF URL 仅 260KB/s
+（≈固定 IP 隧道的 2Mbps 顶），google 仍被重置、部分境外源不可达；而中继**直连**
+CF anycast（172.66.0.218，TCP 握手 235ms 确为跨境）有 2.6MB/s。说明整形按
+「目标信誉/流量画像」区别对待：大 CDN anycast 放行，数据中心 IP 长连接与已知
+VPN 端点（WARP）被钳。**WARP 并不比固定 IP 快，仍只是救生艇。**
+
+**后续选项**：优质跨境线路（CN2 GIA 类 HK/Tokyo VPS）或 GA 持牌通道结构性解决；
+同段换 EIP 已证伪。24h 探针（`vpn-path-probe.timer`，日志 `/var/log/vpn-path-probe.log`）
 继续观察限速是否分时段波动。
 
 **切换操作记录**：换 EIP 窗口期出口失联，兜底健康检查 16:46 自动切 WARP（设计生效）；
