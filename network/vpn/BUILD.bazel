@@ -9,6 +9,7 @@ filegroup(
         "//network/vpn/client:bin/xray-tun-route",
         "//network/vpn/exit:setup.sh",
         "//network/vpn/exit:manage.sh",
+        "//network/vpn/lib:warp.sh",
     ],
 )
 

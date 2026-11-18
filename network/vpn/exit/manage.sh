@@ -46,6 +46,8 @@ write_config() {
         echo "SHORT_ID=\"${SHORT_ID}\""
         echo "LISTEN_PORT=${LISTEN_PORT}"
         echo "REALITY_SNI=\"${REALITY_SNI}\""
+        echo "REALITY_SNIS=\"${REALITY_SNIS:-${REALITY_SNI}}\""
+        echo "ALLOW_IPS=\"${ALLOW_IPS:-}\""
         echo "USERS=\"${USERS}\""
         for u in $USERS; do
             local uuid_var="USER_${u}_UUID"

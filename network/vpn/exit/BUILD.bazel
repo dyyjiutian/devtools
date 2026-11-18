@@ -5,7 +5,10 @@ package(default_visibility = ["//visibility:public"])
 sh_test(
     name = "setup_test",
     srcs = ["setup_test.sh"],
-    data = ["setup.sh"],
+    data = [
+        "setup.sh",
+        "//network/vpn/lib:warp.sh",
+    ],
     size = "small",
     tags = [
         "local",

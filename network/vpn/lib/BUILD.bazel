@@ -1,0 +1,16 @@
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "warp.sh",
+    "net.sh",
+])
+
+filegroup(
+    name = "warp",
+    srcs = ["warp.sh"],
+)
+
+filegroup(
+    name = "net",
+    srcs = ["net.sh"],
+)
