@@ -683,6 +683,22 @@ sudo ./relay/fallback.sh install --exit-ip=198.51.100.21 --exit-ssh=dev.user@198
 curl -x socks5h://127.0.0.1:10808 https://api4.ipify.org   # → 198.51.100.21
 ```
 
+### 2026-11-18 — setproxy test 测速超时误报「下载失败 (HTTP 000)」
+
+**表象**：`setproxy test --size 10` 连通性全 200，但海外 CF 10MB 测速显示
+`下载失败 (HTTP 000)`，看起来像隧道断了；实际链路活着，只是跨境段被限速
+（~150-200KB/s，10MB 需 50-70s，超过测速 30s 上限）。
+
+**根因**：`speed_test` 用 `stats=$(curl ...) || stats="000 0 0 0"`——curl 超时
+（exit 28）时**仍会输出已下载部分的 `%{size_download}/%{speed_download}` 统计**，
+但 `||` 分支把这些真实数据丢弃，统一误报成 HTTP 000 连接失败。
+
+**解法**：单独捕获退出码（`|| rc=$?`），保留 curl 的部分统计；
+`rc=0` 且 2xx → 绿色完整速率；2xx 但中途断开且有数据 → 黄色
+「xxx KB/s（部分下载 N bytes/Ts 后中断，链路降级）」；零字节才报红色失败。
+三处同步修复：`client/bin/setproxy`、`client/linux_setup.sh`、`client/bin/speed_test`。
+回归：`setproxy_test.sh [6b/10]`、`linux_setup_test.sh [9b/9]`（假 curl 模拟 exit 28/7/0）。
+
 ### 2026-08-17 — Compose E2E 里 exit/setup.sh 因 hostname 退出 127
 
 **表象**：特权 systemd 容器已起来，`pair_server.sh` 在「检测系统环境」以 127 退出。
