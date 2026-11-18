@@ -107,26 +107,26 @@ install_pyenv() {
 }
 
 configure_pyenv_shell() {
-  local rc_file=""
+  local rc_file marker='# pyenv init (added by devtools/languages/python/setup.sh)'
 
-  if [[ -n "${ZSH_VERSION:-}" ]] || [[ -f "$HOME/.zshrc" ]]; then
-    rc_file="$HOME/.zshrc"
-  elif [[ -f "$HOME/.bashrc" ]]; then
-    rc_file="$HOME/.bashrc"
-  elif [[ -f "$HOME/.bash_profile" ]]; then
-    rc_file="$HOME/.bash_profile"
-  else
-    rc_file="$HOME/.bashrc"
-  fi
-
-  local marker='# pyenv init (added by devtools/languages/python/setup.sh)'
-  if grep -qF "$marker" "$rc_file" 2>/dev/null; then
-    info "pyenv 初始化已在 $rc_file 中，跳过"
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    info "[dry-run] 将 pyenv 初始化写入 ~/.bashrc 与 ~/.zshrc（按存在情况）"
     return 0
   fi
 
-  info "将 pyenv 初始化写入 $rc_file..."
-  cat >> "$rc_file" <<'RCBLOCK'
+  # Write to every existing shell rc, not just one picked by precedence:
+  # a leftover ~/.zshrc on a bash-only host must not divert pyenv init away
+  # from the shell the user actually runs. Same pattern as the go/java modules.
+  touch "$HOME/.bashrc"
+  for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [[ -f "$rc_file" ]] || continue
+    if grep -qF "$marker" "$rc_file" 2>/dev/null; then
+      info "pyenv 初始化已在 $rc_file 中，跳过"
+      continue
+    fi
+
+    info "将 pyenv 初始化写入 $rc_file..."
+    cat >> "$rc_file" <<'RCBLOCK'
 
 # pyenv init (added by devtools/languages/python/setup.sh)
 export PYENV_ROOT="$HOME/.pyenv"
@@ -136,7 +136,8 @@ if command -v pyenv &>/dev/null; then
 fi
 RCBLOCK
 
-  success "pyenv 初始化已写入 $rc_file"
+    success "pyenv 初始化已写入 $rc_file"
+  done
 }
 
 install_python() {
@@ -326,4 +327,6 @@ main() {
   echo -e "\n${GREEN}${BOLD}✓ Python 环境安装完成！${NC}\n"
 }
 
-main "$@"
+if [[ "${SETUP_NO_MAIN:-false}" != "true" && "${SETUP_NO_MAIN:-false}" != "1" ]]; then
+  main "$@"
+fi
