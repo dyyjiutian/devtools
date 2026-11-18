@@ -111,6 +111,10 @@ echo "$help_out" | grep -q 'conntrack' || fail "help should mention conntrack tu
 echo "$help_out" | grep -q 'hairpin' || fail "help should mention local hairpin path"
 grep -q -- '--comment vpn-relay' "$RELAY_SETUP" \
     || fail "managed rules must carry the vpn-relay marker"
+grep -q -- 'TCPMSS --set-mss 1380' "$RELAY_SETUP" \
+    || fail "relay must clamp forwarded TCP MSS (cross-border PMTUD blackhole)"
+grep -q -- '-t mangle -D FORWARD' "$RELAY_SETUP" \
+    || fail "sweep must clean marked mangle FORWARD rules"
 
 echo "[6/6] detect_public_ip prefers metadata and never returns private/docker IPs"
 fake_bin="${TMP_DIR}/fake-bin"

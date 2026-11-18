@@ -217,6 +217,12 @@ sweep_relay_rules() {
     # 当前出口方向的 FORWARD 放行规则（可能由旧版本脚本写入，无标记）
     iptables -D FORWARD -d "${EXIT_IP}/32" -p tcp --dport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
     iptables -D FORWARD -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" -j ACCEPT 2>/dev/null || true
+    # mangle 表 TCPMSS 钳制规则（带标记）
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # shellcheck disable=SC2086
+        iptables -t mangle -D FORWARD ${line#-A FORWARD } 2>/dev/null || true
+    done < <(iptables -t mangle -S FORWARD 2>/dev/null | grep -- '--comment vpn-relay' || true)
 }
 
 # ── NIC 调优：fq qdisc + 单队列 RPS（高并发 pps 关键）─────────────────────────
@@ -334,6 +340,7 @@ if [[ "$ACTION" != "clean" ]]; then
         info "[dry-run] iptables -t nat -A PREROUTING -p tcp --dport ${LISTEN_PORT} -m comment --comment vpn-relay -j DNAT --to-destination ${EXIT_IP}:${EXIT_PORT}"
         info "[dry-run] iptables -t nat -A POSTROUTING -d ${EXIT_IP}/32 -p tcp -j MASQUERADE"
         info "[dry-run] iptables -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --dport/--sport ${EXIT_PORT} -j ACCEPT"
+        info "[dry-run] iptables -t mangle -A FORWARD -d/-s ${EXIT_IP}/32 -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --set-mss 1380（跨境 PMTUD 黑洞防护）"
         if is_public_ip "$RELAY_IP"; then
             info "[dry-run] iptables -t nat -A OUTPUT -d ${RELAY_IP}/32 -p tcp --dport ${LISTEN_PORT} -m comment --comment vpn-relay -j DNAT --to-destination ${EXIT_IP}:${EXIT_PORT}（本机 hairpin）"
         fi
@@ -359,6 +366,14 @@ if [[ "$ACTION" != "clean" ]]; then
         iptables -A FORWARD \
             -s "${EXIT_IP}/32" -p tcp --sport "${EXIT_PORT}" \
             -j ACCEPT
+
+        # TCPMSS 钳制：跨境段常见 PMTUD 黑洞（路径 MTU < 1500 且 ICMP frag-needed
+        # 被丢），1460 的大包静默丢弃导致吞吐崩塌（小请求正常、下载极慢）。
+        # 把转发 TCP 的 MSS 钳到 1380（IP 包 ≤1420），所有客户端一次生效。
+        iptables -t mangle -A FORWARD -d "${EXIT_IP}/32" -p tcp --tcp-flags SYN,RST SYN \
+            -m comment --comment vpn-relay -j TCPMSS --set-mss 1380
+        iptables -t mangle -A FORWARD -s "${EXIT_IP}/32" -p tcp --tcp-flags SYN,RST SYN \
+            -m comment --comment vpn-relay -j TCPMSS --set-mss 1380
 
         # OUTPUT hairpin: 本机客户端访问自身公网 IP:listen_port 也走同一条 DNAT，
         # 与外部终端共用兜底切换路径（仅公网 IP 有意义；私网/容器环境跳过）
