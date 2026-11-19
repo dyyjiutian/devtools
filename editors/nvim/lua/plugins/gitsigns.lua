@@ -4,6 +4,10 @@
 
 return {
   "lewis6991/gitsigns.nvim",
+  -- v2.0.0 targets Nvim 0.11 (drops 0.9.5); this repo pins Nvim 0.10.4, so
+  -- stay on the last 0.10-compatible release. Unpinned HEAD pulls v2 and
+  -- fails config validation with "opt: expected table, got string".
+  version = "v1.0.2",
   opts = {
     signs = {
       add = { text = "+" },

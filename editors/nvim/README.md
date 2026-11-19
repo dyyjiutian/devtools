@@ -368,6 +368,14 @@ Install a [Nerd Font](https://www.nerdfonts.com/) and set it as your terminal fo
 
 ## Issues
 
+### 2026-11-19 — gitsigns 未锁版本，Linux nvim E2E 因 v2 不兼容 Nvim 0.10 失败
+
+**表象**：`nvim_ops_linux_{ubuntu,alinux3,alinux4}_e2e_test` Exit 4，stderr 刷 `gitsigns/config.lua: opt: expected table, got string`，`Git blame` 打不开 fugitive blame 缓冲（suite `cquit 4`）。macOS 同套件通过。
+
+**根因**：`lua/plugins/gitsigns.lua` 没有 `version`，lazy.nvim 拉默认分支 HEAD（v2.x）。gitsigns v2.0.0 起「target Nvim 0.11, drop testing for 0.9.5」，本仓库固定 Nvim 0.10.4，v2 的 `vim.validate` 新签名在 0.10 上报 `expected table, got string`，`BufReadPost` attach 回调出错并打断 `Git blame`。
+
+**解法**：给 gitsigns 加 `version = "v1.0.2"`（最后一个兼容 0.10 的稳定版，含配置用到的 `nav_hunk` 等 API），与 `lsp.lua`/`surround.lua` 的锁版本风格一致。
+
 ### 2026-08-17 — ALinux 4 nvim E2E 因 `dnf` 没有 ripgrep 包而失败
 
 **表象**：`nvim_ops_linux_alinux4_e2e_test` 报 `No match for argument: ripgrep`，随后 `FAIL: ripgrep (rg) not on PATH after setup`。同 job 的 Ubuntu / ALinux 3 通过（各自仓库有 `ripgrep` 包）。
