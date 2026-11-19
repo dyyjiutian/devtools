@@ -131,6 +131,19 @@ fi
 if [[ -n "${RUSTUP_HOME:-}" && -d "$RUSTUP_HOME" && "$RUSTUP_HOME" != "$HOME/.rustup" ]]; then
   ln -sfn "$RUSTUP_HOME" "$HOME/.rustup"
 fi
+# Some runner images (GitHub macos-26) ship rustup with RUSTUP_HOME but no
+# $HOST_HOME/.cargo, so CARGO_HOME stays unset and the cargo shim dir never
+# lands on PATH. Ask rustup for the real toolchain bin and expose it as the
+# isolated cargo home so rustc/cargo resolve after setup.sh's "rustup already
+# installed" path (which only updates the machine toolchain).
+if [[ -z "${CARGO_HOME:-}" && ! -e "$HOME/.cargo" ]] && command -v rustup >/dev/null 2>&1; then
+  rustc_bin="$(rustup which rustc 2>/dev/null || true)"
+  if [[ -n "$rustc_bin" && -x "$rustc_bin" ]]; then
+    mkdir -p "$HOME/.cargo"
+    ln -sfn "$(dirname "$rustc_bin")" "$HOME/.cargo/bin"
+    export CARGO_HOME="$HOME/.cargo"
+  fi
+fi
 
 path_prefix="$HOME/.local/bin:$HOME/.cargo/bin"
 if [[ -n "${CARGO_HOME:-}" ]]; then
