@@ -41,7 +41,7 @@ assert_contains "$host" "cleanup_tmp_home" "host runner ignores overlayfs rm fai
 assert_contains "$host" "HOMEBREW_NO_BOOTSNAP" "host runner disables Homebrew bootsnap under isolated HOME"
 assert_contains "$host" 'HOST_HOME}/.cargo/bin' "host runner keeps the runner cargo bin on PATH"
 assert_contains "$host" 'CARGO_HOME="${HOST_HOME}/.cargo"' "host runner reuses the machine CARGO_HOME"
-assert_contains "$host" "rustup which rustc" "host runner resolves the toolchain bin when the machine cargo home is absent"
+assert_contains "$host" "rustup which --toolchain stable rustc" "host runner resolves the toolchain bin when the machine cargo home is absent"
 assert_contains "$host" "NVIM_SETUP_STRICT" "host runner enables strict nvim plugin install"
 assert_contains "$host" "NVIM_SETUP_QUIET" "host runner suppresses nvim headless progress logs"
 assert_contains "$host" "NVIM_SETUP_SKIP_TREESITTER" "host runner skips treesitter parser compile"

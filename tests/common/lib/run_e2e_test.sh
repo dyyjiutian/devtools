@@ -135,12 +135,21 @@ fi
 # $HOST_HOME/.cargo, so CARGO_HOME stays unset and the cargo shim dir never
 # lands on PATH. Ask rustup for the real toolchain bin and expose it as the
 # isolated cargo home so rustc/cargo resolve after setup.sh's "rustup already
-# installed" path (which only updates the machine toolchain).
-if [[ -z "${CARGO_HOME:-}" && ! -e "$HOME/.cargo" ]] && command -v rustup >/dev/null 2>&1; then
-  rustc_bin="$(rustup which rustc 2>/dev/null || true)"
+# installed" path (which only updates the machine toolchain). Include the
+# Homebrew dirs in the lookup: bazel sanitizes the test PATH and this runs
+# before the PATH export below. Link individual tools (not the whole bin dir)
+# so a later `rustup update` writing shims into CARGO_HOME/bin cannot overwrite
+# the real toolchain binaries.
+if [[ -z "${CARGO_HOME:-}" && ! -e "$HOME/.cargo" ]]; then
+  rustc_bin="$(PATH="${PATH:-}:/opt/homebrew/bin:/usr/local/bin:${HOST_HOME}/.local/bin" \
+    rustup which --toolchain stable rustc 2>/dev/null || true)"
   if [[ -n "$rustc_bin" && -x "$rustc_bin" ]]; then
-    mkdir -p "$HOME/.cargo"
-    ln -sfn "$(dirname "$rustc_bin")" "$HOME/.cargo/bin"
+    toolchain_bin="$(dirname "$rustc_bin")"
+    mkdir -p "$HOME/.cargo/bin"
+    ln -sfn "$rustc_bin" "$HOME/.cargo/bin/rustc"
+    if [[ -x "${toolchain_bin}/cargo" ]]; then
+      ln -sfn "${toolchain_bin}/cargo" "$HOME/.cargo/bin/cargo"
+    fi
     export CARGO_HOME="$HOME/.cargo"
   fi
 fi

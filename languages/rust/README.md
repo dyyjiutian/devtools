@@ -15,7 +15,7 @@ bash languages/rust/setup.sh --dry-run
 
 **根因**：2026-08-17 的修复假设宿主 cargo home 在 `$HOST_HOME/.cargo`。GitHub macos-26 镜像只预装 `RUSTUP_HOME`（`/Users/runner/.rustup`），没有 `/Users/runner/.cargo`，于是 `run_e2e_test.sh` 的 `CARGO_HOME` 复用分支不触发，隔离 HOME 里没有 `.cargo/bin`，真正的工具链 bin 也没进 PATH。
 
-**解法**：`run_e2e_test.sh` 在 `CARGO_HOME` 仍为空且隔离 HOME 无 `.cargo` 时，用 `rustup which rustc` 解析真实工具链 bin，把它链成 `$HOME/.cargo/bin` 并设 `CARGO_HOME=$HOME/.cargo`。`e2e_runner_suite.sh` 增加对应契约断言。
+**解法**：`run_e2e_test.sh` 在 `CARGO_HOME` 仍为空且隔离 HOME 无 `.cargo` 时，用 `rustup which --toolchain stable rustc` 解析真实工具链 bin，把 rustc/cargo 逐个链进 `$HOME/.cargo/bin` 并设 `CARGO_HOME=$HOME/.cargo`。查找 PATH 需带上 Homebrew 目录（bazel 会净化测试 PATH，rustup 在 `/opt/homebrew/bin`）；只链单个工具而非整个 bin 目录，避免后续 `rustup update` 往 `CARGO_HOME/bin` 写 shim 时覆盖真实工具链二进制。`e2e_runner_suite.sh` 增加对应契约断言。
 
 ### 2026-08-17 — macOS E2E 找不到 rustc
 
