@@ -157,9 +157,12 @@ compose_project_name() {
 }
 
 wait_systemd() {
-  local service="$1" i state
-  i=0
-  while [[ $i -lt 180 ]]; do
+  local service="$1" state deadline
+  # alinux3's older systemd boots slowly under parallel CI load (docker builds
+  # + dnf on --jobs=2). The pair tests are size=enormous (3600s), so give the
+  # boot a realistic budget; the old ~240s window timed out under load.
+  deadline=$((SECONDS + 600))
+  while [[ $SECONDS -lt $deadline ]]; do
     state="$(docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T "$service" \
       systemctl is-system-running 2>/dev/null || true)"
     case "$state" in
@@ -168,10 +171,15 @@ wait_systemd() {
         return 0
         ;;
     esac
-    i=$((i + 1))
-    sleep 1
+    sleep 2
   done
   echo "run_compose_e2e.sh: systemd not ready in $service (state=${state:-unknown})" >&2
+  # systemd writes to the journal, so console logs are empty; dump the queued
+  # jobs and failed units to expose whatever is blocking the boot.
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T "$service" \
+    systemctl list-jobs --no-pager >&2 || true
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T "$service" \
+    systemctl --failed --no-pager >&2 || true
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" logs "$service" >&2 || true
   return 1
 }

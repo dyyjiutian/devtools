@@ -535,6 +535,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## Issues
 
+### 2026-11-20 — alinux3 VPN pair 仍等不到 systemd（180s 窗口在高负载下不够）
+
+**表象**：`vpn_pair_linux_alinux3_e2e_test` 报 `systemd not ready in server (state=starting)`，FAILED in ~237s；同 job 的 proxy/alinux4/ubuntu pair 与 nvim/vim 都过。失败后 dump 的 `docker compose logs` 是空的。
+
+**根因**：延续 2026-08-17 的已知问题——alinux3 较老的 systemd 在 `--jobs=2` 并行 docker build/dnf 负载下启动慢，180 次循环（实际 ~237s）窗口仍不够。pair 测试本身是 `size=enormous`（3600s），等待窗口却远小于预算。且 systemd 日志进 journal 不进 console，失败时 dump console 日志拿不到任何诊断。
+
+**解法**：`wait_systemd` 改为基于 `SECONDS` 的 600s 预算（仍远小于 3600s），轮询间隔 2s；失败时改 dump `systemctl list-jobs` / `systemctl --failed`（定位阻塞 unit），console 日志仅作补充。`compose_runner_suite.sh` 同步契约断言。
+
 ### 2026-08-17 — Compose E2E 里 exit/setup.sh 因 hostname 退出 127
 
 **表象**：特权 systemd 容器已起来，`pair_server.sh` 在「检测系统环境」以 127 退出。
