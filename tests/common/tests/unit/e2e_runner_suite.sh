@@ -60,6 +60,8 @@ assert_contains "$alinux3" \
 assert_contains "$alinux3" "mirrors.aliyun.com" "ALinux 3 E2E rewrites cloud-internal repos"
 
 assert_contains "$alinux3" "gcc-c++" "ALinux 3 E2E installs a C++ compiler for treesitter"
+assert_contains "$alinux3" "dnf-makecache.service" "ALinux 3 E2E masks dnf-makecache for offline boot"
+assert_contains "$alinux3" "serial-getty@getty.service" "ALinux 3 E2E masks the getty device wait"
 
 alinux4="$(cat "$ALINUX4")"
 assert_contains "$alinux4" \
@@ -67,5 +69,6 @@ assert_contains "$alinux4" \
   "ALinux 4 E2E uses the official image"
 assert_contains "$alinux4" "mirrors.aliyun.com" "ALinux 4 E2E rewrites cloud-internal repos"
 assert_contains "$alinux4" "gcc-c++" "ALinux 4 E2E installs a C++ compiler for treesitter"
+assert_contains "$alinux4" "dnf-makecache.service" "ALinux 4 E2E masks dnf-makecache for offline boot"
 
 echo "PASS: e2e runner contract"

@@ -3,6 +3,13 @@ FROM alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Packages are baked in below. Mask container-inappropriate boot units so
+# systemd reaches "running" deterministically instead of stalling in
+# "starting" (which fails the compose pair tests):
+#   - dnf-makecache re-downloads ~90MB of repo metadata from the slow-from-CI
+#     Aliyun mirror on every boot;
+#   - serial-getty@getty waits for a /dev/getty device that never appears in a
+#     container. Neither is needed by the pair tests (they use docker exec).
 RUN set -eux; \
     find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
       | while IFS= read -r repo; do \
@@ -18,6 +25,11 @@ RUN set -eux; \
         nodejs npm systemd dbus iproute; \
     "$PM" install -y ripgrep || true; \
     "$PM" clean all; \
+    ln -sf /dev/null /etc/systemd/system/dnf-makecache.service; \
+    ln -sf /dev/null /etc/systemd/system/dnf-makecache.timer; \
+    ln -sf /dev/null /etc/systemd/system/serial-getty@getty.service; \
+    ln -sf /dev/null /etc/systemd/system/getty@tty1.service; \
+    ln -sf /dev/null /etc/systemd/system/getty.target; \
     printf 'ALL ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/e2e; \
     chmod 0440 /etc/sudoers.d/e2e
 

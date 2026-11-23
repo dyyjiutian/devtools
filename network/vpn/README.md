@@ -535,6 +535,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## Issues
 
+### 2026-11-23 — 定位真因：dnf-makecache 与 getty 卡住 alinux3 容器启动
+
+**表象**：6 个 compose pair（server 均为 alinux3）全报 `systemd not ready in server (state=starting)`，加到 600s 仍卡死；`systemctl list-jobs` 诊断显示唯一 running job 是 `dnf-makecache.service`。IT 的 alinux3 L2 测试也在构建期 900s 超时。
+
+**根因**：alinux3 的 dnf 默认启用 plus(~44MB)/updates(~41MB) 等重型仓库，从美国 runner 访问 Aliyun 镜像只有 ~50–130 kB/s。① 启动期 `dnf-makecache.service` 联网刷 ~90MB 元数据，把 systemd 卡在 `starting`；② 构建期 `dnf install` 同样先下 ~90MB 元数据（L2 只装 git/tar/gzip 三个基础包也要下全量），慢镜像下超时。本地复现还发现 `serial-getty@getty.service` 等待容器里不存在的 `/dev/getty` 设备，是另一类启动陷阱。
+
+**解法**：① `Dockerfile.e2e.alinux3/alinux4` 用 `ln -sf /dev/null` mask `dnf-makecache.service/.timer`（alinux4 含 dnf5 名）与 `serial-getty@getty.service`/`getty@tty1.service`/`getty.target`——测试容器用 docker exec，不需要这些。本地验证 mask 后 systemd 4s 到 `running`。② `Dockerfile.alinux3`（L2）装 git/tar/gzip 时 `--disablerepo='*plus*'/'*powertools*'/'*updates*'/'epel'`，只用 os+module（~6MB），本地构建从 900s+ 降到 39s。契约断言同步更新。600s 等待预算保留作为兜底。
+
 ### 2026-11-20 — alinux3 VPN pair 仍等不到 systemd（180s 窗口在高负载下不够）
 
 **表象**：`vpn_pair_linux_alinux3_e2e_test` 报 `systemd not ready in server (state=starting)`，FAILED in ~237s；同 job 的 proxy/alinux4/ubuntu pair 与 nvim/vim 都过。失败后 dump 的 `docker compose logs` 是空的。

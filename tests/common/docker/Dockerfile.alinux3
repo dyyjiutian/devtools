@@ -5,6 +5,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Official ALinux images point yum/dnf at cloud-internal mirrors.
 # Rewrite them so local Docker builds can install the suite tools.
+# git/tar/gzip live in the base os repo; disable the heavy optional repos
+# (plus ~44MB, updates ~41MB, powertools, epel) so dnf does not download ~90MB
+# of metadata from the slow-from-CI Aliyun mirror just to install three base
+# packages (which timed the L2 alinux3 tests out at 900s). Repos stay enabled
+# in the image; only this build install skips them.
 RUN set -eux; \
     find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
       | while IFS= read -r repo; do \
@@ -14,7 +19,10 @@ RUN set -eux; \
             "$repo"; \
         done; \
     if command -v dnf >/dev/null 2>&1; then PM=dnf; else PM=yum; fi; \
-    "$PM" install -y git tar gzip; \
+    "$PM" install -y \
+        --disablerepo='*plus*' --disablerepo='*powertools*' \
+        --disablerepo='*updates*' --disablerepo='epel' \
+        git tar gzip; \
     "$PM" clean all
 
 WORKDIR /workspace

@@ -3,6 +3,12 @@ FROM alibaba-cloud-linux-4-registry.cn-hangzhou.cr.aliyuncs.com/alinux4/alinux4:
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Packages are baked in below. Mask container-inappropriate boot units so
+# systemd reaches "running" deterministically instead of stalling in
+# "starting": dnf-makecache (re-downloads repo metadata from the slow-from-CI
+# Aliyun mirror; cover dnf5 names too) and serial-getty/getty (wait for console
+# devices that never appear in a container). Masking a non-existent unit is a
+# harmless no-op; the pair tests use docker exec, not a getty login.
 RUN set -eux; \
     find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
       | while IFS= read -r repo; do \
@@ -18,6 +24,13 @@ RUN set -eux; \
         nodejs npm systemd dbus iproute; \
     "$PM" install -y ripgrep || true; \
     "$PM" clean all; \
+    ln -sf /dev/null /etc/systemd/system/dnf-makecache.service; \
+    ln -sf /dev/null /etc/systemd/system/dnf-makecache.timer; \
+    ln -sf /dev/null /etc/systemd/system/dnf5-makecache.service; \
+    ln -sf /dev/null /etc/systemd/system/dnf5-makecache.timer; \
+    ln -sf /dev/null /etc/systemd/system/serial-getty@getty.service; \
+    ln -sf /dev/null /etc/systemd/system/getty@tty1.service; \
+    ln -sf /dev/null /etc/systemd/system/getty.target; \
     printf 'ALL ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/e2e; \
     chmod 0440 /etc/sudoers.d/e2e
 

@@ -41,6 +41,7 @@ assert_contains "$alinux3" \
   "ALinux 3 fixture uses the official Hangzhou ACR image"
 assert_contains "$alinux3" "mirrors.aliyun.com" "ALinux 3 fixture rewrites cloud-internal repos"
 assert_contains "$alinux3" "git tar gzip" "ALinux 3 fixture installs git and archive tools"
+assert_contains "$alinux3" "--disablerepo='*plus*'" "ALinux 3 fixture skips heavy optional repos for base tools"
 assert_contains "$alinux3" "not an E2E" "ALinux 3 fixture stays an L2 portability image"
 
 alinux4="$(cat "$ALINUX4")"
