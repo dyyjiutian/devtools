@@ -541,7 +541,15 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 **根因**：alinux3 的 dnf 默认启用 plus(~44MB)/updates(~41MB) 等重型仓库，从美国 runner 访问 Aliyun 镜像只有 ~50–130 kB/s。① 启动期 `dnf-makecache.service` 联网刷 ~90MB 元数据，把 systemd 卡在 `starting`；② 构建期 `dnf install` 同样先下 ~90MB 元数据（L2 只装 git/tar/gzip 三个基础包也要下全量），慢镜像下超时。本地复现还发现 `serial-getty@getty.service` 等待容器里不存在的 `/dev/getty` 设备，是另一类启动陷阱。
 
-**解法**：① `Dockerfile.e2e.alinux3/alinux4` 用 `ln -sf /dev/null` mask `dnf-makecache.service/.timer`（alinux4 含 dnf5 名）与 `serial-getty@getty.service`/`getty@tty1.service`/`getty.target`——测试容器用 docker exec，不需要这些。本地验证 mask 后 systemd 4s 到 `running`。② `Dockerfile.alinux3`（L2）装 git/tar/gzip 时 `--disablerepo='*plus*'/'*powertools*'/'*updates*'/'epel'`，只用 os+module（~6MB），本地构建从 900s+ 降到 39s。契约断言同步更新。600s 等待预算保留作为兜底。
+**解法**：① `Dockerfile.e2e.alinux3/alinux4` 用 `ln -sf /dev/null` mask `dnf-makecache.service/.timer`（alinux4 含 dnf5 名）与 `serial-getty@getty.service`/`getty@tty1.service`/`getty.target`——测试容器用 docker exec，不需要这些。本地验证 mask 后 systemd 4s 到 `running`。② `Dockerfile.alinux3`（L2）装 git/tar/gzip 时 `--disablerepo='*plus*'/'*powertools*'/'epel'`，本地构建从 900s+ 降到 ~80s。契约断言同步更新。600s 等待预算保留作为兜底。
+
+### 2026-11-24 — L2 精简仓库误禁 updates 把 git 降级，git 测试 `init -b` 报错
+
+**表象**：`git_linux_alinux3_docker_test` 2.1s 失败，`error: unknown switch 'b'`（`git_suite.sh` 用 `git init -b main`）。
+
+**根因**：上一条精简时把 `updates` 也禁了，git 退回 os 基础仓的 2.27（`init -b` 需 ≥2.28）；新版 git 2.43 在 `updates` 仓。
+
+**解法**：L2 精简保留 `updates`，只禁 `plus/powertools/epel`。本地验证 git 2.43.7、构建 ~82s。
 
 ### 2026-11-20 — alinux3 VPN pair 仍等不到 systemd（180s 窗口在高负载下不够）
 
