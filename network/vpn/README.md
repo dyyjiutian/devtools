@@ -535,6 +535,22 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## Issues
 
+### 2026-11-24 — vpn pair e2e 全 OS 失败：Xray 在线安装撞 GitHub 403 限流
+
+**表象**：`vpn_pair_linux_{ubuntu,alinux3,alinux4}_e2e_test` 在「安装 Xray-core」步失败，`curl: (22) The requested URL returned error: 403`、`error: Failed to get release list`；多个 PR 并行跑 e2e 时必现。
+
+**根因**：`exit/setup.sh` 从 GitHub 拉官方安装脚本，脚本再调 GitHub release API 取版本列表；runner 共享 IP 的未认证 API 限额（60 次/小时）被并行 CI 任务耗尽，返回 403。
+
+**解法**：`install_xray` 优先用仓库缓存离线安装——`cache/scripts/install-release.sh install --local cache/binaries/Xray-linux-<arch>-*.zip --without-geodata`（按 `uname -m` 选 64/arm64-v8a/arm32-v7a），缓存缺失才回退在线路径。Compose e2e 把仓库挂进容器，全程零 GitHub 请求。契约断言见 `exit/setup_test.sh [8/8]`。
+
+### 2026-11-24 — nvim/vim alinux3 e2e 900s 超时：plus 仓 45MB 元数据拖垮 dnf
+
+**表象**：`nvim_ops_linux_alinux3_e2e_test`、`vim_ops_linux_alinux3_e2e_test` TIMEOUT in 900s；同期 ubuntu/alinux4 通过。vim 日志里运行时 dnf 光 `alinux3-plus` 元数据就 45MB@142kB/s≈5m23s；nvim 还要先自建镜像（构建期 dnf 725s+），900s 预算必超。
+
+**根因**：美国 runner 访问 Aliyun 镜像只有 ~100kB/s；`Dockerfile.e2e.alinux3` 构建后 `dnf clean all` 清掉了元数据缓存，运行时 setup 再装依赖又把 plus（~45MB）等重仓元数据全量重下。
+
+**解法**：① 构建期安装加 `--disablerepo='*plus*' --disablerepo='*epel*'`（所需包都在 os/updates/powertools）；② 构建后用 sed 把 plus/epel 仓 `enabled=0`，运行时同样跳过；③ `clean all` 改 `clean packages`，保留新鲜元数据缓存供同 job 内运行时安装复用。契约断言同步更新（`e2e_runner_suite.sh`）。
+
 ### 2026-11-23 — 定位真因：dnf-makecache 与 getty 卡住 alinux3 容器启动
 
 **表象**：6 个 compose pair（server 均为 alinux3）全报 `systemd not ready in server (state=starting)`，加到 600s 仍卡死；`systemctl list-jobs` 诊断显示唯一 running job 是 `dnf-makecache.service`。IT 的 alinux3 L2 测试也在构建期 900s 超时。

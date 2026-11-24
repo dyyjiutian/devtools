@@ -10,6 +10,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 #     Aliyun mirror on every boot;
 #   - serial-getty@getty waits for a /dev/getty device that never appears in a
 #     container. Neither is needed by the pair tests (they use docker exec).
+# The heavy plus (~45MB metadata) / epel repos are disabled for build and
+# runtime: from CI the Aliyun mirror runs ~100kB/s, and editor setups that
+# call dnf at runtime otherwise burn the whole 900s test budget on metadata.
+# `clean packages` (not `clean all`) keeps the fresh metadata cache so runtime
+# installs in the same job reuse it instead of re-downloading.
 RUN set -eux; \
     find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
       | while IFS= read -r repo; do \
@@ -19,12 +24,16 @@ RUN set -eux; \
             "$repo"; \
         done; \
     if command -v dnf >/dev/null 2>&1; then PM=dnf; else PM=yum; fi; \
-    "$PM" install -y \
+    "$PM" install -y --disablerepo='*plus*' --disablerepo='*epel*' \
         git tar gzip curl sudo zip unzip \
         gcc gcc-c++ make libevent-devel ncurses-devel bison pkgconfig \
         nodejs npm systemd dbus iproute; \
-    "$PM" install -y ripgrep || true; \
-    "$PM" clean all; \
+    "$PM" install -y --disablerepo='*plus*' --disablerepo='*epel*' ripgrep || true; \
+    for f in /etc/yum.repos.d/*.repo; do \
+        sed -i -e '/^\[[^]]*plus[^]]*\]/,/^\[/{s/^enabled *= *1/enabled=0/}' \
+               -e '/^\[[^]]*epel[^]]*\]/,/^\[/{s/^enabled *= *1/enabled=0/}' "$f"; \
+    done; \
+    "$PM" clean packages; \
     ln -sf /dev/null /etc/systemd/system/dnf-makecache.service; \
     ln -sf /dev/null /etc/systemd/system/dnf-makecache.timer; \
     ln -sf /dev/null /etc/systemd/system/serial-getty@getty.service; \
