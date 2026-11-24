@@ -119,6 +119,7 @@ test_sync_strips_obsolete_root_glob_deny() {
   cat >"$HOME/.claude/settings.json" <<'EOF'
 {
   "permissions": {
+    "defaultMode": "default",
     "allow": ["Bash"],
     "ask": ["Bash(rm -rf *)"],
     "deny": [
@@ -147,6 +148,8 @@ EOF
     "sync keeps exact root deny"
   assert_contains "$(cat "$cfg")" '"customKeep": true' \
     "sync preserves unrelated user fields"
+  assert_contains "$(cat "$cfg")" '"defaultMode": "bypassPermissions"' \
+    "sync initializes the managed permission mode from the template"
   pass "claude sync strips obsolete root-glob deny ($DEVTOOLS_TEST_PROFILE)"
 }
 

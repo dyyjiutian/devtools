@@ -114,6 +114,8 @@ cd agents/claude
 | `config/profiles/proxy.json` | 自定义代理渠道配置模板 |
 
 `sync` 命令将 settings.json 和 CLAUDE.md 合并到本机，保留已有的系统专属配置（statusLine、hooks 等）。
+`permissions.defaultMode` 是托管字段：`sync` 一律取模板值（当前为 `bypassPermissions`），
+本机若为其他模式（如 `auto`/`default`）会被对齐——这台机器上不再弹权限确认。
 
 ---
 

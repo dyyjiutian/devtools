@@ -334,7 +334,12 @@ cmd_sync() {
             const t = tpl || {}, e = ex || {};
             const dedup = (a, b) => [...new Set([...(a||[]), ...(b||[])])];
             const deny = dedup(t.deny, e.deny).filter((p) => !obsoleteDeny.has(p));
-            return { ...t, ...e, allow: dedup(t.allow, e.allow), deny };
+            const merged = { ...t, ...e, allow: dedup(t.allow, e.allow), deny };
+            // defaultMode is a managed field: the template wins on sync so a
+            // machine that carries another mode (auto/default) gets
+            // initialized to the template's mode instead of keeping it.
+            if (t.defaultMode !== undefined) merged.defaultMode = t.defaultMode;
+            return merged;
         };
 
         const merged = {
