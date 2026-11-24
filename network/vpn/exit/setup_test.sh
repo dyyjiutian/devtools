@@ -162,4 +162,8 @@ grep -qF 'rpm -Uvh --nodeps' "$fake_log" \
 grep -qF 'cloudflare-warp' "$fake_log" \
     || fail "expected cloudflare-warp package operations in fake log"
 
+echo "[8/8] install_xray prefers the cached offline installer"
+assert_file_contains "$EXIT_SETUP" "cache/scripts/install-release.sh"
+assert_file_contains "$EXIT_SETUP" 'install --local "$zip" --without-geodata'
+
 echo "PASS: exit/setup WARP yum repo regression checks"

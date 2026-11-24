@@ -200,6 +200,29 @@ install_xray() {
             debian) apt-get update -qq && apt-get install -y curl ;;
         esac
     fi
+    # Prefer the cached installer + release zip: the online path hits the
+    # GitHub release API, which returns 403 under runner-IP rate limits when
+    # several CI jobs install concurrently. The cache lives in the repo, so
+    # Compose e2e (repo mounted at /workspace) installs fully offline.
+    local script_dir repo_root cache_installer arch zip
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo_root="$(cd "${script_dir}/../../.." && pwd)"
+    cache_installer="${repo_root}/cache/scripts/install-release.sh"
+    case "$(uname -m)" in
+        x86_64)  arch="64" ;;
+        aarch64) arch="arm64-v8a" ;;
+        armv7l)  arch="arm32-v7a" ;;
+        *)       arch="" ;;
+    esac
+    zip=""
+    if [[ -n "$arch" ]]; then
+        zip="$(ls "${repo_root}/cache/binaries/Xray-linux-${arch}-"*.zip 2>/dev/null | head -1 || true)"
+    fi
+    if [[ -f "$cache_installer" && -n "$zip" && -f "$zip" ]]; then
+        info "使用仓库缓存离线安装 Xray: $(basename "$zip")"
+        bash "$cache_installer" install --local "$zip" --without-geodata </dev/null
+        return
+    fi
     info "下载 Xray 官方安装脚本..."
     INSTALL_SCRIPT=$(mktemp)
     curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh -o "$INSTALL_SCRIPT"
