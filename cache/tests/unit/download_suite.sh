@@ -212,4 +212,14 @@ test_linux_download_includes_delta
 test_linux_download_includes_glow
 test_linux_download_includes_nvim
 
+# Integrity pins for the protobuf geo data: a history-rewrite once replaced
+# a domain substring inside geosite.dat and broke its wire format. Checksums
+# catch any future byte-level corruption of these binary assets.
+GEOSITE_SHA256="8c3a825b1a7d09f627de10263b21008b8a48dee10794f42caf1927928fec74da"
+GEOIP_SHA256="6ba63d75f307d16a81ae09406ddcf2779fa75cb642d4aae59613370d62d33509"
+actual="$(file_sha256 "$REPO_ROOT/cache/binaries/geosite.dat")"
+[[ "$actual" == "$GEOSITE_SHA256" ]] || fail "geosite.dat checksum mismatch (corrupted?): $actual"
+actual="$(file_sha256 "$REPO_ROOT/cache/binaries/geoip.dat")"
+[[ "$actual" == "$GEOIP_SHA256" ]] || fail "geoip.dat checksum mismatch (corrupted?): $actual"
+
 echo "PASS: cache download unit suite"

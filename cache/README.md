@@ -83,6 +83,14 @@ bash cache/download.sh linux    # 仅下载 Linux 所需
 
 ## Issues
 
+### 2026-11-24 — geosite.dat 被历史重写误伤，xray 报 invalid wire-format
+
+**表象**：vpn pair e2e 全 OS 失败，`failed to load geosite: CN > proto: cannot parse invalid wire-format data`。
+
+**根因**：脱敏历史重写（filter-repo --replace-text）按「前 8000 字节无 NUL 即文本」的启发式把 protobuf 的 `geosite.dat` 当文本处理，域名 `ludongyy.com` 里的 `dongyy` 子串被替换成 `devuser`（+1 字节×2），protobuf 长度前缀失效。
+
+**解法**：用 blob 回调把历史中该 blob 恢复为原始字节；`download_unit_test` 增加 geosite.dat / geoip.dat 的 sha256 完整性断言，任何字节级损坏都会在 L1 被拦下。教训：重写历史后必须对比二进制 blob 的哈希，不能只验证敏感字符串已消失。
+
 ### 2026-08-17 — L1 `download_unit_test` 在 macOS 上找不到 `sha256sum`
 
 **表象**：`bazel test //cache:download_unit_test` 报 `sha256sum: command not found`，随后把合法缓存当成损坏并尝试下载。

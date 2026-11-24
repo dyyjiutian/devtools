@@ -17,6 +17,8 @@ devtools_unit_test(
     suite = ":tests/unit/download_suite.sh",
     data = [
         "binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz",
+        "binaries/geosite.dat",
+        "binaries/geoip.dat",
         "download.sh",
         "scripts/nodesource-setup-20.x",
         "//os/lib:packages_list.sh",
