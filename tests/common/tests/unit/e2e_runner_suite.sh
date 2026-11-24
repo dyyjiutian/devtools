@@ -62,6 +62,7 @@ assert_contains "$alinux3" "mirrors.aliyun.com" "ALinux 3 E2E rewrites cloud-int
 assert_contains "$alinux3" "gcc-c++" "ALinux 3 E2E installs a C++ compiler for treesitter"
 assert_contains "$alinux3" "dnf-makecache.service" "ALinux 3 E2E masks dnf-makecache for offline boot"
 assert_contains "$alinux3" "serial-getty@getty.service" "ALinux 3 E2E masks the getty device wait"
+assert_contains "$runner" "--build-only" "E2E docker runner supports CI pre-build outside test budgets"
 assert_contains "$alinux3" "--disablerepo='*plus*'" "ALinux 3 E2E skips the heavy plus repo on slow mirrors"
 assert_contains "$alinux3" "clean packages" "ALinux 3 E2E keeps the metadata cache for runtime installs"
 

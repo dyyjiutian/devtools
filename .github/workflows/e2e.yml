@@ -26,6 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: bazelbuild/setup-bazelisk@v3
+      - name: Pre-build E2E images (outside test timeout budgets)
+        # alinux3 package downloads from the Aliyun mirror can take 30min
+        # from US runners. Building here keeps that cost out of the bazel
+        # test timeouts; tests then reuse the local images / layer cache.
+        run: |
+          bash tests/common/docker/run_e2e_in_docker.sh --profile linux_ubuntu --build-only
+          bash tests/common/docker/run_e2e_in_docker.sh --profile linux_alinux3 --build-only
+          bash tests/common/docker/run_e2e_in_docker.sh --profile linux_alinux4 --build-only
       - name: E2E Linux Docker real setup
         # Comma-separated positive tags are OR. Use -requires-macos so Linux
         # Docker E2E does not pick up Darwin host tests. GitHub ubuntu-latest

@@ -549,7 +549,7 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 **根因**：美国 runner 访问 Aliyun 镜像只有 ~100kB/s；`Dockerfile.e2e.alinux3` 构建后 `dnf clean all` 清掉了元数据缓存，运行时 setup 再装依赖又把 plus（~45MB）等重仓元数据全量重下。
 
-**解法**：① 构建期安装加 `--disablerepo='*plus*' --disablerepo='*epel*'`（所需包都在 os/updates/powertools）；② 构建后用 sed 把 plus/epel 仓 `enabled=0`，运行时同样跳过；③ `clean all` 改 `clean packages`，保留新鲜元数据缓存供同 job 内运行时安装复用。契约断言同步更新（`e2e_runner_suite.sh`）。
+**解法**：① 构建期安装加 `--disablerepo='*plus*' --disablerepo='*epel*'`（所需包都在 os/updates/powertools）；② 构建后用 sed 把 plus/epel 仓 `enabled=0`，运行时同样跳过；③ `clean all` 改 `clean packages`，保留新鲜元数据缓存供同 job 内运行时安装复用。④ 首轮修复后复测仍超时：慢镜像下 108 个包的下载本身就要 30min，首个测试还得承担镜像构建成本——E2E workflow 增加独立预构建步骤（`run_e2e_in_docker.sh --build-only` 依次构建三个镜像），把构建耗时移出 bazel 测试预算，测试直接复用本地镜像/层缓存。契约断言同步更新（`e2e_runner_suite.sh`）。
 
 ### 2026-11-23 — 定位真因：dnf-makecache 与 getty 卡住 alinux3 容器启动
 

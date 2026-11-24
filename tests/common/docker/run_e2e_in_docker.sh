@@ -118,6 +118,7 @@ PROFILE=""
 SUITE_PATH=""
 MODULE_ROOT=""
 SETUP_ARGS=()
+BUILD_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -125,8 +126,9 @@ while [[ $# -gt 0 ]]; do
     --suite) SUITE_PATH="${2:-}"; shift 2 ;;
     --module-root) MODULE_ROOT="${2:-}"; shift 2 ;;
     --setup-arg) SETUP_ARGS+=("${2:-}"); shift 2 ;;
+    --build-only) BUILD_ONLY=true; shift ;;
     -h|--help)
-      echo "Usage: run_e2e_in_docker.sh --profile PROFILE --suite PATH --module-root PATH [--setup-arg ARG]..."
+      echo "Usage: run_e2e_in_docker.sh --profile PROFILE --suite PATH --module-root PATH [--setup-arg ARG]... [--build-only]"
       exit 0
       ;;
     *)
@@ -136,8 +138,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$PROFILE" || -z "$SUITE_PATH" || -z "$MODULE_ROOT" ]]; then
-  echo "run_e2e_in_docker.sh: --profile, --suite, and --module-root are required" >&2
+if [[ -z "$PROFILE" ]] || { ! $BUILD_ONLY && [[ -z "$SUITE_PATH" || -z "$MODULE_ROOT" ]]; }; then
+  echo "run_e2e_in_docker.sh: --profile, --suite, and --module-root are required (--build-only needs just --profile)" >&2
   exit 1
 fi
 
@@ -185,6 +187,13 @@ cp -L "$DOCKER_DIR/$DOCKERFILE" "$BUILD_CTX/Dockerfile"
 echo "==> building $IMAGE_TAG from $DOCKER_DIR/$DOCKERFILE (platform=linux/amd64, IPv4)"
 docker_build_ipv4 "$BUILD_CTX/Dockerfile" \
   -f "$BUILD_CTX/Dockerfile" -t "$IMAGE_TAG" "$BUILD_CTX"
+
+# CI pre-builds images in a separate step so a slow mirror build (alinux3 can
+# take 30min from US runners) never eats into a test's bazel timeout budget.
+if $BUILD_ONLY; then
+  echo "==> build-only: $IMAGE_TAG ready"
+  exit 0
+fi
 
 run_args=(
   bash /workspace/tests/common/lib/run_e2e_test.sh
