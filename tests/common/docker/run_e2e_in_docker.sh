@@ -180,13 +180,21 @@ fi
 # shellcheck source=ipv4.sh
 source "$DOCKER_DIR/ipv4.sh"
 
-BUILD_CTX="$(mktemp -d "${TMPDIR:-/tmp}/devtools-e2e-build.XXXXXX")"
-trap 'rm -rf "$BUILD_CTX"' EXIT
-cp -L "$DOCKER_DIR/$DOCKERFILE" "$BUILD_CTX/Dockerfile"
-
-echo "==> building $IMAGE_TAG from $DOCKER_DIR/$DOCKERFILE (platform=linux/amd64, IPv4)"
-docker_build_ipv4 "$BUILD_CTX/Dockerfile" \
-  -f "$BUILD_CTX/Dockerfile" -t "$IMAGE_TAG" "$BUILD_CTX"
+src_dockerfile="$DOCKER_DIR/$DOCKERFILE"
+if image_matches_dockerfile "$IMAGE_TAG" "$src_dockerfile"; then
+  echo "==> reusing $IMAGE_TAG (dockerfile unchanged)"
+else
+  BUILD_CTX="$(mktemp -d "${TMPDIR:-/tmp}/devtools-e2e-build.XXXXXX")"
+  trap 'rm -rf "$BUILD_CTX"' EXIT
+  stage_e2e_dockerfile "$src_dockerfile" "$BUILD_CTX" "$SOURCE_ROOT"
+  dockerfile_sha="$(file_sha256 "$src_dockerfile")"
+  echo "==> building $IMAGE_TAG from $src_dockerfile (platform=linux/amd64, IPv4)"
+  docker_build_ipv4 "$BUILD_CTX/Dockerfile" \
+    -f "$BUILD_CTX/Dockerfile" \
+    --label "devtools.dockerfile.sha=${dockerfile_sha}" \
+    -t "$IMAGE_TAG" \
+    "$BUILD_CTX"
+fi
 
 # CI pre-builds images in a separate step so a slow mirror build (alinux3 can
 # take 30min from US runners) never eats into a test's bazel timeout budget.
