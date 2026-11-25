@@ -117,6 +117,17 @@ download_git_delta() {
     "$sha256"
 }
 
+# Alinux 3 E2E: kernel-headers is only in the heavy plus repo. Pin the RPM so
+# the image build does not download plus metadata.
+download_alinux3_kernel_headers() {
+  local filename="kernel-headers-5.10.134-20.2.al8.x86_64.rpm"
+  local sha256="18bea523d468e822a24a74e2427e62355b278895f76516941db1c1a3d890893a"
+  download_verified \
+    "https://mirrors.aliyun.com/alinux/3/plus/x86_64/kernels/${filename}" \
+    "${BINARIES_DIR}/${filename}" \
+    "$sha256"
+}
+
 # VPN 客户端 geoip/geosite（Loyalsoldier；架构无关，linux/macos 共用）
 download_vpn_geodata() {
   download \
@@ -159,6 +170,9 @@ download_linux() {
 
   # git-delta（CentOS 7 x86_64 离线兼容）
   download_git_delta
+
+  # Alinux 3 E2E 编译依赖（避免拉取 plus 仓库元数据）
+  download_alinux3_kernel_headers
 
   # 安装脚本
   download \

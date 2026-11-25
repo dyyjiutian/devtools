@@ -9,6 +9,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Aliyun mirror; cover dnf5 names too) and serial-getty/getty (wait for console
 # devices that never appear in a container). Masking a non-existent unit is a
 # harmless no-op; the pair tests use docker exec, not a getty login.
+# `clean packages` keeps repo metadata in the image so later dnf installs do
+# not download it again.
 RUN set -eux; \
     find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
       | while IFS= read -r repo; do \
@@ -23,7 +25,7 @@ RUN set -eux; \
         gcc gcc-c++ make libevent-devel ncurses-devel bison pkgconfig \
         nodejs npm systemd dbus iproute; \
     "$PM" install -y ripgrep || true; \
-    "$PM" clean all; \
+    "$PM" clean packages; \
     ln -sf /dev/null /etc/systemd/system/dnf-makecache.service; \
     ln -sf /dev/null /etc/systemd/system/dnf-makecache.timer; \
     ln -sf /dev/null /etc/systemd/system/dnf5-makecache.service; \
