@@ -35,6 +35,10 @@ assert_contains "$runner" "SECONDS + 600" "gives systemd boot a 600s budget unde
 assert_contains "$runner" "systemctl list-jobs" "dumps blocking jobs when systemd is not ready"
 assert_contains "$runner" "devtools-e2e-compose.lock" "serializes privileged compose stacks"
 assert_contains "$runner" "docker_build_ipv4" "builds images with IPv4-first pull"
+assert_contains "$runner" "image_matches_dockerfile" "reuses an image only when the Dockerfile sha matches"
+assert_contains "$runner" "devtools.dockerfile.sha" "labels built images with the Dockerfile sha"
+assert_contains "$runner" "stage_e2e_dockerfile" "stages the cached kernel-headers RPM into the build context"
+assert_contains "$runner" "reusing local amd64" "logs when a local amd64 image is reused"
 assert_not_contains "$runner" "setup_os_profile" "Compose E2E does not inject OS fakes"
 
 # shellcheck source=../../docker/ipv4.sh
