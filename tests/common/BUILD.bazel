@@ -62,6 +62,8 @@ devtools_unit_test(
     suite = ":tests/unit/e2e_runner_suite.sh",
     data = [
         ":docker_files",
+        "ci/prebuild_e2e_images.sh",
+        "//:.github/workflows/e2e.yml",
     ],
     tags = [
         "contract",

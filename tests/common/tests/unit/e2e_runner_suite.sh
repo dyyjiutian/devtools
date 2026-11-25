@@ -9,6 +9,8 @@ HOST_RUNNER="$LIB_DIR/run_e2e_test.sh"
 UBUNTU="$DOCKER_DIR/Dockerfile.e2e.ubuntu"
 ALINUX3="$DOCKER_DIR/Dockerfile.e2e.alinux3"
 ALINUX4="$DOCKER_DIR/Dockerfile.e2e.alinux4"
+PREBUILD="$REPO_ROOT/tests/common/ci/prebuild_e2e_images.sh"
+WORKFLOW="$REPO_ROOT/.github/workflows/e2e.yml"
 
 assert_file_exists "$RUNNER" "E2E docker runner exists"
 assert_file_exists "$HOST_RUNNER" "E2E host runner exists"
@@ -64,7 +66,14 @@ assert_contains "$alinux3" "dnf-makecache.service" "ALinux 3 E2E masks dnf-makec
 assert_contains "$alinux3" "serial-getty@getty.service" "ALinux 3 E2E masks the getty device wait"
 assert_contains "$runner" "--build-only" "E2E docker runner supports CI pre-build outside test budgets"
 assert_contains "$alinux3" "--disablerepo='*plus*'" "ALinux 3 E2E skips the heavy plus repo on slow mirrors"
+assert_contains "$alinux3" "kernel-headers-5.10.134-20.2.al8.x86_64.rpm" \
+  "ALinux 3 E2E installs kernel-headers from the local cache"
+assert_contains "$alinux3" "rpm -Uvh --nosignature" \
+  "ALinux 3 E2E installs the cached kernel-headers RPM"
 assert_contains "$alinux3" "clean packages" "ALinux 3 E2E keeps the metadata cache for runtime installs"
+assert_contains "$runner" "image_matches_dockerfile" "E2E runner reuses an image built from the same Dockerfile"
+assert_contains "$runner" "devtools.dockerfile.sha" "E2E runner labels images with the Dockerfile sha"
+assert_contains "$runner" "stage_e2e_dockerfile" "E2E runner stages the cached kernel-headers RPM"
 
 alinux4="$(cat "$ALINUX4")"
 assert_contains "$alinux4" \
@@ -73,5 +82,20 @@ assert_contains "$alinux4" \
 assert_contains "$alinux4" "mirrors.aliyun.com" "ALinux 4 E2E rewrites cloud-internal repos"
 assert_contains "$alinux4" "gcc-c++" "ALinux 4 E2E installs a C++ compiler for treesitter"
 assert_contains "$alinux4" "dnf-makecache.service" "ALinux 4 E2E masks dnf-makecache for offline boot"
+assert_contains "$alinux4" "clean packages" "ALinux 4 E2E keeps dnf metadata for runtime installs"
+
+assert_file_exists "$PREBUILD" "E2E image prebuild script exists"
+assert_file_exists "$WORKFLOW" "E2E workflow exists"
+bash -n "$PREBUILD"
+prebuild="$(cat "$PREBUILD")"
+workflow="$(cat "$WORKFLOW")"
+assert_contains "$prebuild" "docker load" "prebuild loads cached image tarballs"
+assert_contains "$prebuild" "docker save" "prebuild writes image tarballs back to the cache"
+assert_contains "$prebuild" "devtools-e2e:alinux3" "prebuild covers the ALinux 3 image"
+assert_contains "$prebuild" "--build-only" "prebuild uses the docker runner build-only mode"
+assert_contains "$workflow" "actions/cache@v4" "E2E Linux job restores the image tarball cache"
+assert_contains "$workflow" "prebuild_e2e_images.sh" "E2E Linux job prebuilds through the cache script"
+assert_contains "$workflow" "kernel-headers-5.10.134-20.2.al8.x86_64.rpm" \
+  "image cache key includes the pinned kernel-headers RPM"
 
 echo "PASS: e2e runner contract"
