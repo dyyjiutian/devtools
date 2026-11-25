@@ -147,6 +147,10 @@ cd os/macos/agent-notify
 
 表象：`claude update` 长时间无进展，`~/.local/share/claude/versions/` 出现 0 字节的新版本文件，`~/.claude/.last-update-result.json` 记录 `"status":"install_failed"`。根因是原生安装的更新需从 `downloads.claude.ai` 下载约 325MB 二进制（版本 feed `https://downloads.claude.ai/claude-code-releases/latest` → manifest `…/<ver>/manifest.json` → 二进制 `…/<ver>/darwin-arm64/claude`）；本机直连该域名被墙，而经代理的 HTTP/2 长连接会降速（实测下载 32MB：HTTP/1.1 ≈ 3.9MB/s 稳定 vs HTTP/2 ≈ 1.2MB/s），下载停在 0 字节后判定失败。解法：手动升级，用 `curl --http1.1` 下载二进制并 sha256 校验（对照 manifest 的 `checksum`），`cp` 到 `~/.local/share/claude/versions/<ver>` 并 `chmod +x`，再 `ln -sfn` 更新 `~/.local/bin/claude`。claude/codex 均无配置项可强制 HTTP/1.1 或 HTTP/2；claude 下载器尊重 `HTTPS_PROXY`/`HTTP_PROXY`（含 `CLAUDE_CODE_HTTPS_PROXY`），可借此让原生 update 走快代理。
 
+### 2026-11-16 — npm install 报 ENOTEMPTY（回收目录残留）
+
+表象：`./setup.sh install`（npm 安装路径）报 `ENOTEMPTY: directory not empty, rename '…/@anthropic-ai/claude-code' -> '…/@anthropic-ai/.claude-code-XXXX'`。根因：npm 升级时把旧包目录 rename 成按路径**确定性生成**的隐藏回收目录 `.<pkg>-<hash>`；上次安装中断留下同名回收目录后，再次 install 的 rename 目标是非空目录，直接 ENOTEMPTY（与 codex 模块同日记录的问题同源）。解法：`install` 现在会在 `npm install -g` 前自动清理 npm 全局 lib/bin 下的 `.claude-code-*` 回收残留（`_npm_clean_retired`）。手工修复：`rm -rf "$(npm root -g)/@anthropic-ai/.claude-code-"* "$(npm prefix -g)/bin/.claude-code-"*` 后重装。
+
 ---
 
 ## 相关链接
