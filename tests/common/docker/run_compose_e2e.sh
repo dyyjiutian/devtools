@@ -135,16 +135,26 @@ e2e_image_for_profile() {
 
 build_e2e_image() {
   local dockerfile="$1" image_tag="$2" docker_dir="$3"
-  local build_ctx
-  if docker_image_present "$image_tag" && docker_image_is_amd64 "$image_tag"; then
-    echo "==> reusing local amd64 $image_tag"
+  local build_ctx repo_root src dockerfile_sha
+  src="$docker_dir/$dockerfile"
+  if [[ -n "${SOURCE_ROOT:-}" && -d "${SOURCE_ROOT}/cache/binaries" ]]; then
+    repo_root="$SOURCE_ROOT"
+  else
+    repo_root="$(cd "$docker_dir/../../.." && pwd -P)"
+  fi
+  if image_matches_dockerfile "$image_tag" "$src"; then
+    echo "==> reusing local amd64 $image_tag (dockerfile unchanged)"
     return 0
   fi
   build_ctx="$(mktemp -d "${TMPDIR:-/tmp}/devtools-compose-build.XXXXXX")"
-  cp -L "$docker_dir/$dockerfile" "$build_ctx/Dockerfile"
-  echo "==> building $image_tag from $docker_dir/$dockerfile (platform=linux/amd64, IPv4)"
+  stage_e2e_dockerfile "$src" "$build_ctx" "$repo_root"
+  dockerfile_sha="$(file_sha256 "$src")"
+  echo "==> building $image_tag from $src (platform=linux/amd64, IPv4)"
   docker_build_ipv4 "$build_ctx/Dockerfile" \
-    -f "$build_ctx/Dockerfile" -t "$image_tag" "$build_ctx"
+    -f "$build_ctx/Dockerfile" \
+    --label "devtools.dockerfile.sha=${dockerfile_sha}" \
+    -t "$image_tag" \
+    "$build_ctx"
   rm -rf "$build_ctx"
 }
 

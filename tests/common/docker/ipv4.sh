@@ -72,3 +72,49 @@ docker_build_ipv4() {
   pin_dockerfile_from_local "$dockerfile" || return 1
   docker build --pull=false --platform linux/amd64 "$@"
 }
+
+file_sha256() {
+  local file="$1" bin
+  for bin in sha256sum /usr/bin/sha256sum /bin/sha256sum; do
+    if command -v "$bin" >/dev/null 2>&1 || [[ -x "$bin" ]]; then
+      "$bin" "$file" | awk '{print $1}'
+      return 0
+    fi
+  done
+  for bin in shasum /usr/bin/shasum; do
+    if command -v "$bin" >/dev/null 2>&1 || [[ -x "$bin" ]]; then
+      "$bin" -a 256 "$file" | awk '{print $1}'
+      return 0
+    fi
+  done
+  echo "ipv4.sh: sha256sum or shasum is required" >&2
+  return 1
+}
+
+# True when the local amd64 image was built from this exact Dockerfile.
+image_matches_dockerfile() {
+  local image="$1" dockerfile="$2" want="" have=""
+  want="$(file_sha256 "$dockerfile")" || return 1
+  docker_image_present "$image" || return 1
+  docker_image_is_amd64 "$image" || return 1
+  have="$(docker image inspect -f '{{index .Config.Labels "devtools.dockerfile.sha"}}' "$image" 2>/dev/null || true)"
+  [[ -n "$want" && "$have" == "$want" ]]
+}
+
+# Copy Dockerfile into build_ctx. Stage a referenced kernel-headers RPM from
+# cache/binaries so the build does not download it.
+stage_e2e_dockerfile() {
+  local dockerfile_src="$1" build_ctx="$2" repo_root="$3"
+  local name="" rpm=""
+  cp -L "$dockerfile_src" "$build_ctx/Dockerfile"
+  name="$(grep -oE 'kernel-headers-[^[:space:]]+\.x86_64\.rpm' "$build_ctx/Dockerfile" | head -n 1 || true)"
+  if [[ -z "$name" ]]; then
+    return 0
+  fi
+  rpm="${repo_root}/cache/binaries/${name}"
+  if [[ ! -f "$rpm" ]]; then
+    echo "ipv4.sh: missing ${rpm} (run: bash cache/download.sh linux)" >&2
+    return 1
+  fi
+  cp -L "$rpm" "${build_ctx}/${name}"
+}

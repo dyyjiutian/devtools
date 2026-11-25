@@ -48,6 +48,7 @@ cache/
 | `starship-x86_64-unknown-linux-musl.tar.gz` | https://github.com/starship/starship/releases/download/v1.25.1/starship-x86_64-unknown-linux-musl.tar.gz | Linux x86_64 |
 | `starship-aarch64-unknown-linux-musl.tar.gz` | https://github.com/starship/starship/releases/download/v1.25.1/starship-aarch64-unknown-linux-musl.tar.gz | Linux arm64 |
 | `delta-0.19.2-x86_64-unknown-linux-musl.tar.gz` | https://github.com/dandavison/delta/releases/download/0.19.2/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz | CentOS 7 x86_64 Git 工具安装 |
+| `kernel-headers-5.10.134-20.2.al8.x86_64.rpm` | https://mirrors.aliyun.com/alinux/3/plus/x86_64/kernels/kernel-headers-5.10.134-20.2.al8.x86_64.rpm | Alinux 3 E2E 镜像（满足 gcc 的 kernel-headers，不启用 plus 源） |
 | `Xray-linux-64-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip | VPN Linux 客户端 x86_64 |
 | `Xray-linux-arm64-v8a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip | VPN Linux 客户端 arm64 |
 | `Xray-linux-arm32-v7a-v26.3.27.zip` | https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm32-v7a.zip | VPN Linux 客户端 arm32 |
@@ -62,6 +63,8 @@ cache/
 > **neovim**：固定 v0.10.4 portable tarball（无 FUSE 依赖）。更新的 stable 需要 glibc 2.34+，在 Alinux 3（glibc 2.32）上不可用；AppImage 另需 fusermount。`editors/nvim/setup.sh` 优先使用本目录缓存。
 >
 > **git-delta**：`cache/download.sh linux` 会校验固定 SHA-256 `f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b`。已有文件校验正确时跳过；校验错误时删除并下载到同目录临时文件，校验通过后再原子替换。
+>
+> **kernel-headers**：Alinux 3 E2E 用这份 RPM 满足 `glibc-devel`，不启用 plus 源。SHA-256 `18bea523d468e822a24a74e2427e62355b278895f76516941db1c1a3d890893a`。
 
 ---
 
