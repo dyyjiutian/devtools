@@ -607,6 +607,14 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## Issues
 
+### 2026-11-25 — vpn pair e2e 全 OS 失败：Xray 因缺少 geoip.dat 退出 23
+
+**表象**：`vpn_pair_linux_{ubuntu,alinux3,alinux4}_e2e_test` 在「配置并启动 Xray systemd 服务」失败，日志只有 `Xray 服务启动失败，查看日志: journalctl -u xray -n 50`。镜像已能构建，其它 L3 测试不受影响。
+
+**根因**：`install_xray` 用 `--without-geodata` 离线安装，不把 `geoip.dat` 放到 Xray 资源目录。服务端路由含 `geoip:private`，Xray 26 启动时打开 `/usr/local/bin/geoip.dat` 失败并以状态 23 退出。单元写了 `RestartPreventExitStatus=23`，所以 `systemctl restart` 后服务保持 failed。
+
+**解法**：安装后从 `cache/binaries/geoip.dat` 与 `geosite.dat` 拷到 `/usr/local/share/xray`，再符号链接到 `/usr/local/bin`，并写 `XRAY_LOCATION_ASSET` drop-in。启动失败时把 `journalctl -u xray -n 50` 打到 stderr。容器内复现：`devtools-e2e:ubuntu` 上 `systemctl is-active xray` 由 failed 变为 active。
+
 ### 2026-11-24 — vpn pair e2e 全 OS 失败：Xray 在线安装撞 GitHub 403 限流
 
 **表象**：`vpn_pair_linux_{ubuntu,alinux3,alinux4}_e2e_test` 在「安装 Xray-core」步失败，`curl: (22) The requested URL returned error: 403`、`error: Failed to get release list`；多个 PR 并行跑 e2e 时必现。

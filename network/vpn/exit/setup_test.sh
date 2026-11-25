@@ -264,4 +264,11 @@ EOF
 echo "[12/12] install_xray prefers the cached offline installer"
 assert_file_contains "$EXIT_SETUP" "cache/scripts/install-release.sh"
 assert_file_contains "$EXIT_SETUP" 'install --local "$zip" --without-geodata'
+
+echo "[13/13] geoip:private can load geoip.dat after --without-geodata"
+assert_file_contains "$EXIT_SETUP" 'install_cached_geodata'
+assert_file_contains "$EXIT_SETUP" 'cache/binaries/${name}'
+assert_file_contains "$EXIT_SETUP" 'XRAY_LOCATION_ASSET'
+assert_file_contains "$EXIT_SETUP" 'journalctl -u xray -n 50 --no-pager'
+
 echo "PASS: exit/setup WARP repo + multi-SNI + whitelist regression checks"
