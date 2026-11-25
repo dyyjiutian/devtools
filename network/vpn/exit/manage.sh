@@ -46,6 +46,8 @@ write_config() {
         echo "SHORT_ID=\"${SHORT_ID}\""
         echo "LISTEN_PORT=${LISTEN_PORT}"
         echo "REALITY_SNI=\"${REALITY_SNI}\""
+        echo "REALITY_SNIS=\"${REALITY_SNIS:-${REALITY_SNI}}\""
+        echo "ALLOW_IPS=\"${ALLOW_IPS:-}\""
         echo "USERS=\"${USERS}\""
         for u in $USERS; do
             local uuid_var="USER_${u}_UUID"
@@ -235,20 +237,25 @@ bytes_to_human() {
 }
 
 # Raw Stats API counters for the current Xray process (lost on restart).
+# A missing counter is normal: Xray returns NotFound (exit 1) until that user
+# has traffic. Treat it as zero so list/stats/quota checks do not abort.
 get_user_session_traffic() {
     local user="$1"
     local email="${user}@vpn"
-    local up=0 down=0 val
+    local dir raw value up=0 down=0
 
-    val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
-        -name "user>>>${email}>>>traffic>>>uplink" 2>/dev/null \
-        | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
-    up="${val:-0}"
-
-    val=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
-        -name "user>>>${email}>>>traffic>>>downlink" 2>/dev/null \
-        | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
-    down="${val:-0}"
+    for dir in uplink downlink; do
+        raw=$("$XRAY_BIN" api stats --server="$STATS_SERVER" \
+            -name "user>>>${email}>>>traffic>>>${dir}" 2>/dev/null || true)
+        value=$(printf '%s\n' "$raw" \
+            | sed -n 's/.*"value":[[:space:]]*"*\([0-9][0-9]*\).*/\1/p' | head -1)
+        value="${value:-0}"
+        if [[ "$dir" == "uplink" ]]; then
+            up="$value"
+        else
+            down="$value"
+        fi
+    done
 
     echo "${up} ${down}"
 }
@@ -382,8 +389,12 @@ cmd_quota() {
 # ── 命令：vless ────────────────────────────────────────────────────────────────
 cmd_vless() {
     local name="${1:-}"
-    local relay_ip="${2:-${RELAY_IP:-198.51.100.11}}"
+    local relay_ip="${2:-${RELAY_IP:-}}"
     [[ -n "$name" ]] || { error "用法: sudo $0 vless <用户名> [中继IP]"; exit 1; }
+    if [[ -z "$relay_ip" ]]; then
+        relay_ip="198.51.100.10"
+        warn "未指定中继 IP，使用默认 ${relay_ip}（可用第二个参数或 RELAY_IP 环境变量覆盖）"
+    fi
 
     load_config
     [[ " ${USERS} " == *" ${name} "* ]] || { error "用户 '${name}' 不存在"; exit 1; }

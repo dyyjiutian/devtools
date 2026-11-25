@@ -5,34 +5,48 @@
 ## 架构
 
 ```
-国内机器                   杭州中继 ECS               新加坡出口 ECS              目标站点
-  │                      198.51.100.10              198.51.100.30               │
+国内机器                   杭州中继 ECS               东京出口 ECS                目标站点
+  │                      198.51.100.10              198.51.100.20                │
   │                            │                          │                      │
   │  Xray VLESS+Reality        │    iptables DNAT 转发    │  Xray VLESS+Reality  │
   ├──────────────────────────►│──────────────────────────►│─────────────────────►│
-  │  (伪装 TLS 流量)            │  (纯 TCP 转发，无感知)     │  (伪装 icloud.com)    │
+  │  (伪装 TLS 流量)            │  (纯 TCP 转发，无感知)     │  (多 SNI 伪装)        │
   │◄──────────────────────────│◄──────────────────────────│◄─────────────────────│
+                               │
+                               │  出口被墙时（健康检查自动切换）
+                               └──► 备用 xray(127.0.0.1:8443) ──► WARP(Cloudflare) ──► 目标站点
 ```
 
 | 节点 | IP | 作用 | 技术方案 |
 |------|----|------|----------|
-| 中继节点 | 198.51.100.10 | 流量中转，规避国内审查对境外 IP 的封锁 | iptables DNAT（纯转发，无代理软件） |
-| 出口节点 | 198.51.100.30 | 实际出境，访问 claude.ai | Xray VLESS + Reality（伪装 www.icloud.com） |
+| 中继节点 | 198.51.100.10 | 流量中转，规避国内审查对境外 IP 的封锁 | iptables DNAT（主路纯转发）+ WARP 自动兜底 |
+| 出口节点 | 198.51.100.20 | 实际出境，访问 claude.ai | Xray VLESS + Reality（多 SNI）+ 443 来源白名单 |
 
 ## 为什么需要中继节点？
 
-直接使用新加坡 ECS IP 访问 claude.ai 时，该 IP 可能因被标记而被 GFW 干扰。通过杭州中继节点（阿里云国内 ECS）转发，国内流量只与国内 IP 通信，GFW 看到的是阿里云内网流量，从而绕过封锁。
+直接使用境外 ECS IP 访问 claude.ai 时，该 IP 可能因被标记而被 GFW 干扰。通过杭州中继节点（阿里云国内 ECS）转发，国内客户端只与国内 IP 通信，客户端侧画像归零。
+
+**注意**：中继→出口这段仍走公网国际闸口，DPI 看得到「单对 IP 长连接 + 大流量」的画像，出口 IP 仍可能被封（见 Issues 2026-11-18）。中继的价值是把「被墙」从灾难降级为自愈事件：
+
+- **出口白名单**（`--allow-ip`）：443 仅放行中继 IP，GFW 主动探测面归零
+- **多 SNI**：消除「单一 SNI 高频」信号，拖慢被动画像积累
+- **WARP 自动兜底**（`relay/fallback.sh`）：出口被封时健康检查自动把 DNAT 切到中继上的备用 xray→WARP（Cloudflare 共享边缘 IP，封不动），业务中断约 1~3 分钟；换好新出口 EIP 后自动切回
+- **换 EIP 常态化**：出口 IP 是耗材，被封即换，客户端零改动（地址始终是中继）
 
 ## 目录结构
 
 ```
 vpn/
 ├── README.md
+├── lib/
+│   ├── warp.sh            # Cloudflare WARP 安装共享库（exit / relay-fallback 共用）
+│   └── net.sh             # 网络判定共享库（公网 IP / 历史 DNAT 解析）
 ├── exit/
-│   ├── setup.sh           # 新加坡出口节点：安装 Xray，配置 VLESS+Reality（支持多用户）
+│   ├── setup.sh           # 东京出口节点：Xray VLESS+Reality（多 SNI / 多用户 / 443 白名单）
 │   └── manage.sh          # 用户管理：新增/移除用户、流量统计、配额控制
 ├── relay/
-│   └── setup.sh           # 杭州中继节点：配置 iptables DNAT 转发
+│   ├── setup.sh           # 杭州中继节点：iptables DNAT 转发 + 内核优化
+│   └── fallback.sh        # WARP 自动兜底：健康检查 + 被封自动切换 / 恢复切回
 └── client/
     ├── linux_setup.sh       # Linux 客户端一体化脚本：install / status / clean / proxy
     ├── macos_setup.sh       # macOS 客户端一体化脚本：install / status / clean / proxy
@@ -59,33 +73,46 @@ bazel test --config=l3 //network/vpn:vpn_pair_linux_alinux4_e2e_test
 
 ---
 
-### 第一步：部署出口节点（新加坡 ECS 198.51.100.30）
+### 第一步：部署出口节点（东京 ECS 198.51.100.20）
 
 ```bash
-# 登录新加坡 ECS
-ssh root@198.51.100.30
+# 登录东京 ECS
+ssh root@198.51.100.20
 
-# 单用户（默认，创建 user1）
-sudo ./exit/setup.sh
+# 单用户（默认，创建 user1）+ 多 SNI + 443 白名单（仅放行杭州中继）
+sudo ./exit/setup.sh --allow-ip=198.51.100.10
 
 # 多用户：一次创建多个用户（每人独立 UUID / VLESS 链接）
-sudo ./exit/setup.sh --users=alice,bob,carol
+sudo ./exit/setup.sh --users=alice,bob,carol --allow-ip=198.51.100.10
 
 # 也可传数字：--users=3 → 创建 user1 user2 user3
 sudo ./exit/setup.sh --users=3
+
+# 自定义 SNI 列表（首位为 dest 与链接默认 SNI）
+sudo ./exit/setup.sh --sni=www.icloud.com,www.apple.com,www.cloudflare.com,www.tesla.com
+
+# 移除 443 白名单（恢复全网可达，仅防火墙操作，不动 Xray）
+sudo ./exit/setup.sh --allow-ip-off
 ```
 
 脚本会自动：
 - 安装 Xray-core
 - 安装 Cloudflare WARP 并设置为 proxy 模式（SOCKS5 on 40000）
 - 生成 Reality X25519 密钥对、Short ID，以及每用户独立 UUID
-- 写入 VLESS + Reality 服务端配置（伪装 `www.icloud.com`）
+- 写入 VLESS + Reality 服务端配置（**多 SNI**，默认
+  `www.icloud.com` / `www.apple.com` / `www.cloudflare.com` / `www.tesla.com`，dest 为首位）
   - `anthropic.com` / `claude.ai` 流量经 WARP 出站（绕过 Cloudflare Bot 防护）
   - 其余流量直连
   - **Stats API** 监听 `127.0.0.1:10085`，用于流量统计与配额控制
 - 配置 systemd 服务并开放防火墙 443 端口
+- `--allow-ip`：iptables INPUT 仅放行指定 IP → 443，其余 DROP（标记 `vpn-exit-allow`，
+  幂等、持久化、**永不触碰 SSH 22**）；IPv6 若监听同端口则全部 DROP
 
-每个用户对应一条独立 VLESS 链接，部署完成后脚本逐用户打印。
+**SNI 选择方法**（详见 Issues 2026-11-18）：用 `openssl s_client -msg -tls1_3` 统计服务端
+握手响应字节，选 **TLS1.3+H2、握手 ≤4KB、零 NewSessionTicket、基础设施稳定**的知名大站；
+**避免 Microsoft**（握手约 6.4KB，曾导致断连）。多 SNI 让客户端可轮换 sni 分散流量特征。
+
+每个用户对应一条独立 VLESS 链接，部署完成后脚本逐用户打印（链接默认 sni=首位，可换任一备选）。
 
 参数持久化在 `/root/.vpn_exit_config`，可随时查看：
 
@@ -140,7 +167,7 @@ sudo ./exit/manage.sh reset-stats alice
 # 登录杭州 ECS
 ssh root@198.51.100.10
 
-# 执行部署脚本（无需任何连接参数）
+# 执行部署脚本（默认出口 198.51.100.20）
 sudo ./relay/setup.sh
 ```
 
@@ -148,15 +175,49 @@ sudo ./relay/setup.sh
 
 ```bash
 sudo ./relay/setup.sh \
-  --exit-ip=198.51.100.30 \
+  --exit-ip=198.51.100.20 \
   --exit-port=443 \
   --listen-port=443
 ```
 
 脚本会自动：
-- 开启内核 `net.ipv4.ip_forward`（持久化到 sysctl）
-- 设置 iptables DNAT 规则（TCP 443 → 198.51.100.30:443）
+- 开启内核 `net.ipv4.ip_forward` + **BBR + conntrack 优化 + route_localnet**（持久化到
+  `/etc/sysctl.d/99-vpn-relay.conf`；conntrack 收紧 established 超时、扩容表项，兜底所需）
+- **清扫同端口历史 DNAT/MASQUERADE/FORWARD 残留**（保留 Docker 链），再设置
+  iptables DNAT 规则（TCP 443 → 198.51.100.20:443，标记 `vpn-relay`）
+- 设置 **OUTPUT hairpin**：本机客户端访问自身公网 IP:443 也走同一条 DNAT，与外部终端
+  共用兜底切换路径（仅公网 IP 生效）
 - 持久化 iptables 规则（重启后自动恢复）
+
+#### 第二步（可选）：部署 WARP 自动兜底
+
+主链路保持纯 iptables 转发；兜底组件平时不承载流量，出口被墙时自动顶上：
+
+```bash
+# 需要到出口的 SSH（读取 Reality 凭据，全程不回显）；sudo 密码走 stdin 文件
+sudo ./relay/fallback.sh install \
+  --exit-ip=198.51.100.20 \
+  --exit-ssh=dev.user@198.51.100.20 \
+  --sudo-pass-file=/path/to/pass
+
+sudo ./relay/fallback.sh status            # 模式 / 计数 / WARP / 服务 / 当前 DNAT
+sudo ./relay/fallback.sh switch fallback   # 手动切兜底（演练）
+sudo ./relay/fallback.sh switch main       # 手动切回主路
+sudo ./relay/fallback.sh clean             # 移除兜底并恢复主路 DNAT（WARP 保留）
+```
+
+机制：
+- 装 Cloudflare WARP（proxy 模式 SOCKS5 40000）+ 备用 xray（`127.0.0.1:8443`，
+  **复用出口同一套 Reality 私钥/shortId/用户**，客户端零改动）
+- 备用 xray 路由：私网→block、国内→direct（中继在国内）、其余→WARP
+- systemd timer 每 60s 探测出口 443；连续 3 次失败 → 启动备用 xray、把 DNAT 切到
+  `127.0.0.1:8443`（WARP 出站）；连续 3 次成功 → 切回出口、停备用 xray
+- 切换只影响新连接，存量会话自然过渡；被封期间业务中断约 1~3 分钟
+- Reality 私钥仅写入 root:600 文件，任何输出/日志不含密钥
+- 日志：`/var/log/vpn-relay-fallback.log`（`journalctl -t vpn-relay-fallback` 亦可）
+
+> 兜底走 Cloudflare 共享边缘 IP（"封不动"），但带宽是慢车道（晚高峰可能 <1Mbps），
+> 查文档/git/API 足够；被封期间应尽快换出口 EIP，恢复后自动切回独享带宽。
 
 阿里云控制台：
 - **中继 ECS 安全组**：入方向放行 `TCP 443`
@@ -477,8 +538,15 @@ cat /root/.vpn_exit_config     # 查看连接参数
 ```bash
 iptables -t nat -L -n -v       # 查看 NAT 转发规则
 cat /proc/sys/net/ipv4/ip_forward  # 验证 IP 转发
-# 清除转发规则
+# 清除转发规则（含历史残留与 hairpin）
 sudo ./relay/setup.sh --clean
+
+# WARP 兜底子系统
+sudo ./relay/fallback.sh status        # 模式 / 计数 / WARP / 服务 / 当前 DNAT
+sudo ./relay/fallback.sh switch fallback | main  # 手动切换
+tail -f /var/log/vpn-relay-fallback.log          # 切换日志
+systemctl status vpn-relay-healthcheck.timer     # 健康检查 timer
+sudo ./relay/fallback.sh clean         # 移除兜底并恢复主路
 ```
 
 ### 客户端（Linux）
@@ -528,9 +596,13 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 
 ## 安全说明
 
-- **Reality 协议**：通过 TLS 握手伪装成访问 `www.icloud.com` 的流量，流量特征无法与正常 HTTPS 区分
-- **中继节点无感知**：杭州 ECS 仅做 TCP 转发，不解密、不存储任何流量内容
-- **建议**：阿里云安全组限制 443 入方向仅允许可信客户端 IP，防止被扫描滥用
+- **Reality 协议**：通过 TLS 握手伪装成访问知名大站（多 SNI）的流量，流量特征无法与正常 HTTPS 区分
+- **中继主路无感知**：杭州 ECS 主链路仅做 TCP 转发，不解密、不存储任何流量内容
+  （仅兜底激活时备用 xray 才终结 Reality，且凭据与出口同源、仅存 root:600 文件）
+- **出口白名单（可选）**：`--allow-ip` 让 443 仅对中继开放，GFW 主动探测面归零；SSH 不受影响。
+  也可完全交给阿里云安全组管理来源：`--allow-ip-off` 移除主机白名单并清空缓存
+  （普通重跑不会复活），此时出口 IP 直连 VLESS 链接可用。现网自 2026-11-18 晚起采用安全组方案
+- **建议**：阿里云安全组限制中继 443 入方向仅允许可信客户端 IP，防止被扫描滥用
 - **UUID 和私钥**：请妥善保管出口节点生成的配置，切勿公开
 
 ## Issues
@@ -582,6 +654,103 @@ launchctl load -w ~/Library/LaunchAgents/com.vpn.xray-client.plist
 **根因**：延续 2026-08-17 的已知问题——alinux3 较老的 systemd 在 `--jobs=2` 并行 docker build/dnf 负载下启动慢，180 次循环（实际 ~237s）窗口仍不够。pair 测试本身是 `size=enormous`（3600s），等待窗口却远小于预算。且 systemd 日志进 journal 不进 console，失败时 dump console 日志拿不到任何诊断。
 
 **解法**：`wait_systemd` 改为基于 `SECONDS` 的 600s 预算（仍远小于 3600s），轮询间隔 2s；失败时改 dump `systemctl list-jobs` / `systemctl --failed`（定位阻塞 unit），console 日志仅作补充。`compose_runner_suite.sh` 同步契约断言。
+
+### 2026-11-18 — 再换 EIP（198.51.100.20）跨境限速未解除：限速跟着出口目标 IP 走
+
+**表象**：出口 EIP 从 `198.51.100.21` 再换成 `198.51.100.20`（同一台东京 ECS）后，
+隧道吞吐仍 ~259KB/s（换前 239KB/s），YouTube 仍只能 480p。
+
+**排查证据**（均为当日实测）：
+- 中继→新出口 22 端口 SSH 拉 10MB：122KB/s（旧出口同测法 35KB/s）——与 443 隧道无关，按目标 IP 限；
+- **中继本机直连 Cloudflare 10MB：2.8MB/s（3.6s 完成）**——中继自身跨境 bulk 不被限；
+- 出口机直连 CF：30MB/s——出口自身带宽正常；
+- 重传近零、速率平滑贴顶——整形（policer）特征，非拥塞。
+
+**结论（阶段性）**：限速画像挂在「中继→出口目标 IP」上，两个出口 IP 均属阿里云
+国际数据中心段（8.209.x / 8.216.x），换同段 EIP 不解除。ping 110ms 正常是因为
+ICMP 小包不在整形范围。端侧优化（BBR/MSS/窗口）无法突破策略性限速。
+
+**补充实测（同日 17:1x，WARP 对照）**：经 WARP 兜底下载同一 CF URL 仅 260KB/s
+（≈固定 IP 隧道的 2Mbps 顶），google 仍被重置、部分境外源不可达；而中继**直连**
+CF anycast（172.66.0.218，TCP 握手 235ms 确为跨境）有 2.6MB/s。说明整形按
+「目标信誉/流量画像」区别对待：大 CDN anycast 放行，数据中心 IP 长连接与已知
+VPN 端点（WARP）被钳。**WARP 并不比固定 IP 快，仍只是救生艇。**
+
+**后续选项**：优质跨境线路（CN2 GIA 类 HK/Tokyo VPS）或 GA 持牌通道结构性解决；
+同段换 EIP 已证伪。24h 探针（`vpn-path-probe.timer`，日志 `/var/log/vpn-path-probe.log`）
+继续观察限速是否分时段波动。
+
+**切换操作记录**：换 EIP 窗口期出口失联，兜底健康检查 16:46 自动切 WARP（设计生效）；
+新 IP 绑定后更新中继 DNAT/兜底 conf/探针目标并 `switch main`，16:58 恢复主路，
+客户端零改动（hz-dev 经隧道 ipify 显示新出口 IP）。
+
+### 2026-11-18 — 兜底模式下换出口 IP，旧出口 MASQUERADE/FORWARD 规则残留
+
+**表象**：兜底激活期间（DNAT 指向 127.0.0.1:8443）执行 `relay/setup.sh --exit-ip=<新IP>`，
+旧出口的 `POSTROUTING MASQUERADE` 与 `FORWARD ACCEPT` 规则未被清扫，与新规则并存。
+
+**根因**：MASQUERADE/FORWARD 规则不带 `vpn-relay` 标记，清扫只依赖「当前 PREROUTING
+DNAT 目标」反查连带规则；兜底模式下 DNAT 已指向 127.0.0.1，旧出口目标无从反查。
+
+**解法**：MASQUERADE/FORWARD 新规则一律加 `--comment vpn-relay` 标记；`sweep_relay_rules`
+统一清扫 nat POSTROUTING / filter FORWARD / nat OUTPUT / mangle FORWARD 四表的标记规则，
+并保留「单目标 /32 + tcp + MASQUERADE」无标记历史残留的清理（Docker 按源地址段匹配，
+不会误伤）。回归：`relay/setup_test.sh [6b/6]`（假 iptables 夹具：兜底 DNAT + 新旧出口
+规则 + Docker 规则，断言旧规则被清、Docker 不被碰）。
+
+### 2026-11-18 — 运营商/GFW 方向性封禁境外出口 IP（198.51.100.22）
+
+**表象**：东京出口旧 EIP `198.51.100.22` 突然国内全断——本地与远端开发机
+（198.51.100.40）TCP 连 443/22 全部超时，但 `ping` 正常；从境外节点
+（SG/HK/DE/CH/IR）连同一 IP 的 443 全通（0.08~1.2s）。机器本身活着，xray 仍在 443 运行。
+
+**根因**：GFW/省网 DPI 的**方向性 IP 黑洞**（非端口封锁、非机器宕机）。被动侧对
+「单对 IP 7×24 长连接 + 上下行对称 + 单一 SNI（icloud）高频 + 数据中心国际段 IP」
+累计画像打分超阈，升级为整 IP 黑名单；只丢国内→境外方向的 TCP，ICMP 与境外→国内放行。
+实验同时证伪「同云走内部骨干绕开墙」：阿里云国内 ECS 访问该国际 IP 同样超时，公网 IP 互通照样过闸。
+
+**解法**（本轮落地，成本≈现状）：
+1. **换 EIP**：出口同一台 ECS 换新 IP `198.51.100.21`，密钥/UUID 不变，客户端零改动（地址始终是中继）。
+2. **三段式 + 出口白名单**：客户端→杭州中继（198.51.100.10，纯 iptables DNAT）→出口；
+   出口 `exit/setup.sh --allow-ip=198.51.100.10` 让 443 仅放行中继，主动探测面归零。
+3. **多 SNI**：`exit/setup.sh --sni=` 默认 icloud/apple/cloudflare/tesla。筛选用
+   `openssl s_client -connect <d>:443 -servername <d> -tls1_3 -alpn h2 -msg` 统计服务端握手字节：
+   四者均 ≤3.7KB、零 NewSessionTicket、TLS1.3+H2、基础设施稳定；**Microsoft 约 6.4KB 最大**
+   （历史上 SNI 响应体过大导致断连），yahoo.co.jp 5.5KB 且证书 CN 为边缘节点名会轮换，均排除。
+4. **WARP 自动兜底**：`relay/fallback.sh` 健康检查每 60s 探测出口，连续 3 次失败自动把 DNAT
+   切到中继备用 xray（同 Reality 凭据）→WARP（CF 共享边缘 IP，封不动），恢复后自动切回。
+5. **内核优化**：中继 BBR + conntrack 扩容/收紧超时 + route_localnet（兜底 DNAT 到 127.0.0.1 必需）。
+
+**复盘**：中继→出口段仍过公网闸口，画像无法消除，出口 IP 被封是**预期行为**；本方案把
+「被墙」从灾难降级为自愈事件（兜底顶上 + 换 EIP 几分钟恢复）。要结构性消除跨境段风险只有
+GA 持牌通道（付费），本轮按 YAGNI 不做。
+
+**修复/验证命令**：
+```bash
+# 出口（东京）
+sudo ./exit/setup.sh --sni=www.icloud.com,www.apple.com,www.cloudflare.com,www.tesla.com --allow-ip=198.51.100.10
+# 中继（杭州）
+sudo ./relay/setup.sh --exit-ip=198.51.100.21
+sudo ./relay/fallback.sh install --exit-ip=198.51.100.21 --exit-ssh=dev.user@198.51.100.21 --sudo-pass-file=<pass>
+# 验证：远端经中继出海应显示出口 IP；白名单外直连出口 443 应超时
+curl -x socks5h://127.0.0.1:10808 https://api4.ipify.org   # → 198.51.100.21
+```
+
+### 2026-11-18 — setproxy test 测速超时误报「下载失败 (HTTP 000)」
+
+**表象**：`setproxy test --size 10` 连通性全 200，但海外 CF 10MB 测速显示
+`下载失败 (HTTP 000)`，看起来像隧道断了；实际链路活着，只是跨境段被限速
+（~150-200KB/s，10MB 需 50-70s，超过测速 30s 上限）。
+
+**根因**：`speed_test` 用 `stats=$(curl ...) || stats="000 0 0 0"`——curl 超时
+（exit 28）时**仍会输出已下载部分的 `%{size_download}/%{speed_download}` 统计**，
+但 `||` 分支把这些真实数据丢弃，统一误报成 HTTP 000 连接失败。
+
+**解法**：单独捕获退出码（`|| rc=$?`），保留 curl 的部分统计；
+`rc=0` 且 2xx → 绿色完整速率；2xx 但中途断开且有数据 → 黄色
+「xxx KB/s（部分下载 N bytes/Ts 后中断，链路降级）」；零字节才报红色失败。
+三处同步修复：`client/bin/setproxy`、`client/linux_setup.sh`、`client/bin/speed_test`。
+回归：`setproxy_test.sh [6b/10]`、`linux_setup_test.sh [9b/9]`（假 curl 模拟 exit 28/7/0）。
 
 ### 2026-08-17 — Compose E2E 里 exit/setup.sh 因 hostname 退出 127
 
@@ -638,6 +807,29 @@ bash cache/download.sh linux   # 或 macos / all
 sudo cp cache/binaries/geoip.dat cache/binaries/geosite.dat /usr/local/share/xray/
 sudo ./client/linux_setup.sh install --vless='...'
 ```
+
+### 2026-11-18 — Alinux 3 中继装 WARP 报 GLIBC_2.33/2.34 not found
+
+**表象**：`relay/fallback.sh install` 在 Alinux 3（glibc 2.32）装 `cloudflare-warp` 后，
+`warp-cli` 报 `/lib64/libc.so.6: version GLIBC_2.33 (或 2.34) not found`，WARP 连不上。
+
+**根因**：Cloudflare 官方 RPM 源现仅发布 el9/el10 构建（`rpm/9`、`rpm/10`），分别要求
+GLIBC_2.34 / 2.39+；旧版 el8 兼容构建（如出口在用的 `2026.3.846.0-1`）已从官方源下架。
+`lib/warp.sh` 的 `resolve_warp_rpm_releasever` 把 Alinux 3/4 映射到 rpm/9 仍救不了 glibc 鸿沟。
+
+**解法**（本轮落地）：从**同系统、同 glibc、已装好 WARP** 的出口节点拷贝二进制与服务单元：
+```bash
+# 出口（已装好 WARP）打包最小集
+tar czf /tmp/warp-peer.tar.gz -C / bin/warp-cli bin/warp-svc bin/warp-dex opt/cloudflare-warp/warp-svc.service
+# 中继：卸载跑不动的新版 → 解包 → 注册
+sudo yum remove -y cloudflare-warp
+sudo tar xzf warp-peer.tar.gz -C /
+sudo ln -sf /opt/cloudflare-warp/warp-svc.service /usr/lib/systemd/system/warp-svc.service
+sudo systemctl daemon-reload && sudo systemctl enable --now warp-svc
+sudo warp-cli --accept-tos registration new && sudo warp-cli --accept-tos mode proxy && sudo warp-cli --accept-tos connect
+```
+`lib/warp.sh` 已加安装后 `warp-cli --version` 可运行性校验，glibc 不匹配时提前报错并提示本修复。
+长期方案：把兼容 RPM 缓存到 `cache/binaries/`（待补），或改用静态 WARP 客户端。
 
 ## 常见问题
 

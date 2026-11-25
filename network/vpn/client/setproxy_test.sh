@@ -221,6 +221,73 @@ if grep -q 'proof.ovh.net' "${CURL_LOG}"; then
     fail "overseas speed test still uses OVH"
 fi
 
+printf '[6b/10] speed tests report partial throughput on timeout instead of HTTP 000\n'
+SPEED_BIN="${TMP_ROOT}/speed-fake-bin"
+mkdir -p "${SPEED_BIN}"
+cat >"${SPEED_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+    *speed_download*)
+        case "${FAKE_SPEED_MODE:-ok}" in
+            timeout) printf '200 30.001 4500000 150000'; exit 28 ;;
+            down) exit 7 ;;
+            *) printf '200 5.000 2000000 400000'; exit 0 ;;
+        esac ;;
+    *) printf '200' ;;
+esac
+EOF
+chmod +x "${SPEED_BIN}/curl"
+
+run_speed_case() {
+    local mode="$1" outfile="$2" rc=0
+    env -i \
+        HOME="${HOME_ON}" \
+        PATH="${SPEED_BIN}:${FAKE_BIN}:/usr/bin:/bin" \
+        CURL_LOG="${CURL_LOG}" \
+        FAKE_SPEED_MODE="${mode}" \
+        VPN_HTTP_PORT=8001 \
+        VPN_SOCKS_PORT=1081 \
+        "${SETPROXY}" test --size 2 >"${outfile}" 2>&1 || rc=$?
+    printf '%s' "$rc"
+}
+
+rc="$(run_speed_case timeout "${TMP_ROOT}/speed-timeout.stdout")"
+[[ "$rc" != "0" ]] || fail "timeout speed test should not report overall success"
+assert_file_contains "${TMP_ROOT}/speed-timeout.stdout" '部分下载'
+assert_file_contains "${TMP_ROOT}/speed-timeout.stdout" '146 KB/s'
+if grep -q '下载失败 (HTTP 000)' "${TMP_ROOT}/speed-timeout.stdout"; then
+    fail "timeout with partial data must not be reported as HTTP 000 failure"
+fi
+
+rc="$(run_speed_case down "${TMP_ROOT}/speed-down.stdout")"
+[[ "$rc" != "0" ]] || fail "connection failure should not report success"
+assert_file_contains "${TMP_ROOT}/speed-down.stdout" '下载失败 (HTTP 000)'
+if grep -q '部分下载' "${TMP_ROOT}/speed-down.stdout"; then
+    fail "zero-byte failure must not be reported as partial download"
+fi
+
+rc="$(run_speed_case ok "${TMP_ROOT}/speed-ok.stdout")"
+[[ "$rc" == "0" ]] || fail "complete download should report success"
+assert_file_contains "${TMP_ROOT}/speed-ok.stdout" '391 KB/s'
+if grep -q '部分下载' "${TMP_ROOT}/speed-ok.stdout"; then
+    fail "complete download must not be reported as partial"
+fi
+
+# standalone bin/speed_test shares the same reporting contract
+rc=0
+env -i PATH="${SPEED_BIN}:/usr/bin:/bin" FAKE_SPEED_MODE=timeout \
+    bash "${SCRIPT_DIR}/bin/speed_test" --size 2 --vpn-port 1081 \
+    >"${TMP_ROOT}/speed-bin-timeout.stdout" 2>&1 || rc=$?
+[[ "$rc" != "0" ]] || fail "bin/speed_test timeout should exit non-zero"
+assert_file_contains "${TMP_ROOT}/speed-bin-timeout.stdout" '部分下载'
+assert_file_contains "${TMP_ROOT}/speed-bin-timeout.stdout" '146 KB/s'
+rc=0
+env -i PATH="${SPEED_BIN}:/usr/bin:/bin" FAKE_SPEED_MODE=ok \
+    bash "${SCRIPT_DIR}/bin/speed_test" --size 2 --vpn-port 1081 \
+    >"${TMP_ROOT}/speed-bin-ok.stdout" 2>&1 || rc=$?
+[[ "$rc" == "0" ]] || fail "bin/speed_test complete download should exit 0"
+assert_file_contains "${TMP_ROOT}/speed-bin-ok.stdout" '391 KB/s'
+
 printf '[7/10] Docker daemon proxy is opt-in, merged, restored, and never restarted\n'
 DOCKER_DAEMON_JSON="${TMP_ROOT}/linux-daemon.json"
 DOCKER_DNF_CONF="${TMP_ROOT}/docker-dnf.conf"

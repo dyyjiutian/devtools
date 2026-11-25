@@ -30,7 +30,7 @@ assert_eq() {
     [[ "$actual" == "$expected" ]] || fail "${msg}: expected '${expected}', got '${actual}'"
 }
 
-echo "[1/5] source exit/setup.sh helpers without root/install side effects"
+echo "[1/11] source exit/setup.sh helpers without root/install side effects"
 (
     export EXIT_SETUP_SOURCE_ONLY=true
     # shellcheck source=setup.sh
@@ -45,7 +45,7 @@ echo "[1/5] source exit/setup.sh helpers without root/install side effects"
         || fail "install_cloudflare_warp_rhel_cli_only should be defined"
 )
 
-echo "[2/5] Alinux/Anolis VERSION_ID maps to rpm/9 (el10 needs newer glibc)"
+echo "[2/11] Alinux/Anolis VERSION_ID maps to rpm/9 (el10 needs newer glibc)"
 (
     export EXIT_SETUP_SOURCE_ONLY=true
     # shellcheck source=setup.sh
@@ -58,7 +58,7 @@ echo "[2/5] Alinux/Anolis VERSION_ID maps to rpm/9 (el10 needs newer glibc)"
     assert_eq "$(resolve_warp_rpm_releasever "")" "9" "empty fallback"
 )
 
-echo "[3/5] write_cloudflare_warp_repo pins Alinux 4 to rpm/9 (not \$releasever)"
+echo "[3/11] write_cloudflare_warp_repo pins Alinux 4 to rpm/9 (not \$releasever)"
 repo_file="${TMP_DIR}/cloudflare-warp.repo"
 (
     export EXIT_SETUP_SOURCE_ONLY=true
@@ -70,7 +70,7 @@ assert_file_contains "$repo_file" "baseurl=https://pkg.cloudflareclient.com/rpm/
 assert_file_not_contains "$repo_file" '$releasever'
 assert_file_not_contains "$repo_file" "/rpm/4"
 
-echo "[4/5] rewriting an official broken repo is idempotent"
+echo "[4/11] rewriting an official broken repo is idempotent"
 printf '%s\n' \
     '[cloudflare-warp-stable]' \
     'name=cloudflare-warp-stable' \
@@ -86,7 +86,7 @@ printf '%s\n' \
 assert_file_contains "$repo_file" "baseurl=https://pkg.cloudflareclient.com/rpm/9"
 assert_file_not_contains "$repo_file" '$releasever'
 
-echo "[5/7] public IP detection does not fail when hostname is missing"
+echo "[5/11] public IP detection does not fail when hostname is missing"
 grep -q 'hostname -I 2>/dev/null' "$EXIT_SETUP" \
     || fail "SERVER_IP fallback should tolerate missing hostname"
 grep -q 'awk '\''{print $1}'\'' || true' "$EXIT_SETUP" \
@@ -94,7 +94,7 @@ grep -q 'awk '\''{print $1}'\'' || true' "$EXIT_SETUP" \
 grep -q 'ip -4 addr show' "$EXIT_SETUP" \
     || fail "SERVER_IP should fall back to iproute when hostname is absent"
 
-echo "[6/7] --skip-warp is documented and gates WARP install"
+echo "[6/11] --skip-warp is documented and gates WARP install"
 help_out="$("$EXIT_SETUP" --help)"
 echo "$help_out" | grep -q -- '--skip-warp' \
     || fail "setup.sh --help should document --skip-warp"
@@ -103,7 +103,7 @@ grep -q 'SKIP_WARP' "$EXIT_SETUP" \
 grep -q '已跳过 Cloudflare WARP' "$EXIT_SETUP" \
     || fail "setup.sh should skip WARP when --skip-warp is set"
 
-echo "[7/7] missing webkit2gtk3 falls back to rpm --nodeps CLI-only install"
+echo "[7/11] missing webkit2gtk3 falls back to rpm --nodeps CLI-only install"
 fake_bin="${TMP_DIR}/fake-bin"
 mkdir -p "$fake_bin"
 cat >"${fake_bin}/yum" <<'EOF'
@@ -162,14 +162,113 @@ grep -qF 'rpm -Uvh --nodeps' "$fake_log" \
 grep -qF 'cloudflare-warp' "$fake_log" \
     || fail "expected cloudflare-warp package operations in fake log"
 
-echo "[8/8] install_xray prefers the cached offline installer"
+echo "[8/11] normalize_sni_list validates, trims and dedupes domains"
+(
+    export EXIT_SETUP_SOURCE_ONLY=true
+    # shellcheck source=setup.sh
+    source "$EXIT_SETUP"
+    assert_eq "$(normalize_sni_list 'www.icloud.com,www.apple.com')" \
+        "www.icloud.com,www.apple.com" "two domains"
+    assert_eq "$(normalize_sni_list ' www.icloud.com , www.apple.com ,www.icloud.com')" \
+        "www.icloud.com,www.apple.com" "trim + dedupe"
+    if normalize_sni_list "bad domain" >/dev/null 2>&1; then
+        fail "normalize_sni_list should reject spaces in domain"
+    fi
+    if normalize_sni_list "" >/dev/null 2>&1; then
+        fail "normalize_sni_list should reject empty list"
+    fi
+    if normalize_sni_list "-bad.com" >/dev/null 2>&1; then
+        fail "normalize_sni_list should reject leading hyphen"
+    fi
+)
+
+echo "[9/11] build_servernames_json emits quoted comma-separated entries"
+(
+    export EXIT_SETUP_SOURCE_ONLY=true
+    # shellcheck source=setup.sh
+    source "$EXIT_SETUP"
+    assert_eq "$(build_servernames_json 'www.icloud.com,www.apple.com')" \
+        '"www.icloud.com","www.apple.com"' "serverNames JSON entries"
+    assert_eq "$(build_servernames_json 'www.icloud.com')" \
+        '"www.icloud.com"' "single serverName"
+)
+
+echo "[10/11] plan_allow_ip_rules: per-IP ACCEPT before DROP, scoped to listen port"
+(
+    export EXIT_SETUP_SOURCE_ONLY=true
+    # shellcheck source=setup.sh
+    source "$EXIT_SETUP"
+    rules="$(plan_allow_ip_rules 443 '198.51.100.10,1.2.3.4')"
+    echo "$rules" | grep -q -- '-s 198.51.100.10/32 .*--dport 443 .*-j ACCEPT' \
+        || fail "expected ACCEPT for first allow IP on 443"
+    echo "$rules" | grep -q -- '-s 1.2.3.4/32 .*--dport 443 .*-j ACCEPT' \
+        || fail "expected ACCEPT for second allow IP on 443"
+    last_line="$(echo "$rules" | tail -1)"
+    echo "$last_line" | grep -q -- '--dport 443 .*-j DROP' \
+        || fail "last rule must DROP the listen port"
+    if echo "$rules" | grep -q -- '--dport 22'; then
+        fail "whitelist rules must never touch SSH port 22"
+    fi
+    n_accept="$(echo "$rules" | grep -c -- '-j ACCEPT')"
+    assert_eq "$n_accept" "2" "one ACCEPT per allow IP"
+    echo "$rules" | grep -q -- '--comment vpn-exit-allow' \
+        || fail "rules must carry the vpn-exit-allow marker for idempotent cleanup"
+)
+
+echo "[11/11] config cache round-trip preserves REALITY_SNIS and ALLOW_IPS"
+(
+    export EXIT_SETUP_SOURCE_ONLY=true
+    export VPN_EXIT_CONFIG="${TMP_DIR}/exit_cache"
+    # shellcheck source=setup.sh
+    source "$EXIT_SETUP"
+    PRIVATE_KEY="pk-test"; PUBLIC_KEY="pub-test"; SHORT_ID="aabbccdd11223344"
+    LISTEN_PORT=443
+    REALITY_SNI="www.icloud.com"
+    REALITY_SNIS="www.icloud.com,www.apple.com"
+    ALLOW_IPS="198.51.100.10"
+    USERS="user1"
+    USER_user1_UUID="uuid-test"
+    write_config
+    [[ -f "$VPN_EXIT_CONFIG" ]] || fail "write_config should create cache file"
+    mode="$(stat -c '%a' "$VPN_EXIT_CONFIG" 2>/dev/null || stat -f '%Lp' "$VPN_EXIT_CONFIG")"
+    assert_eq "$mode" "600" "cache file must be 0600"
+    # shellcheck source=/dev/null
+    source "$VPN_EXIT_CONFIG"
+    assert_eq "$REALITY_SNIS" "www.icloud.com,www.apple.com" "REALITY_SNIS round-trip"
+    assert_eq "$ALLOW_IPS" "198.51.100.10" "ALLOW_IPS round-trip"
+    assert_eq "$REALITY_SNI" "www.icloud.com" "REALITY_SNI stays primary for manage.sh"
+)
+
+echo "[11b/11] allow-ip-off clears cached ALLOW_IPS so later reruns stay off"
+off_cache="${TMP_DIR}/off-cache"
+cat >"$off_cache" <<'EOF'
+REALITY_SNIS="www.icloud.com,www.apple.com"
+ALLOW_IPS="198.51.100.10,1.2.3.4"
+USERS="user1"
+EOF
+(
+    export EXIT_SETUP_SOURCE_ONLY=true
+    export VPN_EXIT_CONFIG="$off_cache"
+    # shellcheck source=setup.sh
+    source "$EXIT_SETUP"
+    clear_allow_ips_cache
+    assert_file_contains "$off_cache" 'ALLOW_IPS=""'
+    assert_file_contains "$off_cache" 'REALITY_SNIS="www.icloud.com,www.apple.com"'
+    assert_file_contains "$off_cache" 'USERS="user1"'
+    clear_allow_ips_cache
+    assert_eq "$(grep -c '^ALLOW_IPS=' "$off_cache")" "1" "no duplicate ALLOW_IPS lines"
+    clear_allow_ips_cache "${TMP_DIR}/no-such-cache"
+)
+
+
+echo "[12/12] install_xray prefers the cached offline installer"
 assert_file_contains "$EXIT_SETUP" "cache/scripts/install-release.sh"
 assert_file_contains "$EXIT_SETUP" 'install --local "$zip" --without-geodata'
 
-echo "[9/9] geoip:private can load geoip.dat after --without-geodata"
+echo "[13/13] geoip:private can load geoip.dat after --without-geodata"
 assert_file_contains "$EXIT_SETUP" 'install_cached_geodata'
 assert_file_contains "$EXIT_SETUP" 'cache/binaries/${name}'
 assert_file_contains "$EXIT_SETUP" 'XRAY_LOCATION_ASSET'
 assert_file_contains "$EXIT_SETUP" 'journalctl -u xray -n 50 --no-pager'
 
-echo "PASS: exit/setup WARP yum repo regression checks"
+echo "PASS: exit/setup WARP repo + multi-SNI + whitelist regression checks"

@@ -1154,20 +1154,28 @@ check_site() {
 # 基准测速：下载固定大小的测试文件，估算吞吐率（仅供粗略参考，会随网络波动）
 speed_test() {
     local label="$1" proxy_arg="$2" url="$3"
-    local stats code time_total size speed_bps kbps mbps
+    local stats code time_total size speed_bps kbps mbps rc=0
+    # curl 超时(exit 28)也会输出已下载部分的统计，不能丢弃后误报 HTTP 000
     if [[ -n "$proxy_arg" ]]; then
         stats=$(curl -x "$proxy_arg" -sSL --connect-timeout 10 --max-time 30 \
-            -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" "$url" 2>/dev/null) || stats="000 0 0 0"
+            -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" "$url" 2>/dev/null) || rc=$?
     else
         stats=$(curl -sSL --connect-timeout 10 --max-time 30 \
-            -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" "$url" 2>/dev/null) || stats="000 0 0 0"
+            -o /dev/null -w "%{http_code} %{time_total} %{size_download} %{speed_download}" "$url" 2>/dev/null) || rc=$?
     fi
+    [[ -n "$stats" ]] || stats="000 0 0 0"
     read -r code time_total size speed_bps <<< "$stats"
     if [[ "$code" =~ ^2 ]]; then
         kbps=$(awk -v b="$speed_bps" 'BEGIN{printf "%.0f", b/1024}')
         mbps=$(awk -v b="$speed_bps" 'BEGIN{printf "%.2f", b*8/1000000}')
-        echo -e "  ${label} ${GREEN}${kbps} KB/s（约 ${mbps} Mbps，${size} bytes，耗时 ${time_total}s）${RESET}"
-        return 0
+        if [[ "$rc" -eq 0 ]]; then
+            echo -e "  ${label} ${GREEN}${kbps} KB/s（约 ${mbps} Mbps，${size} bytes，耗时 ${time_total}s）${RESET}"
+            return 0
+        fi
+        if [[ "$size" =~ ^[0-9]+$ ]] && (( size > 0 )); then
+            echo -e "  ${label} ${YELLOW}${kbps} KB/s（约 ${mbps} Mbps，部分下载 ${size} bytes/${time_total}s 后中断，链路降级）${RESET}"
+            return 1
+        fi
     fi
     echo -e "  ${label} ${RED}下载失败 (HTTP ${code})${RESET}"
     return 1

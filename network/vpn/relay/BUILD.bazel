@@ -1,0 +1,40 @@
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "setup.sh",
+    "fallback.sh",
+])
+
+sh_test(
+    name = "setup_test",
+    srcs = ["setup_test.sh"],
+    data = [
+        "setup.sh",
+        "//network/vpn/lib:net.sh",
+    ],
+    size = "small",
+    tags = [
+        "l1",
+        "local",
+        "no-sandbox",
+        "smoke",
+    ],
+)
+
+sh_test(
+    name = "fallback_test",
+    srcs = ["fallback_test.sh"],
+    data = [
+        "fallback.sh",
+        "//network/vpn/lib:net.sh",
+    ],
+    size = "small",
+    tags = [
+        "l1",
+        "local",
+        "no-sandbox",
+        "smoke",
+    ],
+)

@@ -524,4 +524,46 @@ grep -q 'cached-geoip-PRIVATE' "${geo_trunc_dat}/geoip.dat" \
 grep -q 'PRIVATE' "${geo_trunc_dat}/geoip.dat" \
     || fail "replaced geoip.dat must contain PRIVATE"
 
+echo "[9b/9] speed_test reports partial throughput on timeout instead of HTTP 000"
+speed_fake_bin="${TMP_DIR}/speed-fake-bin"
+mkdir -p "$speed_fake_bin"
+cat >"${speed_fake_bin}/curl" <<'EOF'
+#!/usr/bin/env bash
+case "${FAKE_SPEED_MODE:-ok}" in
+    timeout) printf '200 30.001 4500000 150000'; exit 28 ;;
+    down) exit 7 ;;
+    *) printf '200 5.000 2000000 400000'; exit 0 ;;
+esac
+EOF
+chmod +x "${speed_fake_bin}/curl"
+(
+    set --
+    export LINUX_SETUP_SOURCE_ONLY=true
+    # shellcheck source=linux_setup.sh
+    source "$LINUX_SETUP"
+    export PATH="${speed_fake_bin}:$PATH"
+
+    export FAKE_SPEED_MODE=timeout
+    rc=0
+    out="$(speed_test "海外" "socks5h://127.0.0.1:10808" "https://speed.cloudflare.com/__down" 2>/dev/null)" || rc=$?
+    [[ "$rc" == "1" ]] || fail "timeout speed_test should return 1, got ${rc}"
+    assert_text_contains "$out" "部分下载"
+    assert_text_contains "$out" "146 KB/s"
+    [[ "$out" != *"下载失败 (HTTP 000)"* ]] || fail "partial data must not be reported as HTTP 000"
+
+    export FAKE_SPEED_MODE=down
+    rc=0
+    out="$(speed_test "海外" "" "https://mirrors.tuna.tsinghua.edu.cn/" 2>/dev/null)" || rc=$?
+    [[ "$rc" == "1" ]] || fail "connection failure should return 1, got ${rc}"
+    assert_text_contains "$out" "下载失败 (HTTP 000)"
+    [[ "$out" != *"部分下载"* ]] || fail "zero-byte failure must not be reported as partial"
+
+    export FAKE_SPEED_MODE=ok
+    rc=0
+    out="$(speed_test "海外" "socks5h://127.0.0.1:10808" "https://speed.cloudflare.com/__down" 2>/dev/null)" || rc=$?
+    [[ "$rc" == "0" ]] || fail "complete download should return 0, got ${rc}"
+    assert_text_contains "$out" "391 KB/s"
+    [[ "$out" != *"部分下载"* ]] || fail "complete download must not be reported as partial"
+)
+
 echo "PASS: linux_setup TUN regression checks"
