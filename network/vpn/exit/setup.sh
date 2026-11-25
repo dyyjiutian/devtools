@@ -193,6 +193,37 @@ XRAY_BIN="/usr/local/bin/xray"
 XRAY_CONFIG_DIR="/usr/local/etc/xray"
 XRAY_LOG_DIR="/var/log/xray"
 
+# Xray loads geoip.dat beside the binary unless XRAY_LOCATION_ASSET is set.
+# --without-geodata skips that file, and geoip:private then exits 23.
+# RestartPreventExitStatus=23 leaves the unit failed.
+install_cached_geodata() {
+    local script_dir repo_root dat_dir name src
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    repo_root="$(cd "${script_dir}/../../.." && pwd)"
+    dat_dir="${DAT_PATH:-/usr/local/share/xray}"
+    mkdir -p "$dat_dir" /etc/systemd/system/xray.service.d
+    for name in geoip.dat geosite.dat; do
+        src="${repo_root}/cache/binaries/${name}"
+        if [[ -f "$src" ]]; then
+            cp "$src" "${dat_dir}/${name}"
+            info "已安装缓存 ${name}"
+        fi
+        if [[ -f "${dat_dir}/${name}" ]]; then
+            ln -sfn "${dat_dir}/${name}" "/usr/local/bin/${name}"
+        else
+            warn "未找到 ${name}"
+        fi
+    done
+    if [[ ! -f "${dat_dir}/geoip.dat" ]]; then
+        error "缺少 geoip.dat，无法加载 geoip:private 路由规则"
+        exit 1
+    fi
+    cat > /etc/systemd/system/xray.service.d/20-asset-dir.conf <<EOF
+[Service]
+Environment=XRAY_LOCATION_ASSET=${dat_dir}
+EOF
+}
+
 install_xray() {
     if ! command -v curl &>/dev/null; then
         case $OS in
@@ -235,6 +266,12 @@ if ! command -v xray &>/dev/null; then
 else
     XRAY_VER=$("$XRAY_BIN" version 2>&1 | head -1 | grep -oP '[\d.]+' | head -1)
     success "Xray 已安装: v${XRAY_VER}"
+fi
+
+if $DRY_RUN; then
+    info "[dry-run] 将从 cache/binaries 安装 geoip.dat / geosite.dat"
+else
+    install_cached_geodata
 fi
 
 # ── 安装配置 Cloudflare WARP ──────────────────────────────────────────────────
@@ -574,6 +611,7 @@ else
     if systemctl is-active --quiet xray; then
         success "Xray 服务运行中"
     else
+        journalctl -u xray -n 50 --no-pager >&2 || true
         error "Xray 服务启动失败，查看日志: journalctl -u xray -n 50"
         exit 1
     fi
