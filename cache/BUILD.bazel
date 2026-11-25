@@ -19,6 +19,7 @@ devtools_unit_test(
         "binaries/delta-0.19.2-x86_64-unknown-linux-musl.tar.gz",
         "binaries/geosite.dat",
         "binaries/geoip.dat",
+        "binaries/kernel-headers-5.10.134-20.2.al8.x86_64.rpm",
         "download.sh",
         "scripts/nodesource-setup-20.x",
         "//os/lib:packages_list.sh",

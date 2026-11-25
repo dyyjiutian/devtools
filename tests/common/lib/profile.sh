@@ -37,7 +37,7 @@ _devtools_link_host_tools() {
     git head grep awk sed tr find mkdir cp ln rm cat tee bash mktemp
     basename dirname readlink wc date env true false chmod touch printf
     ls mv echo sort uniq sleep diff cut install getconf nproc gzip sha256sum tar node
-    df hostname whoami python3
+    df hostname whoami python3 dircolors
   )
   for tool in "${tools[@]}"; do
     real="$(_devtools_resolve_host_tool "$tool" || true)"

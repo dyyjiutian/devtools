@@ -126,6 +126,7 @@ test_linux_download_includes_delta() {
   SCRIPTS_DIR="$dir/scripts"
   FONTS_DIR="$dir/fonts"
   download() { :; }
+  download_alinux3_kernel_headers() { :; }
 
   FINAL_DEST="$dest" \
     DELTA_FIXTURE="$DELTA_FIXTURE" PATH="$fake_bin:$ORIGINAL_PATH" \
@@ -208,9 +209,37 @@ test_linux_download_includes_nvim() {
 test_valid_cache_skips_download
 test_corrupt_cache_is_replaced_atomically
 test_failed_redownload_leaves_no_corrupt_target
+test_linux_download_includes_kernel_headers() {
+  local dir="$TMP_ROOT/linux-kh" fake_bin log
+  # Earlier cases replace download helpers in this shell. Reload the script so
+  # this case calls the real kernel-headers downloader.
+  # shellcheck disable=SC1090
+  source "$DOWNLOAD_SH"
+  mkdir -p "$dir/binaries" "$dir/scripts" "$dir/fonts"
+  fake_bin="$dir/bin"
+  log="$dir/download.log"
+  mkdir -p "$fake_bin"
+  : >"$log"
+
+  BINARIES_DIR="$dir/binaries"
+  SCRIPTS_DIR="$dir/scripts"
+  FONTS_DIR="$dir/fonts"
+  download() { :; }
+  download_verified() {
+    printf '%s\t%s\n' "$1" "$2" >>"$log"
+  }
+
+  PATH="$fake_bin:$ORIGINAL_PATH" download_linux >/dev/null
+
+  grep -Fq $'https://mirrors.aliyun.com/alinux/3/plus/x86_64/kernels/kernel-headers-5.10.134-20.2.al8.x86_64.rpm\t'"$dir/binaries/kernel-headers-5.10.134-20.2.al8.x86_64.rpm" "$log" ||
+    fail "linux download missing pinned alinux3 kernel-headers RPM"
+  echo "PASS: Linux cache download includes pinned alinux3 kernel-headers"
+}
+
 test_linux_download_includes_delta
 test_linux_download_includes_glow
 test_linux_download_includes_nvim
+test_linux_download_includes_kernel_headers
 
 # Integrity pins for the protobuf geo data: a history-rewrite once replaced
 # a domain substring inside geosite.dat and broke its wire format. Checksums
@@ -221,5 +250,8 @@ actual="$(file_sha256 "$REPO_ROOT/cache/binaries/geosite.dat")"
 [[ "$actual" == "$GEOSITE_SHA256" ]] || fail "geosite.dat checksum mismatch (corrupted?): $actual"
 actual="$(file_sha256 "$REPO_ROOT/cache/binaries/geoip.dat")"
 [[ "$actual" == "$GEOIP_SHA256" ]] || fail "geoip.dat checksum mismatch (corrupted?): $actual"
+KH_SHA256="18bea523d468e822a24a74e2427e62355b278895f76516941db1c1a3d890893a"
+actual="$(file_sha256 "$REPO_ROOT/cache/binaries/kernel-headers-5.10.134-20.2.al8.x86_64.rpm")"
+[[ "$actual" == "$KH_SHA256" ]] || fail "kernel-headers RPM checksum mismatch (corrupted?): $actual"
 
 echo "PASS: cache download unit suite"

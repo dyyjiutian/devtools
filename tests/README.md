@@ -55,6 +55,8 @@ bazel test --config=l3 //network/proxy:proxy_pair_linux_alinux3_e2e_test  # prox
 
 三条独立流水线：`UT`（`.github/workflows/ut.yml`）、`IT`（`it.yml`）、`E2E`（`e2e.yml`）。`E2E` 含 Ubuntu Docker job 与 `runs-on: macos-26` job。
 
+Linux L3 的三个镜像由 `e2e.yml` 预构建。`actions/cache` 命中时直接 `docker load`，不再访问阿里云镜像；未命中才构建，并把 `docker save` 的 tar 写回缓存。同一 job 里 Dockerfile 未变的镜像不会再次 `docker build`。
+
 在 **HEAD commit message 或 PR 标题/正文** 里写 `[test#…]` 选择器（大小写不敏感）：
 
 | 写法 | 行为 |
@@ -133,3 +135,13 @@ tests/
 3. 禁止在 L1/L2 里 `sudo`、改真实 shell rc、或联网安装。
 
 更详细的设计见 `docs/superpowers/specs/2026-08-17-l1-l2-l3-test-layers-design.md`。
+
+## Issues
+
+### 2026-11-25 — e2e-linux 每次从阿里云镜像重下包，且 alinux3 缺少 kernel-headers
+
+**表象**：全部打开的 PR 上 UT / IT / e2e-macos 通过，`e2e-linux` 在预构建 `devtools-e2e:alinux3` 时失败：`nothing provides kernel-headers >= 3.2`。镜像构建串行访问 `mirrors.aliyun.com`，美国 runner 上大约 100kB/s，重复跑会把同一批 URL 再下一次。
+
+**根因**：`kernel-headers` 只在 alinux3-plus。plus 的元数据大约 45MB，所以 E2E Dockerfile 禁用了它，`gcc` 的依赖 `glibc-devel` 就装不上。GitHub runner 每次都是空的，三个 E2E 镜像和每个 L3 用例里的 `docker build` 都会重新访问镜像站。
+
+**解法**：把 `kernel-headers-5.10.134-20.2.al8.x86_64.rpm` 放进 `cache/binaries/`（`bash cache/download.sh linux` 会按 SHA-256 补齐），Dockerfile 本地 `rpm -Uvh`，plus 仍然禁用。`e2e-linux` 用 `actions/cache` 保存三个 `docker save` 包；命中则 `docker load`，Dockerfile sha 一致则跳过 `docker build`。alinux4 改为 `dnf clean packages`，运行时安装复用镜像里的元数据。

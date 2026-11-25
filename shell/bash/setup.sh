@@ -431,6 +431,16 @@ generate_bashrc_config() {
         echo "# 用户级命令目录"
         echo '[[ ":$PATH:" != *":$HOME/.local/bin:"* ]] && export PATH="$HOME/.local/bin:$PATH"'
         echo ""
+        echo "# ls 颜色（Ghostty 等 TERM=xterm-ghostty 不匹配 /etc/DIR_COLORS.* 的"
+        echo "# TERM 行时，系统 colorls.sh 会跳过 alias ls，这里兜底）"
+        echo 'if [[ -z "${LS_COLORS:-}" ]] && command -v dircolors &>/dev/null; then'
+        echo '    eval "$(dircolors -b 2>/dev/null)"'
+        echo 'fi'
+        echo "alias ls='ls --color=auto'"
+        echo "alias ll='ls -l --color=auto'"
+        echo "alias la='ls -A --color=auto'"
+        echo "alias l.='ls -d .* --color=auto'"
+        echo ""
         echo "# ble.sh (自动建议 + 语法高亮，需在其他插件之前 source)"
         echo '[[ $- == *i* && -f ~/.local/share/blesh/ble.sh ]] && \'
         echo '    source ~/.local/share/blesh/ble.sh --noattach --noinputrc'
