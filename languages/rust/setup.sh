@@ -32,6 +32,66 @@ source_cargo_env() {
   set -u
 }
 
+# rustup 可能由系统镜像 / Homebrew 预装：工具链在 RUSTUP_HOME 里，但
+# $CARGO_HOME/bin 下没有 rustc/cargo 代理。rustup 只在安装/切换工具链时写代理，
+# stable 已是 default 时 `rustup default stable` 是 no-op，新的 CARGO_HOME 依旧为空
+# （README Issues 2026-11-16）。
+ensure_cargo_proxies() {
+  local cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+  if [[ -x "$cargo_home/bin/rustc" && -x "$cargo_home/bin/cargo" ]] &&
+     rustup show active-toolchain &>/dev/null; then
+    return 0
+  fi
+
+  info "补齐 rustup 代理与 default 工具链..."
+  rustup default stable &>/dev/null || warn "rustup default stable 失败，请手动检查工具链"
+
+  if [[ -x "$cargo_home/bin/rustc" && -x "$cargo_home/bin/cargo" ]]; then
+    success "rustup 代理已就绪：$cargo_home/bin"
+    return 0
+  fi
+
+  # default 为 no-op 时 rustup 不补写代理：链接当前工具链的真实二进制。
+  # 指向 stable 通道目录（原地更新），不会锁死某个版本。
+  info "rustup 未写出代理，按工具链二进制补建 $cargo_home/bin ..."
+  mkdir -p "$cargo_home/bin"
+  local tool target linked=false
+  for tool in rustc cargo rustdoc rustfmt clippy-driver; do
+    if [[ -e "$cargo_home/bin/$tool" ]]; then
+      continue
+    fi
+    target="$(rustup which "$tool" 2>/dev/null)" || continue
+    if [[ -n "$target" && -x "$target" ]]; then
+      ln -sfn "$target" "$cargo_home/bin/$tool"
+      linked=true
+    fi
+  done
+  if [[ "$linked" == true ]]; then
+    success "已补建工具链链接：$cargo_home/bin"
+  else
+    warn "无法定位工具链二进制，请手动运行 rustup default stable"
+  fi
+}
+
+# env 文件由 rustup-init 写入；预装 rustup 的机器可能没有它，补一个等价片段，
+# 让 configure_cargo_env 写进 rc 的 source 行在新 shell 里真正生效。
+ensure_cargo_env_file() {
+  local cargo_home="${CARGO_HOME:-$HOME/.cargo}"
+  local env_file="$cargo_home/env"
+  if [[ -f "$env_file" ]]; then
+    return 0
+  fi
+  mkdir -p "$cargo_home"
+  cat > "$env_file" <<ENVEOF
+#!/bin/sh
+# rustup shell setup (written by devtools/languages/rust/setup.sh)
+case ":\${PATH}:" in
+  *:"$cargo_home/bin":*) ;;
+  *) export PATH="$cargo_home/bin:\$PATH" ;;
+esac
+ENVEOF
+}
+
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
@@ -66,9 +126,18 @@ install_rustup() {
 
   if is_installed rustup; then
     success "rustup 已安装：$(rustup --version 2>/dev/null)"
-    info "更新 stable 工具链..."
     if [[ "$DRY_RUN" != true ]]; then
+      info "更新 stable 工具链..."
       rustup update stable --no-self-update 2>/dev/null && success "stable 工具链已更新"
+      ensure_cargo_proxies
+      ensure_cargo_env_file
+      export PATH="${CARGO_HOME:-$HOME/.cargo}/bin:$HOME/.cargo/bin:$PATH"
+      source_cargo_env
+      if is_installed rustc; then
+        success "Rust 就绪：$(rustc --version 2>/dev/null)"
+      else
+        warn "rustc 仍未在 PATH 中，请检查 rustup 工具链"
+      fi
     fi
     return 0
   fi

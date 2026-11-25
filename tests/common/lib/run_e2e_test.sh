@@ -122,6 +122,12 @@ cleanup_tmp_home() {
 trap cleanup_tmp_home EXIT
 export HOME="$TMP_HOME"
 mkdir -p "$HOME/.local/bin"
+# A runner image can ship rustup (RUSTUP_HOME) with no cargo home at all. Point
+# CARGO_HOME at the isolated HOME so rustup writes its proxies where the ops
+# suite looks, instead of an ambient location nothing puts on PATH.
+if [[ -z "${CARGO_HOME:-}" && -d "${HOST_HOME}/.rustup" && ! -d "${HOST_HOME}/.cargo" ]]; then
+  export CARGO_HOME="$HOME/.cargo"
+fi
 # Point the isolated HOME at the machine toolchain so setup.sh's
 # $HOME/.cargo/env and rustc shims resolve. rm -rf on the temp dir
 # removes the symlink, not the host cargo/rustup trees.
