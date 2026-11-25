@@ -3,4 +3,5 @@ exports_files([
     "AGENTS.md",
     "CLAUDE.md",
     ".dockerignore",
+    ".github/workflows/e2e.yml",
 ])
