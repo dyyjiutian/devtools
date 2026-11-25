@@ -15,7 +15,13 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # call dnf at runtime otherwise burn the whole 900s test budget on metadata.
 # `clean packages` (not `clean all`) keeps the fresh metadata cache so runtime
 # installs in the same job reuse it instead of re-downloading.
+# kernel-headers is published only under alinux3-plus. COPY the pinned RPM from
+# cache/binaries instead of enabling that repo (its metadata is ~45MB and slow
+# from CI). glibc-devel then sees the already-installed provide.
+COPY kernel-headers-5.10.134-20.2.al8.x86_64.rpm /tmp/kernel-headers.rpm
 RUN set -eux; \
+    rpm -Uvh --nosignature /tmp/kernel-headers.rpm; \
+    rm -f /tmp/kernel-headers.rpm; \
     find /etc/yum.repos.d /etc/yum /etc/dnf -type f \( -name '*.repo' -o -name '*.conf' \) 2>/dev/null \
       | while IFS= read -r repo; do \
           sed -i \
