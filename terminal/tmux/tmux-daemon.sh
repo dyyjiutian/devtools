@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# Watch agent CLIs in the default tmux server and append a status suffix
-# to each window name.
+# Watch agent CLIs in the default tmux server and record each window's agent
+# status in the @agent_state window option for the status line to draw.
 set -euo pipefail
 
-SUFFIX_BUSY='+>'
-SUFFIX_WAIT='+?'
-SUFFIX_DONE='+v'
-SUFFIX_FAIL='+x'
-
+STATE_OPTION='@agent_state'
 HISTORY_LINES=120
 
 # Screen text of Claude Code 2.1, Codex 0.169, and Cursor Agent 2026.11.
@@ -50,10 +46,11 @@ usage() {
   cat <<'EOF'
 Usage: tmux-daemon.sh <start|stop|status> [options]
 
-Watch the default tmux server and append a status suffix to window names
-when the active pane is running Claude, Codex, or Cursor Agent.
-
-Suffixes: +> running, +? waiting for confirmation, +v turn finished, +x turn failed.
+Watch the default tmux server and set the @agent_state window option when the
+active pane is running Claude, Codex, or Cursor Agent:
+busy (running), wait (waiting for confirmation), done (turn finished),
+fail (turn failed). The option is unset otherwise; window names are not changed.
+The window-status formats in terminal/tmux/tmux.conf draw it as a colored mark.
 
 Options:
   --interval N   Poll every N seconds (start only). Default: 3
@@ -110,19 +107,10 @@ read_interval() {
   printf '%s\n' "3"
 }
 
-window_base_name() {
-  local name="$1"
-  case "${name}" in
-    *"${SUFFIX_BUSY}") printf '%s\n' "${name%"${SUFFIX_BUSY}"}" ;;
-    *"${SUFFIX_WAIT}") printf '%s\n' "${name%"${SUFFIX_WAIT}"}" ;;
-    *"${SUFFIX_DONE}") printf '%s\n' "${name%"${SUFFIX_DONE}"}" ;;
-    *"${SUFFIX_FAIL}") printf '%s\n' "${name%"${SUFFIX_FAIL}"}" ;;
-    *) printf '%s\n' "${name}" ;;
-  esac
-}
-
+# Rows: window_id, pane_id, pane_pid, pane_active, pane_height, and the current
+# @agent_state ("-" when unset, so no tab-separated field is ever empty).
 list_panes() {
-  tmux list-panes -a -F '#{session_name}	#{window_id}	#{window_name}	#{pane_id}	#{pane_pid}	#{pane_active}	#{pane_height}' 2>/dev/null
+  tmux list-panes -a -F "#{window_id}	#{pane_id}	#{pane_pid}	#{pane_active}	#{pane_height}	#{?${STATE_OPTION},#{${STATE_OPTION}},-}" 2>/dev/null
 }
 
 # Appends the agent state of each pane's process tree to the pane rows:
@@ -157,11 +145,11 @@ annotate_panes() {
     END {
       n = split(ENVIRON["PANES"], rows, "\n")
       for (r = 1; r <= n; r++) {
-        if (split(rows[r], f, "\t") < 7) {
+        if (split(rows[r], f, "\t") < 6) {
           continue
         }
         state = "none"
-        queue = f[5]
+        queue = f[3]
         while (queue != "" && state != "stopped") {
           m = split(queue, ids, " ")
           queue = ""
@@ -238,8 +226,8 @@ classify_screen() {
 }
 
 classify_pane() {
-  local pane_id="$1" rows="$2" state="$3" text
-  case "${state}" in
+  local pane_id="$1" rows="$2" tree="$3" text
+  case "${tree}" in
     none) printf 'clear\n'; return 0 ;;
     stopped) printf 'busy\n'; return 0 ;;
   esac
@@ -250,45 +238,38 @@ classify_pane() {
   printf '%s\n' "${text}" | classify_screen "${rows}"
 }
 
-desired_name() {
-  local base="$1" kind="$2"
-  case "${kind}" in
-    busy) printf '%s%s\n' "${base}" "${SUFFIX_BUSY}" ;;
-    wait) printf '%s%s\n' "${base}" "${SUFFIX_WAIT}" ;;
-    done) printf '%s%s\n' "${base}" "${SUFFIX_DONE}" ;;
-    fail) printf '%s%s\n' "${base}" "${SUFFIX_FAIL}" ;;
-    clear|empty) printf '%s\n' "${base}" ;;
-    *) return 1 ;;
-  esac
-}
-
-apply_window_name() {
+apply_state() {
   local window_id="$1" current="$2" desired="$3"
   [[ "${current}" == "${desired}" ]] && return 0
-  tmux rename-window -t "${window_id}" -- "${desired}" >/dev/null 2>&1 || true
+  if [[ "${desired}" == "-" ]]; then
+    tmux set-option -wu -t "${window_id}" "${STATE_OPTION}" >/dev/null 2>&1 || true
+  else
+    tmux set-option -w -t "${window_id}" "${STATE_OPTION}" "${desired}" >/dev/null 2>&1 || true
+  fi
 }
 
 tick() {
-  local panes annotated session window_id window_name pane_id pane_pid active rows state
-  local kind desired
+  local panes annotated window_id pane_id pane_pid active rows current tree kind
   panes="$(list_panes)" || return 0
   annotated="$(annotate_panes "${panes}")" || return 0
-  while IFS="$(printf '\t')" read -r session window_id window_name pane_id pane_pid active rows state; do
+  while IFS="$(printf '\t')" read -r window_id pane_id pane_pid active rows current tree; do
     [[ -n "${window_id}" && "${active}" == "1" ]] || continue
-    kind="$(classify_pane "${pane_id}" "${rows}" "${state}")"
-    desired="$(desired_name "$(window_base_name "${window_name}")" "${kind}")" || continue
-    apply_window_name "${window_id}" "${window_name}" "${desired}"
+    kind="$(classify_pane "${pane_id}" "${rows}" "${tree}")"
+    case "${kind}" in
+      busy|wait|done|fail) apply_state "${window_id}" "${current}" "${kind}" ;;
+      clear|empty) apply_state "${window_id}" "${current}" "-" ;;
+    esac
   done <<EOF
 ${annotated}
 EOF
 }
 
-clear_suffixes() {
-  local panes session window_id window_name pane_id pane_pid active rows
+clear_states() {
+  local panes window_id pane_id pane_pid active rows current
   panes="$(list_panes)" || return 0
-  while IFS="$(printf '\t')" read -r session window_id window_name pane_id pane_pid active rows; do
+  while IFS="$(printf '\t')" read -r window_id pane_id pane_pid active rows current; do
     [[ -n "${window_id}" && "${active}" == "1" ]] || continue
-    apply_window_name "${window_id}" "${window_name}" "$(window_base_name "${window_name}")"
+    apply_state "${window_id}" "${current}" "-"
   done <<EOF
 ${panes}
 EOF
@@ -321,7 +302,7 @@ cmd_stop() {
       sleep 0.1
     done
   fi
-  clear_suffixes
+  clear_states
   rm -f "$(pid_file)" "$(interval_file)"
 }
 

@@ -26,7 +26,7 @@ Linux 可能从源码构建；macOS 使用 Homebrew。配置以复制方式写�
 
 ## Agent 窗口状态
 
-`tmux-daemon.sh` 轮询本机默认 tmux server，把当前 pane 里 Claude、Codex、Cursor Agent 的状态写进窗口名末尾。
+`tmux-daemon.sh` 轮询本机默认 tmux server，把当前 pane 里 Claude、Codex、Cursor Agent 的状态写进窗口选项 `@agent_state`，状态栏在窗口序号前画出标记。窗口名不改。
 
 ~~~bash
 bash terminal/tmux/tmux-daemon.sh start
@@ -36,9 +36,11 @@ bash terminal/tmux/tmux-daemon.sh stop
 bash terminal/tmux/tmux-daemon.sh start --once
 ~~~
 
-后缀都是两个字符：进行中 `+>`，等你确认 `+?`，这一轮做完 `+v`，这一轮失败 `+x`。还没提问，或进程树里已经没有 agent，不加后缀。手动 `stop` 会去掉这些后缀；进程被杀掉时不会。默认每 3 秒看一遍。不写入 `tmux.conf`，也不随 `setup.sh --all` 启动。
+标记：黄色 `●` 进行中，整个标签红底 `?` 等你确认，绿色 `✓` 这一轮做完，红色 `✗` 这一轮失败。还没提问，或进程树里已经没有 agent，不显示标记。手动 `stop` 会清掉这些标记；进程被杀掉时不会。默认每 3 秒看一遍。daemon 不随 tmux 或 `setup.sh --all` 自动启动。
 
-判断依据是 pane 画面上的固定文字（脚本顶部的 `SCREEN_MARKERS`），按 Claude Code 2.1、Codex 0.169、Cursor Agent 2026.11 实测。CLI 升级改了界面文字后，状态可能停在上一次的后缀；用 `tmux capture-pane -p -t <pane>` 看新画面，更新这张表和 `tests/tmux_daemon_suite.sh` 里的夹具。
+标记由 `tmux.conf` 里的 `@agent-status` 画出。已有的 `~/.tmux.conf` 是旧版时，重新运行 `bash terminal/tmux/setup.sh` 部署（会先备份），然后执行 `tmux source-file ~/.tmux.conf`。
+
+判断依据是 pane 画面上的固定文字（脚本顶部的 `SCREEN_MARKERS`），按 Claude Code 2.1、Codex 0.169、Cursor Agent 2026.11 实测。CLI 升级改了界面文字后，状态可能停在上一次的标记；用 `tmux capture-pane -p -t <pane>` 看新画面，更新这张表和 `tests/tmux_daemon_suite.sh` 里的夹具。
 
 ## Issues
 
