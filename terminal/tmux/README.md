@@ -24,6 +24,22 @@ Linux 可能从源码构建；macOS 使用 Homebrew。配置以复制方式写�
 `~/.local`），并移除过旧的发行版包避免 PATH 冲突。可与 `--dry-run`、`--install-bin-only`
 组合使用。
 
+## Agent 窗口状态
+
+`tmux-daemon.sh` 轮询本机默认 tmux server，把当前 pane 里 Claude、Codex、Cursor Agent 的状态写进窗口名末尾。
+
+~~~bash
+bash terminal/tmux/tmux-daemon.sh start
+bash terminal/tmux/tmux-daemon.sh start --interval 5
+bash terminal/tmux/tmux-daemon.sh status
+bash terminal/tmux/tmux-daemon.sh stop
+bash terminal/tmux/tmux-daemon.sh start --once
+~~~
+
+后缀都是两个字符：进行中 `+>`，等你确认 `+?`，这一轮做完 `+v`，这一轮失败 `+x`。还没提问，或进程树里已经没有 agent，不加后缀。手动 `stop` 会去掉这些后缀；进程被杀掉时不会。默认每 3 秒看一遍。不写入 `tmux.conf`，也不随 `setup.sh --all` 启动。
+
+判断依据是 pane 画面上的固定文字（脚本顶部的 `SCREEN_MARKERS`），按 Claude Code 2.1、Codex 0.169、Cursor Agent 2026.11 实测。CLI 升级改了界面文字后，状态可能停在上一次的后缀；用 `tmux capture-pane -p -t <pane>` 看新画面，更新这张表和 `tests/tmux_daemon_suite.sh` 里的夹具。
+
 ## Issues
 
 ### 2026-07-28 — setup 将 tmux.conf 软链到仓库路径
