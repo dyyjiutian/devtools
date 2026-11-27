@@ -27,7 +27,38 @@ fssh prod -t main     # 解析 host 后 attach session（唯一命中直连）
 fssh prod -t ma       # session 子串唯一 → 直连；多个 → fzf；零命中报错
 ~~~
 
+## 添加 SSH 主机
+
+~~~bash
+fssh -a deploy@192.0.2.10
+fssh --add deploy@example.com:2222
+fssh -a deploy@example.com:2222 --dry-run
+~~~
+
+目标支持 `user@hostname`、`user@IPv4` 和可选的 `:port`（1–65535，默认 22）；
+暂不支持 IPv6。别名为 `user-hostname`，非默认端口追加 `-port`，例如
+`deploy-example.com-2222`；已存在的别名（包括 Include 中的别名）不会覆盖。
+添加后使用 `fssh deploy-example.com-2222` 连接。`--dry-run` 不修改本地或远程。
+
+此操作需要 `ssh`、`ssh-keygen` 和 `ssh-copy-id`，不需要 fzf。它直接连接指定
+地址，不使用现有 SSH config 中的代理配置；请确认目标、用户名及首次连接时的
+主机指纹。`ssh-copy-id` 会提示输入远端账号密码，并把公钥写入远端账号的
+`~/.ssh/authorized_keys`；密码不会保存到本地配置。默认复用
+`~/.ssh/id_ed25519`，不存在时生成**无口令**私钥，请妥善保护该文件。部署后
+验证密钥登录，通过后才更新 `~/.ssh/config`，并备份已有配置到
+`~/.ssh/config.bak.*`。修改的配置目录权限为 700，配置文件权限为 600。
+
+回滚时可将备份恢复到 `~/.ssh/config`（或删除新增的 Host 块）；如需撤销远端
+授权，登录目标账号，从 `~/.ssh/authorized_keys` 中删除对应公钥。部署成功但
+登录验证或本地写入失败时，远端公钥可能已存在，需按上述方式手动撤销。
+
 ## Issues
+
+### 2026-11-27 — fssh 不能新增 SSH 主机和配置免密登录
+
+**表象**：只能选择已有 Host，无法从账号与地址直接建立免密连接。
+**根因**：fssh 没有公钥部署和 Host 配置入口。
+**解法**：使用 `fssh -a user@host[:port]` 部署并验证公钥后写入配置；详见上文的安全与回滚说明。
 
 ### 2026-08-23 — fssh 连 Mac 时找不到 Homebrew tmux
 

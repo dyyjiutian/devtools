@@ -453,6 +453,88 @@ EOF
   pass "fssh list_hosts perf <=${budget_ms}ms for ~50 hosts (${elapsed_ms}ms, $DEVTOOLS_TEST_PROFILE)"
 }
 
+test_add_host() {
+  local out rc target before backup
+  rm -rf "$HOME/.ssh"
+  export FSSH_TEST_LOG="$HOME/add.log"
+  : >"$FSSH_TEST_LOG"
+  cat >"$FAKE_BIN/ssh-keygen" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'keygen %s\n' "$*" >>"$FSSH_TEST_LOG"
+while [[ "$1" != "-f" ]]; do shift; done
+printf 'private\n' >"$2"
+printf 'public\n' >"$2.pub"
+EOF
+  cat >"$FAKE_BIN/ssh-copy-id" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'copy %s\n' "$*" >>"$FSSH_TEST_LOG"
+exit "${FSSH_COPY_RC:-0}"
+EOF
+  cat >"$FAKE_BIN/ssh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'ssh %s\n' "$*" >>"$FSSH_TEST_LOG"
+exit "${FSSH_SSH_RC:-0}"
+EOF
+  chmod +x "$FAKE_BIN/ssh-keygen" "$FAKE_BIN/ssh-copy-id" "$FAKE_BIN/ssh"
+
+  out="$(bash "$FSSH_SH" -a deploy@10.1.2.3:2222 --dry-run 2>&1)"
+  assert_contains "$out" "deploy-10.1.2.3-2222" "dry-run shows alias"
+  [[ ! -e "$HOME/.ssh" && ! -s "$FSSH_TEST_LOG" ]] || return 1
+
+  for target in 'missing-user' 'u@host:0' 'u@host:65536' 'u@host:abc' 'u@host:22:23' $'u@host\nHost evil' '-oops'; do
+    rc=0
+    bash "$FSSH_SH" -a "$target" --dry-run >/dev/null 2>&1 || rc=$?
+    [[ "$rc" -ne 0 ]] || { echo "FAIL: accepted invalid target $target" >&2; return 1; }
+  done
+  rc=0
+  bash "$FSSH_SH" -a u@host -n >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]] || return 1
+  [[ ! -e "$HOME/.ssh" && ! -s "$FSSH_TEST_LOG" ]] || return 1
+
+  mkdir -p "$HOME/.ssh/config.d"
+  printf 'Include config.d/work\nHost *\n    User fallback\n    Port 99\n' >"$HOME/.ssh/config"
+  printf 'Host included-host\n    HostName example.org\n' >"$HOME/.ssh/config.d/work"
+  before="$(cat "$HOME/.ssh/config")"
+  out="$(bash "$FSSH_SH" --add deploy@example.com:2222 2>&1)"
+  assert_contains "$out" "deploy-example.com-2222" "success reports alias"
+  assert_contains "$(cat "$FSSH_TEST_LOG")" "copy -F /dev/null" "copies key without user config"
+  assert_contains "$(cat "$FSSH_TEST_LOG")" "-p 2222" "uses requested port"
+  assert_contains "$(cat "$FSSH_TEST_LOG")" "BatchMode=yes" "verifies passwordless login"
+  assert_contains "$(cat "$HOME/.ssh/config")" "Host deploy-example.com-2222" "writes host"
+  assert_contains "$(cat "$HOME/.ssh/config")" "Include config.d/work" "preserves existing config"
+  assert_contains "$(run_fssh_fn list_hosts)" "included-host" "preserves Include discovery"
+  backup="$(cat "$HOME"/.ssh/config.bak.*)"
+  assert_eq "$backup" "$before" "backup preserves original"
+  [[ ! -r "$HOME/.ssh/config" || ! -x "$HOME/.ssh/config" ]] || return 1
+
+  : >"$FSSH_TEST_LOG"
+  rc=0
+  bash "$FSSH_SH" -a deploy@example.com:2222 >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 && ! -s "$FSSH_TEST_LOG" ]] || return 1
+  printf 'Host admin-example.net\n' >>"$HOME/.ssh/config.d/work"
+  rc=0
+  bash "$FSSH_SH" -a admin@example.net >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 && ! -s "$FSSH_TEST_LOG" ]] || return 1
+
+  before="$(cat "$HOME/.ssh/config")"
+  rc=0
+  FSSH_COPY_RC=1 bash "$FSSH_SH" -a other@example.net >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]] || return 1
+  assert_eq "$(cat "$HOME/.ssh/config")" "$before" "copy failure leaves config unchanged"
+  rc=0
+  FSSH_SSH_RC=1 bash "$FSSH_SH" -a other@example.net >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]] || return 1
+  assert_eq "$(cat "$HOME/.ssh/config")" "$before" "verification failure leaves config unchanged"
+  : >"$FSSH_TEST_LOG"
+  bash "$FSSH_SH" -a other@example.net >/dev/null 2>&1
+  assert_not_contains "$(cat "$FSSH_TEST_LOG")" "keygen" "reuses existing key"
+  assert_contains "$(cat "$HOME/.ssh/config")" "Host other-example.net" "adds hostname at default port"
+  pass "fssh add host scenarios ($DEVTOOLS_TEST_PROFILE)"
+}
+
 test_setup_help
 test_fssh_help_mentions_query
 test_list_hosts_follows_include
@@ -481,5 +563,6 @@ test_list_remote_sessions_ignores_stderr_noise
 test_remote_tmux_prepends_common_bin_paths
 test_list_remote_sessions_failure_warns_from_stderr
 test_list_hosts_perf_budget_50_hosts
+test_add_host
 
 echo "PASS: ssh suite complete ($DEVTOOLS_TEST_PROFILE)"
