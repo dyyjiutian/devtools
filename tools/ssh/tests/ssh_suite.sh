@@ -503,12 +503,15 @@ EOF
   assert_contains "$(cat "$FSSH_TEST_LOG")" "copy -F /dev/null" "copies key without user config"
   assert_contains "$(cat "$FSSH_TEST_LOG")" "-p 2222" "uses requested port"
   assert_contains "$(cat "$FSSH_TEST_LOG")" "BatchMode=yes" "verifies passwordless login"
+  assert_contains "$(cat "$FSSH_TEST_LOG")" "keygen -t ed25519" "generates a key when absent"
   assert_contains "$(cat "$HOME/.ssh/config")" "Host deploy-example.com-2222" "writes host"
+  assert_contains "$(cat "$HOME/.ssh/config")" "ProxyCommand none" "does not inherit proxy commands"
+  assert_contains "$(cat "$HOME/.ssh/config")" "ProxyJump none" "does not inherit proxy jumps"
   assert_contains "$(cat "$HOME/.ssh/config")" "Include config.d/work" "preserves existing config"
   assert_contains "$(run_fssh_fn list_hosts)" "included-host" "preserves Include discovery"
   backup="$(cat "$HOME"/.ssh/config.bak.*)"
   assert_eq "$backup" "$before" "backup preserves original"
-  [[ ! -r "$HOME/.ssh/config" || ! -x "$HOME/.ssh/config" ]] || return 1
+  [[ ! -x "$HOME/.ssh/config" ]] || return 1
 
   : >"$FSSH_TEST_LOG"
   rc=0
@@ -518,6 +521,14 @@ EOF
   rc=0
   bash "$FSSH_SH" -a admin@example.net >/dev/null 2>&1 || rc=$?
   [[ "$rc" -ne 0 && ! -s "$FSSH_TEST_LOG" ]] || return 1
+
+  printf 'Include "config.d/quoted hosts"\n' >>"$HOME/.ssh/config"
+  printf 'Host="admin-example.org"\nHost "user-example.org" other\n' >"$HOME/.ssh/config.d/quoted hosts"
+  for target in admin@example.org user@example.org; do
+    rc=0
+    bash "$FSSH_SH" -a "$target" >/dev/null 2>&1 || rc=$?
+    [[ "$rc" -ne 0 && ! -s "$FSSH_TEST_LOG" ]] || return 1
+  done
 
   before="$(cat "$HOME/.ssh/config")"
   rc=0
@@ -532,6 +543,18 @@ EOF
   bash "$FSSH_SH" -a other@example.net >/dev/null 2>&1
   assert_not_contains "$(cat "$FSSH_TEST_LOG")" "keygen" "reuses existing key"
   assert_contains "$(cat "$HOME/.ssh/config")" "Host other-example.net" "adds hostname at default port"
+
+  rm -f "$HOME/.ssh/config"
+  : >"$FSSH_TEST_LOG"
+  bash "$FSSH_SH" -a root@192.0.2.1:65535 >/dev/null 2>&1
+  assert_contains "$(cat "$HOME/.ssh/config")" "Host root-192.0.2.1-65535" "creates missing config"
+  assert_contains "$(run_fssh_fn list_hosts)" "root-192.0.2.1-65535" "new host is discoverable"
+  rm -f "$HOME/.ssh/config"
+  ln -s "$HOME/.ssh/config.d/work" "$HOME/.ssh/config"
+  : >"$FSSH_TEST_LOG"
+  rc=0
+  bash "$FSSH_SH" -a root@192.0.2.1 >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 && ! -s "$FSSH_TEST_LOG" && -L "$HOME/.ssh/config" ]] || return 1
   pass "fssh add host scenarios ($DEVTOOLS_TEST_PROFILE)"
 }
 

@@ -121,12 +121,43 @@ _fssh_abs_path() {
     printf '%s/%s\n' "$dir" "$base"
 }
 
+_fssh_split_config_line() {
+    local line="$1" char token="" quoted=false escaped=false active=false i
+    _FSSH_WORDS=()
+    if [[ "$line" =~ ^([^[:space:]=]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+        line="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+    fi
+    for ((i = 0; i < ${#line}; i++)); do
+        char="${line:i:1}"
+        if [[ "$escaped" == "true" ]]; then
+            token="${token}${char}"; escaped=false; active=true
+        elif [[ "$char" == '\' ]]; then
+            escaped=true; active=true
+        elif [[ "$char" == '"' ]]; then
+            if [[ "$quoted" == "true" ]]; then quoted=false; else quoted=true; fi
+            active=true
+        elif [[ "$quoted" == "false" && "$char" == "#" ]]; then
+            break
+        elif [[ "$quoted" == "false" && "$char" == [[:space:]] ]]; then
+            if [[ "$active" == "true" ]]; then
+                _FSSH_WORDS+=("$token"); token=""; active=false
+            fi
+        else
+            token="${token}${char}"; active=true
+        fi
+    done
+    [[ "$quoted" == "false" && "$escaped" == "false" ]] \
+        || error "Invalid SSH config quoting."
+    [[ "$active" == "false" ]] || _FSSH_WORDS+=("$token")
+}
+
 # Recursively emit Host alias tokens from a config file and its Include targets.
 _fssh_collect_hosts_from_file() {
     local file="$1"
     local abs line
     local -a words
-    [[ -f "$file" && -r "$file" ]] || return 0
+    [[ -f "$file" ]] || return 0
+    [[ -r "$file" ]] || error "Cannot read SSH config: ${file}"
 
     abs=$(_fssh_abs_path "$file")
     if printf '%s\n' "$_FSSH_SEEN_CONFIGS" | grep -Fxq -- "$abs"; then
@@ -135,16 +166,16 @@ _fssh_collect_hosts_from_file() {
     _FSSH_SEEN_CONFIGS="${_FSSH_SEEN_CONFIGS}${abs}"$'\n'
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        line="${line%%#*}"
         # trim leading whitespace
         line="${line#"${line%%[![:space:]]*}"}"
         [[ -n "$line" ]] || continue
+        case "$line" in
+            [Hh][Oo][Ss][Tt][=[:space:]]*|[Ii][Nn][Cc][Ll][Uu][Dd][Ee][=[:space:]]*) ;;
+            *) continue ;;
+        esac
 
-        # Split into words (SSH config is whitespace-separated).
-        # Bash 3.2: avoid mapfile; use read -a.
-        words=()
-        # shellcheck disable=SC2086
-        read -r -a words <<< "$line"
+        _fssh_split_config_line "$line"
+        words=("${_FSSH_WORDS[@]+"${_FSSH_WORDS[@]}"}")
         [[ ${#words[@]} -ge 2 ]] || continue
 
         # Match keywords with case patterns — do not fork tr/awk per line
@@ -174,7 +205,7 @@ list_hosts() {
     [[ -f "$config" ]] || error "~/.ssh/config not found."
     _FSSH_SEEN_CONFIGS=""
     _fssh_collect_hosts_from_file "$config" \
-        | grep -v '[*?]' \
+        | awk '!/[*?]/' \
         | sort -u
 }
 
@@ -228,7 +259,7 @@ add_host() (
 
     [[ ! -L "$config" ]] || error "Refusing to replace symlinked SSH config: ${config}"
     if [[ -f "$config" ]]; then
-        existing=$(list_hosts || true)
+        existing=$(list_hosts) || error "Cannot inspect existing SSH hosts; no changes made."
         if printf '%s\n' "$existing" | awk -v a="$alias" 'tolower($0)==tolower(a) {found=1} END {exit !found}'; then
             error "SSH Host '${alias}' already exists; no changes made."
         fi
@@ -260,7 +291,7 @@ add_host() (
 
     tmp=$(mktemp "${HOME}/.ssh/.fssh-config.XXXXXX") || error "Cannot create temporary SSH config."
     {
-        printf 'Host %s\n    HostName %s\n    User %s\n    Port %s\n    IdentityFile ~/.ssh/id_ed25519\n\nHost *\n' \
+        printf 'Host %s\n    HostName %s\n    User %s\n    Port %s\n    IdentityFile ~/.ssh/id_ed25519\n    ProxyCommand none\n    ProxyJump none\n\nHost *\n' \
             "$alias" "$host" "$user" "$port"
         [[ ! -f "$config" ]] || cat "$config"
     } >"$tmp" || error "Cannot write temporary SSH config."

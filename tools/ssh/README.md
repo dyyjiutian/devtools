@@ -41,7 +41,8 @@ fssh -a deploy@example.com:2222 --dry-run
 添加后使用 `fssh deploy-example.com-2222` 连接。`--dry-run` 不修改本地或远程。
 
 此操作需要 `ssh`、`ssh-keygen` 和 `ssh-copy-id`，不需要 fzf。它直接连接指定
-地址，不使用现有 SSH config 中的代理配置；请确认目标、用户名及首次连接时的
+地址，不使用现有 SSH config 中的代理配置；新增的 Host 也禁用继承的代理设置。
+请确认目标、用户名及首次连接时的
 主机指纹。`ssh-copy-id` 会提示输入远端账号密码，并把公钥写入远端账号的
 `~/.ssh/authorized_keys`；密码不会保存到本地配置。默认复用
 `~/.ssh/id_ed25519`，不存在时生成**无口令**私钥，请妥善保护该文件。部署后
