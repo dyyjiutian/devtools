@@ -6,6 +6,7 @@ filegroup(
     name = "tmux_srcs",
     srcs = [
         "setup.sh",
+        "tmux-daemon.sh",
         "tmux.conf",
         "README.md",
         "tests/e2e/tmux_ops_suite.sh",
@@ -14,7 +15,9 @@ filegroup(
 
 exports_files([
     "setup.sh",
+    "tmux-daemon.sh",
     "tests/tmux_suite.sh",
+    "tests/tmux_daemon_suite.sh",
     "tests/e2e/tmux_ops_suite.sh",
 ])
 
@@ -34,6 +37,19 @@ devtools_module_tests(
         "linux_centos",
         "linux_alinux3",
         "linux_alinux4",
+    ],
+)
+
+devtools_module_tests(
+    name = "tmux_daemon",
+    suite = ":tests/tmux_daemon_suite.sh",
+    module_root = ":tmux-daemon.sh",
+    module_data = [":tmux_srcs"],
+    profiles = [
+        "linux_ubuntu",
+        "linux_alinux3",
+        "linux_alinux4",
+        "macos",
     ],
 )
 
