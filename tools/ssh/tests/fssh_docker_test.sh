@@ -49,8 +49,8 @@ ip1=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}
 ip2=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$server2")
 [[ -n "$ip1" && -n "$ip2" && "$ip1" != "$ip2" ]]
 
-docker cp "$fssh_script" "$client:/tmp/fssh.sh"
-docker cp "$client_test" "$client:/tmp/fssh_docker_client.sh"
+docker cp -L "$fssh_script" "$client:/tmp/fssh.sh"
+docker cp -L "$client_test" "$client:/tmp/fssh_docker_client.sh"
 docker exec "$client" install -d -m 700 -o fssh -g fssh /home/fssh/.ssh
 for item in "$server1:$ip1" "$server2:$ip2"; do
     container="${item%%:*}"
