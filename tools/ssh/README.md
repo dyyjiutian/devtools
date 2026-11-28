@@ -53,6 +53,24 @@ fssh -a deploy@example.com:2222 --dry-run
 授权，登录目标账号，从 `~/.ssh/authorized_keys` 中删除对应公钥。部署成功但
 登录验证或本地写入失败时，远端公钥可能已存在，需按上述方式手动撤销。
 
+## 真实 SSH 容器测试
+
+L3 测试使用 Docker 构建临时 Ubuntu 客户端和两个 SSH 服务端，在隔离网络中
+使用随机密码进行真实公钥部署及登录。覆盖首次添加、重复添加、多 IP、不同端口、
+已有公钥和错误密码；不映射宿主端口，退出时清理容器、网络与测试镜像。
+需要 Docker daemon、网络（构建时下载镜像和软件包）、Bazel 和宿主机 `openssl`：
+
+~~~bash
+bazel test --config=l3 //tools/ssh:fssh_real_ssh_e2e_test
+~~~
+
+也可在仓库根目录直接运行（无需 Bazel）：
+
+~~~bash
+bash tools/ssh/tests/fssh_docker_test.sh tools/ssh/tests/Dockerfile.ssh \
+  tools/ssh/tests/fssh_docker_client.sh tools/ssh/fssh.sh
+~~~
+
 ## Issues
 
 ### 2026-11-27 — fssh 不能新增 SSH 主机和配置免密登录

@@ -1,4 +1,5 @@
 load("//tests/common/rules:devtools_tests.bzl", "devtools_module_tests")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -27,5 +28,29 @@ devtools_module_tests(
         "linux_alinux3",
         "linux_alinux4",
         "macos",
+    ],
+)
+
+sh_test(
+    name = "fssh_real_ssh_e2e_test",
+    srcs = ["tests/fssh_docker_test.sh"],
+    args = [
+        "$(rootpath :tests/Dockerfile.ssh)",
+        "$(rootpath :tests/fssh_docker_client.sh)",
+        "$(rootpath :fssh.sh)",
+    ],
+    data = [
+        "fssh.sh",
+        "tests/Dockerfile.ssh",
+        "tests/fssh_docker_client.sh",
+    ],
+    size = "large",
+    tags = [
+        "l3",
+        "e2e",
+        "requires-docker",
+        "requires-network",
+        "no-sandbox",
+        "local",
     ],
 )
