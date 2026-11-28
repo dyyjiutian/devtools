@@ -1,0 +1,11 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        openssh-client openssh-server sshpass fzf ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub && \
+    useradd -m -s /bin/bash fssh && useradd -m -s /bin/bash fsshother && \
+    mkdir -p /run/sshd
+
+CMD ["sleep", "infinity"]

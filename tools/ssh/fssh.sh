@@ -51,11 +51,15 @@ Usage:
                         Resolve <query>, then attach tmux session
                         (host query required with -t)
   fssh -l               List all hosts from SSH config (incl. Include) and exit
+  fssh -a user@host[:port]  Install a public key and add an SSH Host
+  fssh -a user@host --dry-run  Preview without local or remote changes
   fssh -h               Show this help
 
 Flags (long forms also accepted):
   -h, --help            Show this help
   -l, --list            List available SSH hosts and exit
+  -a, --add TARGET      Add user@hostname or user@ip, optionally with :port
+  --dry-run             Preview --add only
   -n, --no-tmux         Plain SSH — skip tmux session picker entirely
   -t, --tmux SESSION    Attach tmux session (requires host query; mutually
                         exclusive with -n/--no-tmux)
@@ -76,7 +80,7 @@ Interactive tmux flow (no -n / -t):
 On any exit (normal or network disconnect), local terminal mouse state is
 reset automatically so Ghostty mouse events work correctly again.
 
-Requirements: fzf, ssh
+Requirements: fzf, ssh; --add also requires ssh-copy-id and ssh-keygen
 EOF
     exit 0
 }
@@ -117,12 +121,43 @@ _fssh_abs_path() {
     printf '%s/%s\n' "$dir" "$base"
 }
 
+_fssh_split_config_line() {
+    local line="$1" char token="" quoted=false escaped=false active=false i
+    _FSSH_WORDS=()
+    if [[ "$line" =~ ^([^[:space:]=]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+        line="${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+    fi
+    for ((i = 0; i < ${#line}; i++)); do
+        char="${line:i:1}"
+        if [[ "$escaped" == "true" ]]; then
+            token="${token}${char}"; escaped=false; active=true
+        elif [[ "$char" == '\' ]]; then
+            escaped=true; active=true
+        elif [[ "$char" == '"' ]]; then
+            if [[ "$quoted" == "true" ]]; then quoted=false; else quoted=true; fi
+            active=true
+        elif [[ "$quoted" == "false" && "$char" == "#" ]]; then
+            break
+        elif [[ "$quoted" == "false" && "$char" == [[:space:]] ]]; then
+            if [[ "$active" == "true" ]]; then
+                _FSSH_WORDS+=("$token"); token=""; active=false
+            fi
+        else
+            token="${token}${char}"; active=true
+        fi
+    done
+    [[ "$quoted" == "false" && "$escaped" == "false" ]] \
+        || error "Invalid SSH config quoting."
+    [[ "$active" == "false" ]] || _FSSH_WORDS+=("$token")
+}
+
 # Recursively emit Host alias tokens from a config file and its Include targets.
 _fssh_collect_hosts_from_file() {
     local file="$1"
     local abs line
     local -a words
-    [[ -f "$file" && -r "$file" ]] || return 0
+    [[ -f "$file" ]] || return 0
+    [[ -r "$file" ]] || error "Cannot read SSH config: ${file}"
 
     abs=$(_fssh_abs_path "$file")
     if printf '%s\n' "$_FSSH_SEEN_CONFIGS" | grep -Fxq -- "$abs"; then
@@ -131,16 +166,16 @@ _fssh_collect_hosts_from_file() {
     _FSSH_SEEN_CONFIGS="${_FSSH_SEEN_CONFIGS}${abs}"$'\n'
 
     while IFS= read -r line || [[ -n "$line" ]]; do
-        line="${line%%#*}"
         # trim leading whitespace
         line="${line#"${line%%[![:space:]]*}"}"
         [[ -n "$line" ]] || continue
+        case "$line" in
+            [Hh][Oo][Ss][Tt][=[:space:]]*|[Ii][Nn][Cc][Ll][Uu][Dd][Ee][=[:space:]]*) ;;
+            *) continue ;;
+        esac
 
-        # Split into words (SSH config is whitespace-separated).
-        # Bash 3.2: avoid mapfile; use read -a.
-        words=()
-        # shellcheck disable=SC2086
-        read -r -a words <<< "$line"
+        _fssh_split_config_line "$line"
+        words=("${_FSSH_WORDS[@]+"${_FSSH_WORDS[@]}"}")
         [[ ${#words[@]} -ge 2 ]] || continue
 
         # Match keywords with case patterns — do not fork tr/awk per line
@@ -170,7 +205,7 @@ list_hosts() {
     [[ -f "$config" ]] || error "~/.ssh/config not found."
     _FSSH_SEEN_CONFIGS=""
     _fssh_collect_hosts_from_file "$config" \
-        | grep -v '[*?]' \
+        | awk '!/[*?]/' \
         | sort -u
 }
 
@@ -198,6 +233,78 @@ check_deps() {
         error "Missing required tools: ${missing[*]}\nInstall: brew install ${missing[*]}"
     fi
 }
+
+# Add a direct connection using a dedicated alias and the default Ed25519 key.
+add_host() (
+    local target="$1" dry_run="$2"
+    local user host port=22 alias config="${HOME}/.ssh/config"
+    local key="${HOME}/.ssh/id_ed25519" tmp="" backup="" existing
+    trap '[[ -z "$tmp" ]] || rm -f "$tmp"' EXIT
+
+    [[ "$target" == *@* && "${target#*@}" != *"@"* ]] \
+        || error "Expected user@hostname or user@hostname:port."
+    user="${target%%@*}"
+    host="${target#*@}"
+    if [[ "$host" == *:* ]]; then
+        port="${host##*:}"
+        host="${host%:*}"
+        [[ "$port" =~ ^[0-9]{1,5}$ ]] || error "Invalid SSH port."
+        port=$((10#$port))
+        [[ "$port" -ge 1 && "$port" -le 65535 ]] || error "Invalid SSH port."
+    fi
+    [[ "$user" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*[$]?$ ]] || error "Invalid SSH user."
+    [[ "$host" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || error "Invalid SSH hostname or IPv4 address."
+    alias="${user}-${host}"
+    [[ "$port" == 22 ]] || alias="${alias}-${port}"
+
+    [[ ! -L "$config" ]] || error "Refusing to replace symlinked SSH config: ${config}"
+    if [[ -f "$config" ]]; then
+        existing=$(list_hosts) || error "Cannot inspect existing SSH hosts; no changes made."
+        if printf '%s\n' "$existing" | awk -v a="$alias" 'tolower($0)==tolower(a) {found=1} END {exit !found}'; then
+            error "SSH Host '${alias}' already exists; no changes made."
+        fi
+    fi
+    info "Target: ${user}@${host}:${port}; SSH Host alias: ${alias}"
+    if [[ "$dry_run" == "true" ]]; then
+        info "Would install ${key}.pub on the remote account and update ${config}."
+        return 0
+    fi
+    command -v ssh >/dev/null 2>&1 || error "Missing required tool: ssh"
+    command -v ssh-copy-id >/dev/null 2>&1 || error "Missing required tool: ssh-copy-id"
+    command -v ssh-keygen >/dev/null 2>&1 || error "Missing required tool: ssh-keygen"
+    mkdir -p "${HOME}/.ssh"
+    chmod 700 "${HOME}/.ssh"
+    if [[ ! -e "$key" && ! -e "${key}.pub" ]]; then
+        info "Generating an unencrypted Ed25519 key at ${key}."
+        ssh-keygen -t ed25519 -N '' -f "$key" || error "SSH key generation failed."
+    fi
+    [[ -f "$key" && -f "${key}.pub" ]] || error "Both ${key} and ${key}.pub are required."
+
+    info "Installing the public key on ${user}@${host}; verify the host key and enter the remote password if prompted."
+    ssh-copy-id -F /dev/null -i "${key}.pub" -p "$port" \
+        -o ControlMaster=no -o ControlPath=none "${user}@${host}" \
+        || error "Public key installation failed; local SSH config was not changed."
+    ssh -F /dev/null -o BatchMode=yes -o IdentitiesOnly=yes \
+        -o ControlMaster=no -o ControlPath=none -i "$key" -p "$port" \
+        "${user}@${host}" true \
+        || error "Key authentication failed; local SSH config was not changed."
+
+    tmp=$(mktemp "${HOME}/.ssh/.fssh-config.XXXXXX") || error "Cannot create temporary SSH config."
+    {
+        printf 'Host %s\n    HostName %s\n    User %s\n    Port %s\n    IdentityFile ~/.ssh/id_ed25519\n    ProxyCommand none\n    ProxyJump none\n\nHost *\n' \
+            "$alias" "$host" "$user" "$port"
+        [[ ! -f "$config" ]] || cat "$config"
+    } >"$tmp" || error "Cannot write temporary SSH config."
+    chmod 600 "$tmp" || error "Cannot secure temporary SSH config."
+    if [[ -f "$config" ]]; then
+        backup=$(mktemp "${config}.bak.XXXXXX") || error "Cannot create SSH config backup."
+        cp -p "$config" "$backup" || error "Cannot back up SSH config."
+        info "Backup: ${backup}"
+    fi
+    mv -f "$tmp" "$config" || error "Cannot update SSH config."
+    tmp=""
+    success "Added SSH Host ${alias}. Connect with: fssh ${alias}"
+)
 
 # ── Host query matching (aliases only) ────────────────────────────────────────
 # Exact case-insensitive match wins; otherwise substring. Prints matching aliases.
@@ -455,12 +562,21 @@ fssh_main() {
     local NO_TMUX=false
     local DIRECT_HOST=""
     local SESSION_QUERY=""
+    local ADD_TARGET="" DRY_RUN=false LIST=false
     local CHOICE SESSION sessions
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --help|-h)     show_help ;;
-            --list|-l)     list_hosts_detail; exit 0 ;;
+            --list|-l)     LIST=true; shift ;;
+            --dry-run)     DRY_RUN=true; shift ;;
+            --add|-a)
+                [[ -n "${2:-}" && "${2:0:1}" != "-" ]] \
+                    || error "-a/--add requires a target."
+                [[ -z "$ADD_TARGET" ]] || error "-a/--add may only be specified once."
+                ADD_TARGET="$2"
+                shift 2
+                ;;
             --no-tmux|-n)  NO_TMUX=true; shift ;;
             --tmux|-t)
                 [[ -n "${2:-}" && "${2:0:1}" != "-" ]] \
@@ -478,6 +594,18 @@ fssh_main() {
                 ;;
         esac
     done
+
+    if [[ -n "$ADD_TARGET" ]]; then
+        [[ -z "$DIRECT_HOST" && -z "$SESSION_QUERY" && "$NO_TMUX" == "false" && "$LIST" == "false" ]] \
+            || error "-a/--add cannot be combined with connection or list options."
+        add_host "$ADD_TARGET" "$DRY_RUN"
+        return
+    fi
+    [[ "$DRY_RUN" == "false" ]] || error "--dry-run requires -a/--add."
+    if [[ "$LIST" == "true" ]]; then
+        list_hosts_detail
+        return
+    fi
 
     if [[ -n "$SESSION_QUERY" && "$NO_TMUX" == "true" ]]; then
         error "-t/--tmux and -n/--no-tmux are mutually exclusive."
