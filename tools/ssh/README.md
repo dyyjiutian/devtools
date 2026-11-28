@@ -124,3 +124,7 @@ macOS 自带 Bash 3.2 在 `set -u` 下展开空的 `"${array[@]}"` 会报
 `unbound variable`，导致不使用 PTY 的会话列表和 tmux 版本探测在调用 SSH
 前失败。fssh 使用 Bash 3.2 兼容的条件数组展开；会话列表失败时保留 stderr，
 并将原因合并到单行 warning 中。
+
+### 2026-11-28 — fssh Docker E2E 找不到 /tmp/fssh_docker_client.sh
+
+Bazel 的 runfiles 是符号链接，`docker cp` 默认复制链接本身，容器内变成悬空链接，`bash /tmp/fssh_docker_client.sh` 报 `No such file or directory`（exit 127）。`tests/fssh_docker_test.sh` 现改用 `docker cp -L` 复制 `fssh.sh` 与客户端脚本。
